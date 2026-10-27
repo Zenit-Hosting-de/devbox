@@ -1,0 +1,65 @@
+# devbox run: one case per exit code of the plugin protocol; the CLI passes the code on.
+
+chmod 755 home/.local/share/devbox/plugins/demo/act.sh
+
+exec devbox run demo.code -p code=0
+stdout '^ran with code 0'
+
+! exec devbox run demo.code -p code=1
+stderr 'demo.code: failed \(exit 1\)'
+
+! exec devbox run demo.code -p code=2
+stderr 'demo.code: failed \(exit 2\)'
+
+! exec devbox run demo.code -p code=3
+stderr 'demo.code: blocked \(exit 3\)'
+
+! exec devbox run demo.code -p code=4
+stderr 'demo.code: stopped \(exit 4\)'
+
+# killed by SIGINT (130) and SIGTERM (143): stopped
+! exec devbox run demo.signal -p sig=INT
+stderr 'demo.signal: stopped'
+! exec devbox run demo.signal -p sig=TERM
+stderr 'demo.signal: stopped'
+
+# parameters are checked against their fields
+! exec devbox run demo.code -p code=9
+stderr 'validation: demo.code#code'
+! exec devbox run demo.code -p nope=1
+stderr 'unknown parameter'
+! exec devbox run demo.missing
+stderr 'not-found: demo.missing'
+
+-- home/.local/share/devbox/plugins/demo/plugin.json --
+{
+  "id": "demo",
+  "version": "1.0.0",
+  "name": "Demo",
+  "actions": {
+    "code": {
+      "label": "Exit with a code",
+      "run": ["act.sh", "code"],
+      "params": { "code": { "type": "integer", "enum": [0, 1, 2, 3, 4], "label": "Code" } }
+    },
+    "signal": {
+      "label": "Kill itself",
+      "run": ["act.sh", "signal"],
+      "params": { "sig": { "type": "string", "enum": ["INT", "TERM"], "label": "Signal" } }
+    }
+  }
+}
+-- home/.local/share/devbox/plugins/demo/act.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+param() { grep -o "\"$1\":[^,}]*" "$DEVBOX_REQUEST" | cut -d: -f2 | tr -d '"'; }
+case "$1" in
+code)
+  code=$(param code)
+  echo "ran with code $code"
+  exit "$code"
+  ;;
+signal)
+  kill -"$(param sig)" $$
+  ;;
+esac
