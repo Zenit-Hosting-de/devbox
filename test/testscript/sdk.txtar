@@ -1,0 +1,85 @@
+# devbox sdk inside a plugin: param, setting, emit, block (idempotent), json-set
+# (keeps formatting) and dry run (no file changes).
+
+chmod 755 home/.local/share/devbox/plugins/demo/apply.sh
+
+# dry run: only change messages, no file is touched
+exec devbox run demo.apply --dry-run --json
+stdout '"op":"create","summary":"devbox:demo block","target":"~/.demorc"'
+stdout '"op":"update","summary":"/editor.tabSize set","target":"~/settings.json"'
+! exists home/.demorc
+cmp home/settings.json settings.orig.json
+
+# first run writes both files
+exec devbox run demo.apply
+stdout '^registry=https://nexus.example.com/repository/npm-group/\r?$'
+cmp home/.demorc demorc.want
+cmp home/settings.json settings.want.json
+
+# second run: no difference, no change message
+exec devbox run demo.apply --json
+! stdout '"type":"change"'
+stdout '"type":"result"'
+cmp home/.demorc demorc.want
+cmp home/settings.json settings.want.json
+
+# parameters and settings from the request
+exec devbox run demo.show -p name=example
+stdout '^name=example url=https://nexus.example.com\r?$'
+
+# sdk outside a plugin fails clearly
+! exec devbox sdk param name
+stderr 'DEVBOX_REQUEST is not set'
+
+-- home/.local/share/devbox/plugins/demo/plugin.json --
+{
+  "id": "demo",
+  "version": "1.0.0",
+  "name": "Demo",
+  "settings": {
+    "url": { "type": "string", "format": "uri", "default": "https://nexus.example.com", "label": "Registry" }
+  },
+  "actions": {
+    "apply": { "label": "Apply", "run": ["apply.sh", "apply"] },
+    "show": {
+      "label": "Show",
+      "run": ["apply.sh", "show"],
+      "params": { "name": { "type": "string", "label": "Name" } }
+    }
+  }
+}
+-- home/.local/share/devbox/plugins/demo/apply.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1" in
+apply)
+  url=$("$DEVBOX_BIN" sdk setting url)
+  "$DEVBOX_BIN" sdk emit step write running "Write files"
+  printf 'registry=%s/repository/npm-group/\n' "$url" | "$DEVBOX_BIN" sdk block ~/.demorc demo --mode 600
+  "$DEVBOX_BIN" sdk json-set ~/settings.json /editor.tabSize 4
+  "$DEVBOX_BIN" sdk emit result "applied"
+  if [ "$DEVBOX_DRY_RUN" = 0 ]; then grep '^registry=' ~/.demorc; fi
+  ;;
+show)
+  echo "name=$("$DEVBOX_BIN" sdk param name) url=$("$DEVBOX_BIN" sdk setting url)"
+  ;;
+esac
+-- home/settings.json --
+{
+    "editor.tabSize": 2,
+    "files.exclude": { "**/.git": true }
+}
+-- settings.orig.json --
+{
+    "editor.tabSize": 2,
+    "files.exclude": { "**/.git": true }
+}
+-- settings.want.json --
+{
+    "editor.tabSize": 4,
+    "files.exclude": { "**/.git": true }
+}
+-- demorc.want --
+# >>> devbox:demo >>>
+registry=https://nexus.example.com/repository/npm-group/
+# <<< devbox:demo <<<
