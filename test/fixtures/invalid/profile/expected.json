@@ -1,0 +1,34 @@
+{
+  "missing-version.json": {
+    "pointer": "",
+    "keyword": "required"
+  },
+  "setting-bare-value.json": {
+    "pointer": "/settings/node.channel",
+    "keyword": "type"
+  },
+  "setting-locked-without-value.json": {
+    "pointer": "/settings/java.vendorApi",
+    "keyword": "required"
+  },
+  "branding-unknown-property.json": {
+    "pointer": "/branding",
+    "keyword": "additionalProperties"
+  },
+  "setup-step.json": {
+    "pointer": "/setup/1",
+    "keyword": "pattern"
+  },
+  "repository-kind.json": {
+    "pointer": "/repositories/team-apt/kind",
+    "keyword": "enum"
+  },
+  "id-pattern.json": {
+    "pointer": "/id",
+    "keyword": "pattern"
+  },
+  "ui-accent.json": {
+    "pointer": "/ui",
+    "keyword": "additionalProperties"
+  }
+}

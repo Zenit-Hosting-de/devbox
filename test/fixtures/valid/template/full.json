@@ -1,0 +1,71 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/template.v1.json",
+  "$comment": "Own example with every property.",
+  "id": "java-service",
+  "name": "Java service",
+  "description": "Maven project with a minimal HTTP service",
+  "language": "java",
+  "tags": [
+    "maven",
+    "http"
+  ],
+  "params": {
+    "projectName": {
+      "type": "string",
+      "label": "Project name",
+      "help": "Used as folder and artifact name.",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "javaVersion": {
+      "type": "integer",
+      "label": "Java version",
+      "enum": [
+        17,
+        21,
+        25
+      ],
+      "default": "${java.defaultVersion}"
+    },
+    "groupId": {
+      "type": "string",
+      "label": "Group ID",
+      "default": "com.example",
+      "advanced": true
+    }
+  },
+  "files": {
+    "include": [
+      "**/*"
+    ],
+    "exclude": [
+      "**/.gitkeep"
+    ],
+    "render": [
+      "pom.xml",
+      "README.md",
+      "src/main/java/**/*.java"
+    ]
+  },
+  "hooks": {
+    "postCreate": [
+      [
+        "git",
+        "init"
+      ],
+      [
+        "mvn",
+        "-q",
+        "validate"
+      ]
+    ]
+  },
+  "requires": {
+    "commands": [
+      "git",
+      "mvn"
+    ],
+    "plugins": {
+      "java": ">=1.0.0"
+    }
+  }
+}

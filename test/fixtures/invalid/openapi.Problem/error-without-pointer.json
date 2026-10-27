@@ -1,0 +1,1 @@
+{ "type": "https://example.com/errors/validation", "title": "Validation", "status": 422, "code": "validation", "errors": [{ "code": "required" }] }

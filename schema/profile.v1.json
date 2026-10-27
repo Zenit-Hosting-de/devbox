@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/profile.v1.json",
+  "title": "DevBox profile",
+  "description": "Defaults of a team or company: settings (optionally locked), plugins, prepared credential instances, groups, setup order, branding and repositories. A profile cannot run scripts.",
+  "type": "object",
+  "required": ["id", "name", "version"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of the schema this file follows."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    },
+    "id": {
+      "$ref": "#/$defs/id",
+      "description": "Profile ID; shown as origin profile:<id>, e.g. for locked values."
+    },
+    "name": {
+      "$ref": "#/$defs/text",
+      "description": "Display name of the profile."
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of the profile, e.g. 2026.10.1."
+    },
+    "description": {
+      "$ref": "#/$defs/text",
+      "description": "Short description of the profile."
+    },
+    "requires": {
+      "type": "object",
+      "description": "Requirements of the profile.",
+      "additionalProperties": false,
+      "properties": {
+        "devbox": {
+          "type": "string",
+          "description": "Version range of DevBox, e.g. >=1.0.0 <2.0.0."
+        }
+      }
+    },
+    "plugins": {
+      "type": "object",
+      "description": "Plugins the profile requires from catalogs, switches on or switches off.",
+      "additionalProperties": false,
+      "properties": {
+        "require": {
+          "type": "object",
+          "description": "Plugins to install from a catalog, keyed by plugin ID.",
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": ["catalog"],
+            "additionalProperties": false,
+            "properties": {
+              "catalog": {
+                "$ref": "#/$defs/id",
+                "description": "Name of the catalog entry in repositories."
+              },
+              "version": {
+                "type": "string",
+                "description": "Version range, e.g. ^1.2.0."
+              }
+            }
+          }
+        },
+        "enable": {
+          "type": "array",
+          "description": "IDs of plugins to switch on.",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "disable": {
+          "type": "array",
+          "description": "IDs of plugins to switch off.",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "description": "Setting values keyed by <plugin>.<name>.",
+      "propertyNames": {
+        "$ref": "#/$defs/ref"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/setting"
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "description": "Prepared credential instances keyed by instance name; only the secret is missing.",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/credential"
+      }
+    },
+    "groups": {
+      "type": "object",
+      "description": "Action groups keyed by group ID; replaces the contributions of the plugins to a group with the same ID.",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "setup": {
+      "type": "array",
+      "description": "Order of the first-run setup: actions (<plugin>.<action>) and credential instances (credentials:<name>).",
+      "items": {
+        "type": "string",
+        "pattern": "^([a-z][a-z0-9-]{1,31}\\.[a-z][A-Za-z0-9]{0,47}|credentials:[a-z][a-z0-9-]{1,31})$"
+      }
+    },
+    "branding": {
+      "type": "object",
+      "description": "Customisation of the UI.",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "$ref": "#/$defs/text",
+          "description": "Title in header and browser tab."
+        },
+        "accent": {
+          "type": "string",
+          "description": "Accent colour from the zenit-ui accents."
+        },
+        "notice": {
+          "$ref": "#/$defs/text",
+          "description": "Notice shown on the overview."
+        },
+        "links": {
+          "type": "array",
+          "description": "Links in the header.",
+          "items": {
+            "$ref": "#/$defs/link"
+          }
+        },
+        "logo": {
+          "type": "string",
+          "description": "Logo as SVG path data; sanitised before use.",
+          "maxLength": 32768
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "description": "Defaults for the language of UI, CLI and terminal menu. Appearance (title, accent) is set under branding.",
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "type": "string",
+          "description": "Language code for UI, CLI and terminal menu, e.g. de or en.",
+          "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
+          "$comment": "Must match an installed language pack; checked when loading, not in the schema."
+        }
+      }
+    },
+    "repositories": {
+      "type": "object",
+      "description": "Repositories for plugins, catalogs, profiles, project templates and system packages that the profile adds for the team, keyed by name.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]{1,31}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/repository"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}$"
+    },
+    "ref": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}\\.[a-z][A-Za-z0-9]{0,47}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "setting": {
+      "type": "object",
+      "description": "A setting value set by the profile.",
+      "required": ["value"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "description": "The value; its type is checked against the plugin manifest when loading."
+        },
+        "locked": {
+          "type": "boolean",
+          "description": "User, environment and command line cannot override the value."
+        }
+      }
+    },
+    "credential": {
+      "type": "object",
+      "description": "A credential instance prepared by the profile.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/id",
+          "description": "Credential type, e.g. registry, git-host, ssh-key or generic."
+        },
+        "label": {
+          "$ref": "#/$defs/text",
+          "description": "Display name of the instance."
+        },
+        "fields": {
+          "type": "object",
+          "description": "Preset field values; field names and types are defined by the credential type."
+        },
+        "locked": {
+          "type": "array",
+          "description": "Names of fields that cannot be changed.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "consumers": {
+          "type": "object",
+          "description": "Plugins that write the instance into their tools, keyed by plugin ID, with consumer options.",
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "additionalProperties": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "description": "An action group.",
+      "required": ["actions"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/text",
+          "description": "Display name of the group."
+        },
+        "actions": {
+          "type": "array",
+          "description": "Actions run in this order.",
+          "items": {
+            "$ref": "#/$defs/ref"
+          }
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "description": "A link in the header.",
+      "required": ["label", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/text",
+          "description": "Link text."
+        },
+        "url": {
+          "type": "string",
+          "description": "Link target."
+        }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "description": "A repository with plugins, a catalog, a profile, project templates or system packages. The key of the entry is its ID in CLI, API and UI.",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Kind of repository.",
+          "enum": ["plugins", "catalog", "profile", "templates", "packages"]
+        },
+        "source": {
+          "type": "string",
+          "description": "Location: git+https://, git+ssh://, https:// (tarball or index.json) or file://.",
+          "pattern": "^(file|https|git\\+https|git\\+ssh)://"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Branch, tag or commit; tags or commits are recommended for teams."
+        },
+        "path": {
+          "type": "string",
+          "description": "Sub-directory or file inside the source."
+        },
+        "credential": {
+          "type": "string",
+          "description": "Name of a credential instance (git-host or registry) for private repositories. The secret is passed only to Git or the download, never to plugins."
+        },
+        "trust": {
+          "description": "How code from the repository is released: an object with a Sigstore identity (signature required), \"prompt\" (show and confirm permissions for every new version) or \"pinned\" (only the commit named in ref, without asking).",
+          "oneOf": [
+            {
+              "enum": ["prompt", "pinned"]
+            },
+            {
+              "$ref": "#/$defs/trust"
+            }
+          ],
+          "default": "prompt"
+        },
+        "format": {
+          "description": "Package format of a packages repository.",
+          "enum": ["apt", "rpm", "pacman", "zypper"]
+        },
+        "url": {
+          "type": "string",
+          "description": "Base URL of a packages repository."
+        },
+        "suite": {
+          "type": "string",
+          "description": "Suite of a packages repository, e.g. the distribution codename (apt)."
+        },
+        "components": {
+          "type": "array",
+          "description": "Components of a packages repository (apt).",
+          "items": {
+            "type": "string"
+          }
+        },
+        "key": {
+          "type": "string",
+          "description": "URL of the signing key of a packages repository."
+        },
+        "when": {
+          "type": "object",
+          "description": "Limits the entry to distributions or architectures.",
+          "additionalProperties": false,
+          "properties": {
+            "distro": {
+              "type": "array",
+              "description": "Distribution IDs, e.g. ubuntu, debian, fedora.",
+              "items": {
+                "type": "string"
+              }
+            },
+            "arch": {
+              "type": "array",
+              "description": "CPU architectures.",
+              "items": {
+                "enum": ["amd64", "arm64"]
+              }
+            }
+          }
+        },
+        "locked": {
+          "type": "boolean",
+          "description": "Set in a profile: an entry with the same name in the user configuration does not override this one."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the entry is active.",
+          "default": true
+        }
+      },
+      "$comment": "AP-27 adds if/then: packages requires format, url and key; all other kinds require source."
+    },
+    "trust": {
+      "type": "object",
+      "description": "Expected Sigstore signing identity; a valid signature is required.",
+      "required": ["issuer", "identity"],
+      "additionalProperties": false,
+      "properties": {
+        "issuer": {
+          "type": "string",
+          "description": "OIDC issuer of the signing certificate.",
+          "format": "uri"
+        },
+        "identity": {
+          "type": "string",
+          "description": "Certificate identity, e.g. the URL of the release workflow."
+        }
+      }
+    }
+  }
+}

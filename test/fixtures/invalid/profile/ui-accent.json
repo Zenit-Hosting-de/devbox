@@ -1,0 +1,9 @@
+{
+  "id": "example-team",
+  "name": "Example team",
+  "version": "2026.10.1",
+  "ui": {
+    "language": "en",
+    "accent": "blue"
+  }
+}

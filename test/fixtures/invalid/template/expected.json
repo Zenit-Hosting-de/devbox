@@ -1,0 +1,26 @@
+{
+  "missing-name.json": {
+    "pointer": "",
+    "keyword": "required"
+  },
+  "unknown-property.json": {
+    "pointer": "",
+    "keyword": "additionalProperties"
+  },
+  "id-not-lowercase.json": {
+    "pointer": "/id",
+    "keyword": "pattern"
+  },
+  "language-uppercase.json": {
+    "pointer": "/language",
+    "keyword": "pattern"
+  },
+  "param-type-unknown.json": {
+    "pointer": "/params/options/type",
+    "keyword": "enum"
+  },
+  "hook-command-empty.json": {
+    "pointer": "/hooks/postCreate/0",
+    "keyword": "minItems"
+  }
+}

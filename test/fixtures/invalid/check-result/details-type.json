@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "summary": "Example tool 1.2.3",
+  "details": {
+    "label": "Version",
+    "value": "1.2.3"
+  }
+}

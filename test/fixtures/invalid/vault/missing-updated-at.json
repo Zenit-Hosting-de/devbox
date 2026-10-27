@@ -1,0 +1,4 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/vault.v1.json",
+  "entries": { "devbox/company-registry": { "secret": "example-token-0000" } }
+}

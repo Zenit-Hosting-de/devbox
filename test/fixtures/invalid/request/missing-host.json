@@ -1,0 +1,7 @@
+{
+  "protocol": 1,
+  "kind": "check",
+  "plugin": "example",
+  "name": "installed",
+  "dryRun": false
+}

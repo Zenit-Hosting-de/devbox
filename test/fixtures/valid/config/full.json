@@ -1,0 +1,72 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/config.v1.json",
+  "$comment": "Every property of config.v1.json used once.",
+  "profiles": [
+    {
+      "source": "git+https://git.example.com/platform/devbox-profile.git",
+      "ref": "v2026.10.1",
+      "path": "profile.json",
+      "trust": {
+        "issuer": "https://git.example.com",
+        "identity": "https://git.example.com/platform/devbox-profile//.ci/sign@refs/heads/main"
+      }
+    },
+    { "source": "file://${xdg:config}/devbox/local-profile.json" }
+  ],
+  "plugins": {
+    "paths": ["${xdg:data}/devbox/plugins", "/usr/share/devbox/plugins"],
+    "disabled": ["xrdp"]
+  },
+  "settings": {
+    "node.channel": "lts",
+    "java.defaultVersion": 21,
+    "npm.scopes": ["@example"],
+    "git.defaults": { "pull.rebase": "true" }
+  },
+  "repositories": {
+    "team-plugins": {
+      "kind": "plugins",
+      "source": "git+ssh://git@git.example.com/platform/devbox-plugins.git",
+      "ref": "v1.4.0",
+      "path": "plugins",
+      "credential": "company-git",
+      "trust": "pinned",
+      "locked": false,
+      "enabled": true
+    },
+    "team-catalog": {
+      "kind": "catalog",
+      "source": "https://devbox-catalog.example.com/index.json",
+      "trust": {
+        "issuer": "https://git.example.com",
+        "identity": "https://git.example.com/platform/devbox-catalog//.ci/release@refs/heads/main"
+      }
+    },
+    "internal-apt": {
+      "kind": "packages",
+      "format": "apt",
+      "url": "https://apt.example.com/${host:distro}",
+      "suite": "${host:codename}",
+      "components": ["main"],
+      "key": "https://apt.example.com/gpg",
+      "when": { "distro": ["ubuntu", "debian"], "arch": ["amd64", "arm64"] }
+    }
+  },
+  "server": {
+    "listen": "127.0.0.1:7878",
+    "auth": "pam",
+    "tls": {
+      "cert": "${xdg:config}/devbox/tls/cert.pem",
+      "key": "${xdg:config}/devbox/tls/key.pem"
+    },
+    "allowedOrigins": ["https://devbox.example.com"]
+  },
+  "ui": { "language": "en", "scheme": "contrast", "accent": "blue" },
+  "vault": { "backend": "age", "passphrase": true },
+  "history": { "keepDays": 30, "keepSessions": 100 },
+  "network": {
+    "proxy": "http://proxy.example.com:3128",
+    "noProxy": "localhost,127.0.0.1,.example.com",
+    "caFile": "/etc/ssl/certs/example-ca.pem"
+  }
+}

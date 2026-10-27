@@ -1,0 +1,276 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "$comment": "Uses every manifest property and every field keyword at least once.",
+  "protocol": 1,
+  "id": "example-tool",
+  "version": "1.2.3-rc.1",
+  "name": "Example tool",
+  "description": "Installs and configures the example tool",
+  "category": "tool",
+  "icon": "build_circle",
+  "license": "Apache-2.0",
+  "authors": [
+    "Example Author"
+  ],
+  "homepage": "https://example.com/devbox/example-tool",
+  "requires": {
+    "devbox": ">=1.0.0 <2.0.0",
+    "os": [
+      "linux"
+    ],
+    "arch": [
+      "amd64",
+      "arm64"
+    ],
+    "distro": [
+      "ubuntu",
+      "debian"
+    ],
+    "commands": [
+      "curl",
+      "tar"
+    ],
+    "plugins": {
+      "base": ">=1.0.0"
+    }
+  },
+  "permissions": {
+    "network": [
+      "${example-tool.downloadUrl}"
+    ],
+    "files": {
+      "read": [
+        "${env:HOME}"
+      ],
+      "write": [
+        "${example-tool.installDir}"
+      ]
+    },
+    "sudo": true,
+    "credentials": [
+      "registry"
+    ]
+  },
+  "settings": {
+    "downloadUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://downloads.example.com/tool",
+      "label": "Download address",
+      "help": "Change for a mirror in the local network."
+    },
+    "installDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:data}/example-tool",
+      "label": "Install location",
+      "advanced": true
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "stable",
+        "beta"
+      ],
+      "default": "stable",
+      "label": "Channel"
+    },
+    "mode": {
+      "type": "string",
+      "const": "managed",
+      "label": "Mode"
+    },
+    "keepVersions": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "default": 2,
+      "label": "Versions to keep"
+    },
+    "ratio": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "exclusiveMaximum": 1,
+      "default": 0.5,
+      "label": "Cache ratio"
+    },
+    "prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16,
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": [
+        "dev"
+      ],
+      "label": "Name prefix"
+    },
+    "mirrors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "minItems": 0,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "default": [],
+      "label": "Mirrors"
+    },
+    "proxy": {
+      "type": "object",
+      "properties": {
+        "host": {
+          "type": "string",
+          "label": "Host"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "additionalProperties": false,
+      "label": "Proxy"
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "label": "Labels"
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "label": "Enabled"
+    }
+  },
+  "checks": {
+    "installed": {
+      "label": "Installed versions",
+      "run": [
+        "checks/installed.sh"
+      ],
+      "timeout": "500ms",
+      "cache": "10m",
+      "network": false,
+      "refreshOn": [
+        "session.finished:example-tool.*"
+      ]
+    }
+  },
+  "actions": {
+    "install": {
+      "label": "Install",
+      "description": "Downloads and installs the example tool.",
+      "run": [
+        "actions/install.sh",
+        "--quiet"
+      ],
+      "params": {
+        "version": {
+          "type": "string",
+          "label": "Version",
+          "optionsFrom": "example-tool.installed#/data/items/*/version"
+        },
+        "token": {
+          "type": "string",
+          "label": "Token",
+          "secret": true
+        }
+      },
+      "timeout": "15m",
+      "confirm": true,
+      "danger": false,
+      "sudo": true,
+      "locks": [
+        "system-packages"
+      ]
+    },
+    "remove": {
+      "label": "Remove",
+      "run": [
+        "actions/remove.sh"
+      ],
+      "confirm": "The tool is deleted.",
+      "danger": true
+    }
+  },
+  "credentialTypes": {
+    "example-host": {
+      "label": "Example host",
+      "fields": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "label": "Address"
+        }
+      },
+      "secret": {
+        "label": "Token",
+        "expires": "required"
+      },
+      "verify": "example-tool.verify"
+    }
+  },
+  "consumes": {
+    "registry": {
+      "apply": [
+        "consume/apply.sh"
+      ],
+      "remove": [
+        "consume/remove.sh"
+      ],
+      "options": {
+        "repository": {
+          "type": "string",
+          "label": "Repository name"
+        }
+      }
+    }
+  },
+  "contributes": {
+    "groups": {
+      "update-all": [
+        "example-tool.install"
+      ]
+    },
+    "setup": [
+      {
+        "action": "example-tool.install",
+        "after": [
+          "base.packages"
+        ]
+      }
+    ],
+    "language": {
+      "code": "pt-BR",
+      "name": "Português (Brasil)",
+      "englishName": "Portuguese (Brazil)",
+      "fallback": "en",
+      "messages": "messages"
+    },
+    "overview": {
+      "check": "example-tool.installed",
+      "primaryAction": "example-tool.install"
+    },
+    "links": [
+      {
+        "label": "Documentation",
+        "url": "https://docs.example.com/tool"
+      }
+    ]
+  },
+  "on": {
+    "credential.changed": [
+      "hooks/credential-changed.sh"
+    ]
+  },
+  "i18n": {
+    "default": "en",
+    "dir": "i18n"
+  }
+}

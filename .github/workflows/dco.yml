@@ -1,0 +1,73 @@
+name: dco
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Check Signed-off-by trailers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Bot accounts that cannot sign off; matched by name and email.
+          is_bot() {
+            case "$1 <$2>" in
+              "renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>") return 0 ;;
+              "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>") return 0 ;;
+              "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>") return 0 ;;
+            esac
+            return 1
+          }
+
+          failed=()
+          checked=0
+
+          # Every field ends with NUL; git adds a newline between records.
+          while IFS= read -r -d '' sha \
+            && IFS= read -r -d '' name \
+            && IFS= read -r -d '' email \
+            && IFS= read -r -d '' body; do
+            sha=${sha#$'\n'}
+            checked=$((checked + 1))
+            if is_bot "$name" "$email"; then
+              echo "skip  $sha ($name)"
+              continue
+            fi
+            expected="Signed-off-by: $name <$email>"
+            if grep -Fxq -- "$expected" <<<"${body//$'\r'/}"; then
+              echo "ok    $sha"
+            else
+              echo "fail  $sha (expected \"$expected\")"
+              failed+=("$sha")
+            fi
+          done < <(git log --no-merges --format='%H%x00%an%x00%ae%x00%B%x00' "$BASE_SHA..$HEAD_SHA")
+
+          echo "Checked $checked commit(s)."
+
+          if ((${#failed[@]} > 0)); then
+            echo "::error::${#failed[@]} commit(s) without a matching Signed-off-by trailer."
+            printf '  %s\n' "${failed[@]}"
+            echo
+            echo "Sign off with 'git commit --amend -s' (last commit) or"
+            echo "'git rebase --signoff $BASE_SHA' (all commits), then force-push."
+            exit 1
+          fi

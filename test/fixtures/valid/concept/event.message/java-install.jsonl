@@ -1,0 +1,7 @@
+{"type":"step","id":"download","label":"Temurin 21.0.5 laden","state":"running"}
+{"type":"progress","percent":45,"text":"87 von 192 MB"}
+{"type":"step","id":"download","label":"Temurin 21.0.5 laden","state":"done"}
+{"type":"change","kind":"file","op":"create","target":"~/.local/share/jdk/21.0.5","summary":"JDK entpackt"}
+{"type":"change","kind":"env","op":"update","target":"JAVA_HOME","summary":"zeigt auf 21.0.5"}
+{"type":"notice","kind":"restart-shell","text":"Neue Terminals nutzen JAVA_HOME sofort, offene erst nach Neustart."}
+{"type":"result","summary":"Temurin 21.0.5 installiert und als Standard gesetzt","data":{"version":"21.0.5"}}

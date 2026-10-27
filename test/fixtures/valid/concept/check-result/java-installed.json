@@ -1,0 +1,7 @@
+{
+  "status": "warn",
+  "summary": "Temurin 21.0.4 (Standard), 17.0.12",
+  "data": { "items": [ { "version": "21.0.4", "path": "/home/m.muster/.local/share/jdk/21.0.4", "default": true }, { "version": "17.0.12", "path": "/home/m.muster/.local/share/jdk/17.0.12", "default": false } ] },
+  "details": [ { "label": "JAVA_HOME", "value": "/home/m.muster/.local/share/jdk/current" } ],
+  "hints": [ { "text": "21.0.5 ist verfügbar", "action": "java.update" } ]
+}

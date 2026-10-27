@@ -1,0 +1,18 @@
+{
+  "generatedAt": "2026-10-27T08:00:00Z",
+  "plugins": {
+    "kubectl": {
+      "name": "kubectl",
+      "versions": [
+        {
+          "version": "1.2.3",
+          "url": "packages/kubectl-1.2.3.tar.gz",
+          "digest": "sha256:3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c",
+          "publishedAt": "2026-10-20T12:00:00Z",
+          "yanked": "no",
+          "bundle": "sigstore/kubectl-1.0.0.bundle.json"
+        }
+      ]
+    }
+  }
+}

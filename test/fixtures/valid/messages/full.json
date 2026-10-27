@@ -1,0 +1,8 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "$comment": "Example translation file with core and plugin keys.",
+  "core.overview.title": "Overview",
+  "core.sessions.count": "{count, plural, one {# session} other {# sessions}}",
+  "plugins.example-tool.actions.install.label": "Install",
+  "errors.settingLocked": "Locked by {profile}"
+}

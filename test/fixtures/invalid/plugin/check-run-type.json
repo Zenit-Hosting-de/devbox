@@ -1,0 +1,11 @@
+{
+  "id": "example",
+  "version": "1.0.0",
+  "name": "Example",
+  "checks": {
+    "installed": {
+      "label": "Installed",
+      "run": "checks/installed.sh"
+    }
+  }
+}

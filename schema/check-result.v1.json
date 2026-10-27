@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/check-result.v1.json",
+  "title": "DevBox check result",
+  "description": "The single JSON object a check prints to stdout.",
+  "type": "object",
+  "required": ["status", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URI of the JSON Schema this document follows; enables editor completion."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    },
+    "status": {
+      "enum": ["ok", "warn", "error", "missing"],
+      "description": "Overall state."
+    },
+    "summary": {
+      "$ref": "#/$defs/text",
+      "description": "One-line summary for the overview."
+    },
+    "data": {
+      "type": "object",
+      "description": "Structured data, e.g. for optionsFrom in actions."
+    },
+    "details": {
+      "type": "array",
+      "description": "Label-value pairs shown on the plugin page.",
+      "items": {
+        "type": "object",
+        "required": ["label", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "$ref": "#/$defs/text",
+            "description": "Label."
+          },
+          "value": {
+            "type": "string",
+            "description": "Value."
+          }
+        }
+      }
+    },
+    "hints": {
+      "type": "array",
+      "description": "Hints, optionally with a direct action.",
+      "items": {
+        "type": "object",
+        "required": ["text"],
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "$ref": "#/$defs/text",
+            "description": "Hint text."
+          },
+          "action": {
+            "$ref": "#/$defs/ref",
+            "description": "Action offered with the hint."
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ref": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}\\.[a-z][A-Za-z0-9]{0,47}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/template.v1.json",
+  "id": "node-basic",
+  "name": "Node.js project"
+}

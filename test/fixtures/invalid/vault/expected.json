@@ -1,0 +1,20 @@
+{
+  "missing-entries.json": { "pointer": "", "keyword": "required" },
+  "missing-updated-at.json": {
+    "pointer": "/entries/devbox~1company-registry",
+    "keyword": "required"
+  },
+  "empty-secret.json": {
+    "pointer": "/entries/devbox~1company-registry/secret",
+    "keyword": "minLength"
+  },
+  "unknown-property.json": {
+    "pointer": "/entries/devbox~1company-registry",
+    "keyword": "additionalProperties"
+  },
+  "expires-at-type.json": {
+    "pointer": "/entries/devbox~1company-registry/expiresAt",
+    "keyword": "type"
+  },
+  "entry-with-backend-prefix.json": { "pointer": "/entries", "keyword": "propertyNames" }
+}

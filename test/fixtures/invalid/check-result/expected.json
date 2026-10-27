@@ -1,0 +1,22 @@
+{
+  "missing-status.json": {
+    "pointer": "",
+    "keyword": "required"
+  },
+  "status-enum.json": {
+    "pointer": "/status",
+    "keyword": "enum"
+  },
+  "unknown-property.json": {
+    "pointer": "",
+    "keyword": "additionalProperties"
+  },
+  "details-type.json": {
+    "pointer": "/details",
+    "keyword": "type"
+  },
+  "hint-action-pattern.json": {
+    "pointer": "/hints/0/action",
+    "keyword": "pattern"
+  }
+}

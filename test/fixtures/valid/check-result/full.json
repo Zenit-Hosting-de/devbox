@@ -1,0 +1,24 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/check-result.v1.json",
+  "$comment": "Uses every check result property at least once.",
+  "status": "missing",
+  "summary": "Example tool not installed",
+  "data": {
+    "items": []
+  },
+  "details": [
+    {
+      "label": "Install location",
+      "value": "/home/dev/.local/share/example-tool"
+    }
+  ],
+  "hints": [
+    {
+      "text": "Install the example tool",
+      "action": "example-tool.install"
+    },
+    {
+      "text": "Mirror configured"
+    }
+  ]
+}

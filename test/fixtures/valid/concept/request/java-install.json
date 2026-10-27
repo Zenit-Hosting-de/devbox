@@ -1,0 +1,11 @@
+{
+  "protocol": 1,
+  "kind": "action",
+  "plugin": "java",
+  "name": "install",
+  "params": { "version": 21, "makeDefault": true },
+  "settings": { "vendorApi": "https://api.adoptium.net/v3", "defaultVersion": 21, "installDir": "/home/m.muster/.local/share/jdk", "keepPatches": 1 },
+  "credential": null,
+  "dryRun": false,
+  "host": { "distro": "ubuntu", "distroVersion": "24.04", "arch": "amd64", "desktop": "xfce" }
+}

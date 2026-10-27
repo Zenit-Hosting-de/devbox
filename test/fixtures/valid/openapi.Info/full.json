@@ -1,0 +1,10 @@
+{
+  "vendor": "zenit-hosting",
+  "version": "1.0.0",
+  "commit": "0123abc",
+  "date": "2026-10-27T09:00:00Z",
+  "protocol": 1,
+  "auth": "local",
+  "host": { "name": "dev-vm-01", "user": "a.example", "distro": "debian", "distroVersion": "13", "arch": "arm64" },
+  "features": ["tui"]
+}

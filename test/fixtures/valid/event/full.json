@@ -1,0 +1,13 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/event.v1.json",
+  "$comment": "Uses every envelope property; one file per message type covers the message fields.",
+  "seq": 42,
+  "time": "2026-10-27T09:20:12Z",
+  "event": {
+    "type": "result",
+    "summary": "Example tool 1.2.3 installed",
+    "data": {
+      "version": "1.2.3"
+    }
+  }
+}

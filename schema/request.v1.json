@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/request.v1.json",
+  "title": "DevBox plugin request",
+  "description": "Request passed to a plugin process as the JSON file named by DEVBOX_REQUEST. The only place where secrets reach a plugin.",
+  "type": "object",
+  "required": ["protocol", "kind", "plugin", "name", "dryRun", "host"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URI of the JSON Schema this document follows; enables editor completion."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    },
+    "protocol": {
+      "const": 1,
+      "description": "Plugin protocol version."
+    },
+    "kind": {
+      "enum": ["check", "action", "apply", "remove", "event"],
+      "description": "What is invoked: a check, an action, a consumer's apply or remove, or an event handler."
+    },
+    "plugin": {
+      "$ref": "#/$defs/id",
+      "description": "ID of the invoked plugin."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Key of the check or action, the consumed credential type for apply and remove, or the event name for event."
+    },
+    "params": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/key"
+      },
+      "description": "Resolved action parameters."
+    },
+    "settings": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/key"
+      },
+      "description": "Resolved settings of the plugin, keyed without the plugin prefix."
+    },
+    "credential": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/requestCredential"
+        }
+      ],
+      "description": "Credential instance for consumers, including the secret; null otherwise."
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "Dry run: report planned changes, change nothing."
+    },
+    "host": {
+      "type": "object",
+      "required": ["distro", "distroVersion", "arch"],
+      "additionalProperties": false,
+      "description": "Facts about the machine.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Host name."
+        },
+        "user": {
+          "type": "string",
+          "description": "User name."
+        },
+        "distro": {
+          "type": "string",
+          "description": "Distribution ID as in os-release, e.g. ubuntu."
+        },
+        "distroVersion": {
+          "type": "string",
+          "description": "Distribution version, e.g. 24.04."
+        },
+        "codename": {
+          "type": "string",
+          "description": "Distribution code name, e.g. noble."
+        },
+        "arch": {
+          "enum": ["amd64", "arm64"],
+          "description": "CPU architecture."
+        },
+        "desktop": {
+          "type": "string",
+          "description": "Desktop environment, e.g. xfce; empty without desktop."
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "description": "The core event for kind event.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Event name, e.g. credential.changed."
+        },
+        "data": {
+          "type": "object",
+          "description": "Event payload."
+        }
+      }
+    },
+    "lang": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
+      "description": "UI language, same as DEVBOX_LANG."
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}$"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9]{0,47}$"
+    },
+    "requestCredential": {
+      "type": "object",
+      "description": "Credential instance with fields, consumer options from the profile and the secret.",
+      "required": ["instance", "type", "fields", "secret"],
+      "additionalProperties": false,
+      "properties": {
+        "instance": {
+          "$ref": "#/$defs/id",
+          "description": "Name of the credential instance."
+        },
+        "type": {
+          "$ref": "#/$defs/id",
+          "description": "Credential type."
+        },
+        "fields": {
+          "type": "object",
+          "description": "Non-secret fields of the instance."
+        },
+        "options": {
+          "type": "object",
+          "description": "Consumer options for this plugin from profile or user."
+        },
+        "secret": {
+          "type": "string",
+          "description": "The secret (token or password)."
+        }
+      }
+    }
+  }
+}

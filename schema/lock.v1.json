@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/lock.v1.json",
+  "title": "DevBox plugin lock file",
+  "description": "Plugins installed from catalogs (~/.local/share/devbox/plugins.lock.json), so the same state can be reproduced.",
+  "type": "object",
+  "required": ["plugins"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of the schema this file follows."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    },
+    "plugins": {
+      "type": "object",
+      "description": "Installed plugins keyed by plugin ID.",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/plugin" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" },
+    "plugin": {
+      "type": "object",
+      "description": "One plugin installed from a catalog.",
+      "required": ["catalog", "version", "digest", "signedBy", "installedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "$ref": "#/$defs/id",
+          "description": "Name of the catalog entry in repositories."
+        },
+        "version": {
+          "type": "string",
+          "description": "Installed version (SemVer).",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+        },
+        "digest": {
+          "type": "string",
+          "description": "SHA-256 digest of the installed package.",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "signedBy": {
+          "type": "string",
+          "description": "Sigstore identity that signed the package."
+        },
+        "installedAt": {
+          "type": "string",
+          "description": "When the plugin was installed.",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

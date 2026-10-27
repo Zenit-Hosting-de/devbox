@@ -1,0 +1,12 @@
+{
+  "protocol": 1,
+  "kind": "check",
+  "plugin": "example",
+  "name": "installed",
+  "dryRun": false,
+  "host": {
+    "distro": "ubuntu",
+    "distroVersion": "24.04",
+    "arch": "x86_64"
+  }
+}

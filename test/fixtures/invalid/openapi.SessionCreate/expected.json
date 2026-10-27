@@ -1,0 +1,5 @@
+{
+  "missing-action.json": { "pointer": "", "keyword": "required" },
+  "action-not-qualified.json": { "pointer": "/action", "keyword": "pattern" },
+  "unknown-property.json": { "pointer": "", "keyword": "additionalProperties" }
+}

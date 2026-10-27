@@ -1,0 +1,124 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/profile.v1.json",
+  "$comment": "Every property of profile.v1.json used once.",
+  "id": "example-team",
+  "name": "Example team",
+  "version": "2026.10.1",
+  "description": "Defaults for the developer machines of the example team.",
+  "requires": {
+    "devbox": ">=1.0.0 <2.0.0"
+  },
+  "plugins": {
+    "require": {
+      "kubectl": {
+        "catalog": "team-catalog",
+        "version": "^1.2.0"
+      }
+    },
+    "enable": [
+      "docker"
+    ],
+    "disable": [
+      "xrdp"
+    ]
+  },
+  "settings": {
+    "node.channel": {
+      "value": "lts"
+    },
+    "java.vendorApi": {
+      "value": "https://mirror.example.com/adoptium/v3",
+      "locked": true
+    }
+  },
+  "credentials": {
+    "company-registry": {
+      "type": "registry",
+      "label": "Company registry",
+      "fields": {
+        "url": "https://nexus.example.com",
+        "layout": "nexus"
+      },
+      "locked": [
+        "url",
+        "layout"
+      ],
+      "consumers": {
+        "npm": {
+          "repository": "npm-group",
+          "scopes": [
+            "@example"
+          ]
+        }
+      }
+    }
+  },
+  "groups": {
+    "update-all": {
+      "label": "Update everything",
+      "actions": [
+        "base.upgrade",
+        "node.update"
+      ]
+    }
+  },
+  "setup": [
+    "base.packages",
+    "node.install",
+    "credentials:company-registry"
+  ],
+  "branding": {
+    "title": "Example DevBox",
+    "accent": "blue",
+    "notice": "Questions about the setup: #devbox on chat.example.com.",
+    "links": [
+      {
+        "label": "Wiki",
+        "url": "https://wiki.example.com/devbox"
+      }
+    ],
+    "logo": "M2 2h20v20H2z"
+  },
+  "ui": {
+    "language": "en"
+  },
+  "repositories": {
+    "team-plugins": {
+      "kind": "plugins",
+      "source": "git+https://git.example.com/platform/devbox-plugins.git",
+      "ref": "main",
+      "path": "plugins",
+      "credential": "company-git",
+      "trust": "prompt",
+      "locked": true,
+      "enabled": true
+    },
+    "team-catalog": {
+      "kind": "catalog",
+      "source": "https://devbox-catalog.example.com/index.json",
+      "trust": {
+        "issuer": "https://git.example.com",
+        "identity": "https://git.example.com/platform/devbox-catalog//.ci/release@refs/heads/main"
+      }
+    },
+    "internal-rpm": {
+      "kind": "packages",
+      "format": "rpm",
+      "url": "https://repo.example.com/rpm/$releasever/$basearch/",
+      "suite": "stable",
+      "components": [
+        "main"
+      ],
+      "key": "https://repo.example.com/RPM-GPG-KEY-example",
+      "when": {
+        "distro": [
+          "fedora",
+          "rhel"
+        ],
+        "arch": [
+          "amd64"
+        ]
+      }
+    }
+  }
+}

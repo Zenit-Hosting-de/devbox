@@ -1,0 +1,30 @@
+{
+  "missing-generated-at.json": {
+    "pointer": "",
+    "keyword": "required"
+  },
+  "release-unknown-property.json": {
+    "pointer": "/plugins/kubectl/versions/0",
+    "keyword": "additionalProperties"
+  },
+  "digest-truncated.json": {
+    "pointer": "/plugins/kubectl/versions/0/digest",
+    "keyword": "pattern"
+  },
+  "category-unknown.json": {
+    "pointer": "/plugins/kubectl/category",
+    "keyword": "enum"
+  },
+  "versions-empty.json": {
+    "pointer": "/plugins/kubectl/versions",
+    "keyword": "minItems"
+  },
+  "yanked-string.json": {
+    "pointer": "/plugins/kubectl/versions/0/yanked",
+    "keyword": "type"
+  },
+  "release-unsigned.json": {
+    "pointer": "/plugins/kubectl/versions/0",
+    "keyword": "required"
+  }
+}

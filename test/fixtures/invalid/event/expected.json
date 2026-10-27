@@ -1,0 +1,22 @@
+{
+  "seq-minimum.json": {
+    "pointer": "/seq",
+    "keyword": "minimum"
+  },
+  "seq-type.json": {
+    "pointer": "/seq",
+    "keyword": "type"
+  },
+  "missing-time.json": {
+    "pointer": "",
+    "keyword": "required"
+  },
+  "unknown-property.json": {
+    "pointer": "",
+    "keyword": "additionalProperties"
+  },
+  "message-type-unknown.json": {
+    "pointer": "/event",
+    "keyword": "oneOf"
+  }
+}

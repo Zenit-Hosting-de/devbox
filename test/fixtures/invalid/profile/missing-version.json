@@ -1,0 +1,5 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/profile.v1.json",
+  "id": "example-team",
+  "name": "Example team"
+}

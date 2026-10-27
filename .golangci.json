@@ -1,0 +1,24 @@
+{
+  "version": "2",
+  "linters": {
+    "enable": ["errcheck", "revive", "gosec", "staticcheck", "govet", "ineffassign", "unused"],
+    "exclusions": {
+      "generated": "strict",
+      "paths": ["internal/gen/"],
+      "rules": [
+        {
+          "path": "(_test\\.go$|^internal/tools/)",
+          "linters": ["gosec"],
+          "text": "G304"
+        }
+      ]
+    }
+  },
+  "formatters": {
+    "enable": ["gofumpt"],
+    "exclusions": {
+      "generated": "strict",
+      "paths": ["internal/gen/"]
+    }
+  }
+}

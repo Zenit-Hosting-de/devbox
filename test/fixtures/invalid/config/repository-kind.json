@@ -1,0 +1,6 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/config.v1.json",
+  "repositories": {
+    "team-plugins": { "kind": "svn", "source": "https://svn.example.com/plugins" }
+  }
+}

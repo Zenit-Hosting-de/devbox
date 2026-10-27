@@ -1,0 +1,30 @@
+{
+  "missing-host.json": {
+    "pointer": "",
+    "keyword": "required"
+  },
+  "unknown-property.json": {
+    "pointer": "",
+    "keyword": "additionalProperties"
+  },
+  "kind-enum.json": {
+    "pointer": "/kind",
+    "keyword": "enum"
+  },
+  "protocol-const.json": {
+    "pointer": "/protocol",
+    "keyword": "const"
+  },
+  "dry-run-type.json": {
+    "pointer": "/dryRun",
+    "keyword": "type"
+  },
+  "host-missing-arch.json": {
+    "pointer": "/host",
+    "keyword": "required"
+  },
+  "host-arch-enum.json": {
+    "pointer": "/host/arch",
+    "keyword": "enum"
+  }
+}

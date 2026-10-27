@@ -1,0 +1,16 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/vault.v1.json",
+  "$comment": "Every property of vault.v1.json used once. Stored only age-encrypted.",
+  "entries": {
+    "devbox/company-registry": {
+      "secret": "example-token-0000",
+      "updatedAt": "2026-10-27T09:12:00Z",
+      "expiresAt": "2027-01-25T00:00:00Z"
+    },
+    "devbox/personal-key": {
+      "secret": "example passphrase",
+      "updatedAt": "2026-10-01T08:00:00Z",
+      "expiresAt": null
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$comment": "Concept excerpt; version and name added to form a complete manifest.",
+  "id": "registry",
+  "version": "1.0.0",
+  "name": "Package registries",
+  "credentialTypes": {
+    "registry": {
+      "label": "Paket-Registry",
+      "fields": {
+        "url": { "type": "string", "format": "uri", "label": "Adresse" },
+        "layout": { "type": "string", "enum": ["nexus", "artifactory", "gitea", "gitlab", "custom"], "default": "nexus", "label": "Art der Registry" },
+        "username": { "type": "string", "label": "Benutzername" }
+      },
+      "secret": { "label": "Token oder Passwort", "expires": "optional" },
+      "verify": "registry.verify"
+    }
+  }
+}

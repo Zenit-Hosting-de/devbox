@@ -1,0 +1,669 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "title": "DevBox plugin manifest",
+  "description": "Manifest of a DevBox plugin (<plugin>/plugin.json): identity, requirements, permissions, settings, checks, actions, credential types, consumers, contributions and event handlers.",
+  "type": "object",
+  "required": ["id", "version", "name"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URI of the JSON Schema this document follows; enables editor completion."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    },
+    "protocol": {
+      "const": 1,
+      "default": 1,
+      "description": "Plugin protocol version. If missing, 1 applies."
+    },
+    "id": {
+      "$ref": "#/$defs/id",
+      "description": "Plugin ID, unique across all plugin paths."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$",
+      "description": "Plugin version (semantic version, optional pre-release suffix)."
+    },
+    "name": {
+      "$ref": "#/$defs/text",
+      "description": "Display name of the plugin."
+    },
+    "description": {
+      "$ref": "#/$defs/text",
+      "description": "Short description of what the plugin does."
+    },
+    "category": {
+      "enum": [
+        "core",
+        "system",
+        "runtime",
+        "tool",
+        "credentials",
+        "consumer",
+        "projects",
+        "remote",
+        "maintenance",
+        "language",
+        "other"
+      ],
+      "description": "Category used to group plugin cards on the overview."
+    },
+    "icon": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$",
+      "description": "Icon name from the UI icon set."
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier."
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Authors of the plugin."
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "Homepage or source location of the plugin."
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Requirements; if one is not met, the plugin is blocked.",
+      "properties": {
+        "devbox": {
+          "type": "string",
+          "description": "Version range of DevBox, e.g. \">=1.0.0\"."
+        },
+        "os": {
+          "type": "array",
+          "items": {
+            "enum": ["linux"]
+          },
+          "description": "Supported operating systems."
+        },
+        "arch": {
+          "type": "array",
+          "items": {
+            "enum": ["amd64", "arm64"]
+          },
+          "description": "Supported CPU architectures."
+        },
+        "distro": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Supported distributions (IDs as in os-release)."
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Commands that must be available in PATH."
+        },
+        "plugins": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Other plugins required, mapped to a version range."
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Permissions the plugin declares; anything not declared is denied.",
+      "properties": {
+        "network": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Network targets (URLs, placeholders allowed) the plugin may reach."
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "File system paths the plugin may access.",
+          "properties": {
+            "read": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Readable paths (placeholders allowed)."
+            },
+            "write": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Writable paths (placeholders allowed)."
+            }
+          }
+        },
+        "sudo": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether actions may run announced steps with sudo."
+        },
+        "credentials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "description": "Credential types whose instances (including secrets) the plugin may access."
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/key"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/field"
+      },
+      "description": "Settings of the plugin, addressed as <plugin>.<key>."
+    },
+    "checks": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/key"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/check"
+      },
+      "description": "Checks that read a state without changing anything, addressed as <plugin>.<key>."
+    },
+    "actions": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/key"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/action"
+      },
+      "description": "Actions that change something, addressed as <plugin>.<key>."
+    },
+    "credentialTypes": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/credentialType"
+      },
+      "description": "Credential types defined by this plugin."
+    },
+    "consumes": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/id"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/consumer"
+      },
+      "description": "Credential types this plugin writes into tool configuration, keyed by credential type."
+    },
+    "contributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Contributions to groups, first-time setup, overview, header links and languages.",
+      "properties": {
+        "groups": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ref"
+            }
+          },
+          "description": "Actions appended to named groups, e.g. update-all."
+        },
+        "setup": {
+          "type": "array",
+          "description": "Steps contributed to the first-time setup plan.",
+          "items": {
+            "type": "object",
+            "required": ["action"],
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "$ref": "#/$defs/ref",
+                "description": "Fully qualified action to run."
+              },
+              "after": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/ref"
+                },
+                "description": "Setup steps that must run before this one."
+              }
+            }
+          }
+        },
+        "language": {
+          "type": "object",
+          "required": ["code", "name", "messages"],
+          "additionalProperties": false,
+          "description": "Language pack contribution: all texts of one language for core and plugins.",
+          "properties": {
+            "code": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
+              "description": "Language code, e.g. fr or pt-BR."
+            },
+            "name": {
+              "$ref": "#/$defs/text",
+              "description": "Name of the language in the language itself."
+            },
+            "englishName": {
+              "$ref": "#/$defs/text",
+              "description": "Name of the language in English."
+            },
+            "fallback": {
+              "type": "string",
+              "description": "Language code used when a text is missing."
+            },
+            "messages": {
+              "type": "string",
+              "description": "Directory with core.json and plugins/<id>.json, relative to the plugin folder."
+            }
+          }
+        },
+        "overview": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Overview card of the plugin.",
+          "properties": {
+            "check": {
+              "$ref": "#/$defs/ref",
+              "description": "Check whose result the card shows."
+            },
+            "primaryAction": {
+              "$ref": "#/$defs/ref",
+              "description": "Action offered directly on the card."
+            }
+          }
+        },
+        "links": {
+          "type": "array",
+          "description": "Links contributed to the header.",
+          "items": {
+            "type": "object",
+            "required": ["label", "url"],
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "$ref": "#/$defs/text",
+                "description": "Link text."
+              },
+              "url": {
+                "type": "string",
+                "description": "Link target."
+              }
+            }
+          }
+        }
+      }
+    },
+    "on": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/command"
+      },
+      "description": "Commands run on core events, keyed by event name, e.g. credential.changed or session.finished."
+    },
+    "i18n": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Translations shipped with the plugin.",
+      "properties": {
+        "default": {
+          "type": "string",
+          "description": "Language of the texts written directly in the manifest."
+        },
+        "dir": {
+          "type": "string",
+          "description": "Directory with <language>.json files, relative to the plugin folder."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}$"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9]{0,47}$"
+    },
+    "ref": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}\\.[a-z][A-Za-z0-9]{0,47}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^\\d+(ms|s|m|h)$",
+      "description": "Go duration with a single unit, e.g. 5s, 10m, 6h."
+    },
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "Command as an exec-style array; the first element is relative to the plugin folder or a command in PATH."
+    },
+    "field": {
+      "description": "Form field: a JSON Schema fragment for a setting, parameter, credential field or consumer option. Same closed keyword list as subschema, but label is required.",
+      "type": "object",
+      "$ref": "#/$defs/subschema",
+      "required": ["type", "label"]
+    },
+    "subschema": {
+      "type": "object",
+      "description": "Closed list of JSON Schema keywords supported by SchemaForm. Used directly for nested values (array items, object properties), where label and help are optional.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": ["string", "integer", "number", "boolean", "array", "object"],
+          "description": "JSON type of the value."
+        },
+        "label": {
+          "$ref": "#/$defs/text",
+          "description": "Label of the form field."
+        },
+        "help": {
+          "$ref": "#/$defs/text",
+          "description": "Help text of the form field."
+        },
+        "default": {
+          "description": "Default value. Not type-checked, because placeholders such as ${java.defaultVersion} are resolved before type checking."
+        },
+        "advanced": {
+          "type": "boolean",
+          "description": "Collapse the field under further options."
+        },
+        "secret": {
+          "type": "boolean",
+          "description": "Render as password field; never prefilled."
+        },
+        "optionsFrom": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,31}\\.[a-z][A-Za-z0-9]{0,47}#(/[^/]*)*$",
+          "description": "Fills a selection from check data: <plugin>.<check>#<JSON Pointer>, with * for list items."
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Allowed values."
+        },
+        "const": {
+          "description": "The only allowed value."
+        },
+        "format": {
+          "enum": ["uri", "date-time", "path"],
+          "description": "String format; path shows a placeholder preview."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regular expression (RE2 and ECMAScript compatible) a string must match."
+        },
+        "minimum": {
+          "type": "number",
+          "description": "Inclusive lower bound."
+        },
+        "maximum": {
+          "type": "number",
+          "description": "Inclusive upper bound."
+        },
+        "exclusiveMinimum": {
+          "type": "number",
+          "description": "Exclusive lower bound."
+        },
+        "exclusiveMaximum": {
+          "type": "number",
+          "description": "Exclusive upper bound."
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum string length."
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum string length."
+        },
+        "items": {
+          "$ref": "#/$defs/subschema",
+          "description": "Schema of the array items."
+        },
+        "minItems": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum number of array items."
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of array items."
+        },
+        "uniqueItems": {
+          "type": "boolean",
+          "description": "Whether array items must be unique."
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/subschema"
+          },
+          "description": "Schemas of the object properties."
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "Object properties that must be present."
+        },
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/subschema"
+            }
+          ],
+          "description": "Whether, or with which schema, further object properties are allowed."
+        },
+        "examples": {
+          "type": "array",
+          "description": "Example values shown as hints."
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "description": "Check: reads a state and reports ok, warn, error or missing; fast and without changes.",
+      "required": ["label", "run"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/text",
+          "description": "Label of the check."
+        },
+        "run": {
+          "$ref": "#/$defs/command",
+          "description": "Command that prints exactly one check result object to stdout."
+        },
+        "timeout": {
+          "$ref": "#/$defs/duration",
+          "description": "Maximum run time."
+        },
+        "cache": {
+          "$ref": "#/$defs/duration",
+          "description": "How long the result is cached."
+        },
+        "network": {
+          "type": "boolean",
+          "description": "Whether the check needs the network; such checks run separately."
+        },
+        "refreshOn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Events that invalidate the cached result, e.g. session.finished:java.*."
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "description": "Action: changes something, runs in a PTY, supports parameters, dry run and an optional confirmation.",
+      "required": ["label", "run"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/text",
+          "description": "Label of the action."
+        },
+        "description": {
+          "$ref": "#/$defs/text",
+          "description": "Longer description of the action."
+        },
+        "run": {
+          "$ref": "#/$defs/command",
+          "description": "Command that performs the action."
+        },
+        "params": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/key"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/field"
+          },
+          "description": "Parameters of the action."
+        },
+        "timeout": {
+          "$ref": "#/$defs/duration",
+          "description": "Maximum run time."
+        },
+        "confirm": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/text"
+            }
+          ],
+          "description": "Ask for confirmation before running; a text is shown verbatim."
+        },
+        "danger": {
+          "type": "boolean",
+          "description": "Style the button as dangerous."
+        },
+        "sudo": {
+          "type": "boolean",
+          "description": "Whether the action runs announced steps with sudo."
+        },
+        "locks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Named locks; actions sharing a lock never run at the same time."
+        }
+      }
+    },
+    "credentialType": {
+      "type": "object",
+      "description": "Credential type: fields, secret, verification action and expiry.",
+      "required": ["label", "fields", "secret"],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/text",
+          "description": "Label of the credential type."
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/field"
+          },
+          "description": "Non-secret fields of an instance."
+        },
+        "secret": {
+          "type": "object",
+          "required": ["label"],
+          "additionalProperties": false,
+          "description": "The secret of an instance.",
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/text",
+              "description": "Label of the secret input."
+            },
+            "expires": {
+              "enum": ["never", "optional", "required"],
+              "description": "Whether an expiry date is never, optionally or always known."
+            }
+          }
+        },
+        "verify": {
+          "$ref": "#/$defs/ref",
+          "description": "Action that verifies an instance."
+        }
+      }
+    },
+    "consumer": {
+      "type": "object",
+      "description": "Consumer: writes credentials of one type into a tool's configuration and removes them again.",
+      "required": ["apply", "remove"],
+      "additionalProperties": false,
+      "properties": {
+        "apply": {
+          "$ref": "#/$defs/command",
+          "description": "Command that writes the credential into the tool configuration."
+        },
+        "remove": {
+          "$ref": "#/$defs/command",
+          "description": "Command that removes the credential from the tool configuration."
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/field"
+          },
+          "description": "Per-instance options set in profile or UI."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "unknown-property.json": { "pointer": "", "keyword": "additionalProperties" },
+  "profile-missing-source.json": { "pointer": "/profiles/0", "keyword": "required" },
+  "profile-source-scheme.json": { "pointer": "/profiles/0/source", "keyword": "pattern" },
+  "repository-kind.json": { "pointer": "/repositories/team-plugins/kind", "keyword": "enum" },
+  "setting-key.json": { "pointer": "/settings", "keyword": "propertyNames" },
+  "history-keepdays-type.json": { "pointer": "/history/keepDays", "keyword": "type" },
+  "server-auth.json": { "pointer": "/server/auth", "keyword": "enum" }
+}

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/check-result.v1.json",
+  "status": "ok",
+  "summary": "Example tool 1.2.3"
+}
