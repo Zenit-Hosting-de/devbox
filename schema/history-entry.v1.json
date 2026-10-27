@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/history-entry.v1.json",
+  "title": "DevBox history entry",
+  "description": "One line of ~/.local/state/devbox/history/<YYYY-MM>.jsonl, written by the core once per finished session.",
+  "type": "object",
+  "required": [
+    "id",
+    "action",
+    "title",
+    "user",
+    "origin",
+    "dryRun",
+    "startedAt",
+    "endedAt",
+    "state",
+    "exitCode",
+    "changes",
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of this JSON Schema, for editor completion."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment, ignored by DevBox."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^s_[0-9A-HJKMNP-TV-Z]{10,26}$",
+      "description": "Session ID: \"s_\" followed by 10 to 26 upper-case Crockford base32 characters."
+    },
+    "action": {
+      "$ref": "#/$defs/ref",
+      "description": "Fully qualified action that ran, e.g. java.update. For group runs still the single action of this session."
+    },
+    "plugin": {
+      "$ref": "#/$defs/id",
+      "description": "ID of the plugin that owns the action."
+    },
+    "group": {
+      "$ref": "#/$defs/id",
+      "description": "ID of the group, when the session was started as part of a group run."
+    },
+    "title": {
+      "$ref": "#/$defs/text",
+      "description": "Human-readable session title in the language active at start."
+    },
+    "user": {
+      "type": "string",
+      "minLength": 1,
+      "description": "System account that started the session."
+    },
+    "origin": {
+      "enum": ["ui", "cli", "tui", "api", "setup", "group", "event"],
+      "description": "Where the session was started: web UI, CLI, terminal menu, plain API client, first-time setup, group run or event handler."
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "True when the session ran with DEVBOX_DRY_RUN=1."
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Start time, RFC 3339 UTC."
+    },
+    "endedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "End time, RFC 3339 UTC."
+    },
+    "state": {
+      "enum": ["success", "failed", "blocked", "stopped", "timeout"],
+      "description": "Final session state, derived from the exit code or from cancellation and timeout."
+    },
+    "exitCode": {
+      "type": ["integer", "null"],
+      "description": "Exit code of the action process; null when the process was killed without one."
+    },
+    "changes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of change messages reported (planned changes in a dry run)."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Summary from the result message, or empty when the action sent none."
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}$"
+    },
+    "ref": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,31}\\.[a-z][A-Za-z0-9]{0,47}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    }
+  }
+}

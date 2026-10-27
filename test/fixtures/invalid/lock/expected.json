@@ -1,0 +1,8 @@
+{
+  "abbreviated-digest.json": { "pointer": "/plugins/kubectl/digest", "keyword": "pattern" },
+  "missing-signed-by.json": { "pointer": "/plugins/kubectl", "keyword": "required" },
+  "unknown-property.json": { "pointer": "/plugins/kubectl", "keyword": "additionalProperties" },
+  "version-pattern.json": { "pointer": "/plugins/kubectl/version", "keyword": "pattern" },
+  "installed-at-type.json": { "pointer": "/plugins/kubectl/installedAt", "keyword": "type" },
+  "missing-plugins.json": { "pointer": "", "keyword": "required" }
+}

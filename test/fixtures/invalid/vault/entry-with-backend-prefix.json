@@ -1,0 +1,9 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/vault.v1.json",
+  "entries": {
+    "age:devbox/company-registry": {
+      "secret": "example-token-0000",
+      "updatedAt": "2026-10-27T09:12:00Z"
+    }
+  }
+}

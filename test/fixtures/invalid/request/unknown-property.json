@@ -1,0 +1,13 @@
+{
+  "protocol": 1,
+  "kind": "check",
+  "plugin": "example",
+  "name": "installed",
+  "dryRun": false,
+  "host": {
+    "distro": "ubuntu",
+    "distroVersion": "24.04",
+    "arch": "amd64"
+  },
+  "secret": "test-token-not-real"
+}

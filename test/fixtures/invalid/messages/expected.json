@@ -1,0 +1,22 @@
+{
+  "single-segment-key.json": {
+    "pointer": "",
+    "keyword": "additionalProperties"
+  },
+  "uppercase-key.json": {
+    "pointer": "",
+    "keyword": "additionalProperties"
+  },
+  "empty-value.json": {
+    "pointer": "/core.title",
+    "keyword": "minLength"
+  },
+  "value-type.json": {
+    "pointer": "/core.count",
+    "keyword": "type"
+  },
+  "schema-type.json": {
+    "pointer": "/$schema",
+    "keyword": "type"
+  }
+}

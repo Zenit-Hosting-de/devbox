@@ -1,0 +1,9 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/event.v1.json",
+  "seq": 7,
+  "time": "2026-10-27T09:20:12Z",
+  "event": {
+    "type": "result",
+    "summary": "Nothing to do"
+  }
+}

@@ -1,0 +1,10 @@
+# Review responsibilities. The last matching pattern takes precedence.
+# Maintainers are listed in MAINTAINERS.md.
+
+*         @KianHelmrich12
+
+/web/     @KianHelmrich12
+/schema/  @KianHelmrich12
+/api/     @KianHelmrich12
+/plugins/ @KianHelmrich12
+/sdk/     @KianHelmrich12

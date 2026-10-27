@@ -1,0 +1,47 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/request.v1.json",
+  "$comment": "Uses every request property at least once.",
+  "protocol": 1,
+  "kind": "event",
+  "plugin": "npm",
+  "name": "credential.changed",
+  "params": {
+    "version": 21
+  },
+  "settings": {
+    "registryUrl": "https://registry.example.com/npm/"
+  },
+  "credential": {
+    "instance": "example-registry",
+    "type": "registry",
+    "fields": {
+      "url": "https://nexus.example.com",
+      "layout": "nexus",
+      "username": "dev"
+    },
+    "options": {
+      "repository": "npm-group",
+      "scopes": [
+        "@example"
+      ]
+    },
+    "secret": "test-token-not-real"
+  },
+  "dryRun": true,
+  "host": {
+    "name": "dev-vm-01",
+    "user": "dev",
+    "distro": "debian",
+    "distroVersion": "12",
+    "codename": "bookworm",
+    "arch": "arm64",
+    "desktop": ""
+  },
+  "event": {
+    "type": "credential.changed",
+    "data": {
+      "instance": "example-registry"
+    }
+  },
+  "lang": "en"
+}

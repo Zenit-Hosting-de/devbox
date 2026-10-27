@@ -1,0 +1,10 @@
+{
+  "id": "example",
+  "version": "1.0.0",
+  "name": "Example",
+  "settings": {
+    "channel": {
+      "type": "string"
+    }
+  }
+}

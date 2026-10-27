@@ -1,0 +1,30 @@
+{
+  "missing-state.json": {
+    "pointer": "",
+    "keyword": "required"
+  },
+  "unknown-property.json": {
+    "pointer": "",
+    "keyword": "additionalProperties"
+  },
+  "id-without-prefix.json": {
+    "pointer": "/id",
+    "keyword": "pattern"
+  },
+  "origin-unknown.json": {
+    "pointer": "/origin",
+    "keyword": "enum"
+  },
+  "state-not-finished.json": {
+    "pointer": "/state",
+    "keyword": "enum"
+  },
+  "exit-code-string.json": {
+    "pointer": "/exitCode",
+    "keyword": "type"
+  },
+  "changes-negative.json": {
+    "pointer": "/changes",
+    "keyword": "minimum"
+  }
+}

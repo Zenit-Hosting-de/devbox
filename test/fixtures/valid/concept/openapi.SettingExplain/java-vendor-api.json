@@ -1,0 +1,10 @@
+{
+  "key": "java.vendorApi",
+  "value": "https://mirror.example.com/adoptium/v3",
+  "origin": "profile:example-team",
+  "locked": true,
+  "layers": [
+    { "layer": "plugin", "value": "https://api.adoptium.net/v3" },
+    { "layer": "profile:example-team", "value": "https://mirror.example.com/adoptium/v3", "locked": true }
+  ]
+}

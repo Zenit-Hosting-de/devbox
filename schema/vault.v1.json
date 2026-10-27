@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/vault.v1.json",
+  "title": "DevBox vault",
+  "description": "Decrypted content of the vault file ~/.local/share/devbox/vault.age, used when no Secret Service is available. The file is only ever stored age-encrypted, never as plain JSON.",
+  "type": "object",
+  "required": ["entries"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of the schema this file follows."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    },
+    "entries": {
+      "type": "object",
+      "description": "Secrets keyed by the reference without backend prefix (age:<name> in credentials.json refers to <name>).",
+      "propertyNames": { "pattern": "^[A-Za-z0-9._/-]+$" },
+      "additionalProperties": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "description": "One secret.",
+      "required": ["secret", "updatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "secret": {
+          "type": "string",
+          "description": "The secret, e.g. a token, password or passphrase.",
+          "minLength": 1
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "When the secret was set.",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": ["string", "null"],
+          "description": "When the secret expires; null if it does not expire or the date is unknown.",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

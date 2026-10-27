@@ -1,0 +1,1 @@
+{ "action": "java.install", "params": { "version": 21 }, "dryRun": false, "cols": 120, "rows": 32 }

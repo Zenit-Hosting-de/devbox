@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/event.v1.json",
+  "title": "DevBox session event",
+  "description": "One line of sessions/<id>.events.jsonl: a protocol message written by a plugin to fd 3, wrapped with sequence number and time. $defs/message is the bare protocol message.",
+  "type": "object",
+  "required": ["seq", "time", "event"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URI of the JSON Schema this document follows; enables editor completion."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Sequence number within the session, shared with terminal output."
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Time the core received the message (RFC 3339, UTC)."
+    },
+    "event": {
+      "$ref": "#/$defs/message",
+      "description": "The protocol message."
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9]{0,47}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "message": {
+      "description": "Protocol message written by a plugin as one JSON line to fd 3, discriminated by type.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/stepMessage"
+        },
+        {
+          "$ref": "#/$defs/progressMessage"
+        },
+        {
+          "$ref": "#/$defs/changeMessage"
+        },
+        {
+          "$ref": "#/$defs/logMessage"
+        },
+        {
+          "$ref": "#/$defs/settingMessage"
+        },
+        {
+          "$ref": "#/$defs/noticeMessage"
+        },
+        {
+          "$ref": "#/$defs/resultMessage"
+        }
+      ]
+    },
+    "stepMessage": {
+      "type": "object",
+      "description": "Sub-step for the progress list.",
+      "required": ["type", "id", "label", "state"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "step",
+          "description": "Message type."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Step ID, stable across state changes."
+        },
+        "label": {
+          "$ref": "#/$defs/text",
+          "description": "Label of the step."
+        },
+        "state": {
+          "enum": ["running", "done", "skipped", "failed"],
+          "description": "State of the step."
+        }
+      }
+    },
+    "progressMessage": {
+      "type": "object",
+      "description": "Progress bar.",
+      "required": ["type", "percent"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "progress",
+          "description": "Message type."
+        },
+        "percent": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Progress in percent; null if unknown."
+        },
+        "text": {
+          "$ref": "#/$defs/text",
+          "description": "Progress text."
+        }
+      }
+    },
+    "changeMessage": {
+      "type": "object",
+      "description": "A change; a planned one in a dry run.",
+      "required": ["type", "kind", "op", "target", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "change",
+          "description": "Message type."
+        },
+        "kind": {
+          "enum": ["file", "package", "service", "env", "link", "other"],
+          "description": "Kind of the changed object."
+        },
+        "op": {
+          "enum": ["create", "update", "delete"],
+          "description": "Operation."
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Changed object, e.g. a path, package or variable name."
+        },
+        "summary": {
+          "$ref": "#/$defs/text",
+          "description": "Summary of the change."
+        }
+      }
+    },
+    "logMessage": {
+      "type": "object",
+      "description": "Message highlighted in the history.",
+      "required": ["type", "level", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "log",
+          "description": "Message type."
+        },
+        "level": {
+          "enum": ["info", "warn", "error"],
+          "description": "Severity."
+        },
+        "text": {
+          "$ref": "#/$defs/text",
+          "description": "Message text."
+        }
+      }
+    },
+    "settingMessage": {
+      "type": "object",
+      "description": "Persistently set a setting of the plugin itself.",
+      "required": ["type", "key", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "setting",
+          "description": "Message type."
+        },
+        "key": {
+          "$ref": "#/$defs/key",
+          "description": "Setting key without the plugin prefix; only keys of the own plugin."
+        },
+        "value": {
+          "description": "New value; must match the setting's schema."
+        }
+      }
+    },
+    "noticeMessage": {
+      "type": "object",
+      "description": "Notice shown after the run.",
+      "required": ["type", "kind", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "notice",
+          "description": "Message type."
+        },
+        "kind": {
+          "enum": ["relogin", "reboot", "restart-shell"],
+          "description": "What the user has to do."
+        },
+        "text": {
+          "$ref": "#/$defs/text",
+          "description": "Notice text."
+        }
+      }
+    },
+    "resultMessage": {
+      "type": "object",
+      "description": "Final result, exactly once at the end.",
+      "required": ["type", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "result",
+          "description": "Message type."
+        },
+        "summary": {
+          "$ref": "#/$defs/text",
+          "description": "Summary of the result."
+        },
+        "data": {
+          "type": "object",
+          "description": "Structured result data."
+        }
+      }
+    }
+  }
+}

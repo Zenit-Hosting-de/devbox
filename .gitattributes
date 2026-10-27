@@ -1,0 +1,6 @@
+* text=auto eol=lf
+
+# Generated code (never edit by hand; run `make generate`)
+internal/gen/** linguist-generated=true
+web/src/app/gen/** linguist-generated=true
+sdk/ts/src/gen/** linguist-generated=true

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/profile.v1.json",
+  "id": "example-team",
+  "name": "Beispiel-Team",
+  "version": "2026.10.1",
+  "requires": { "devbox": ">=1.0.0 <2.0.0" },
+  "plugins": {
+    "require": { "kubectl": { "catalog": "zenit-hosting", "version": "^1.2.0" } },
+    "disable": ["xrdp"]
+  },
+  "settings": {
+    "node.channel": { "value": "lts" },
+    "java.defaultVersion": { "value": 21 },
+    "base.packages": { "value": ["git", "curl", "jq", "unzip", "build-essential"] },
+    "cleanup.projectRoots": { "value": ["${env:HOME}/projekte"] }
+  },
+  "credentials": {
+    "firmen-registry": {
+      "type": "registry",
+      "label": "Firmen-Registry",
+      "fields": { "url": "https://nexus.example.com", "layout": "nexus" },
+      "locked": ["url", "layout"],
+      "consumers": {
+        "npm": { "repository": "npm-group", "scopes": ["@example"] },
+        "maven": { "mirror": "maven-public", "releases": "maven-releases", "snapshots": "maven-snapshots" },
+        "nuget": { "repository": "nuget-group" },
+        "pip": { "repository": "pypi-group" },
+        "docker": { "host": "docker.example.com" }
+      }
+    },
+    "firmen-git": {
+      "type": "git-host",
+      "label": "Firmen-Git",
+      "fields": { "url": "https://git.example.com", "flavor": "gitlab" },
+      "consumers": { "git": { "protocol": "https" } }
+    }
+  },
+  "groups": {
+    "update-all": { "label": "Alles aktualisieren", "actions": ["base.upgrade", "node.update", "java.update", "dotnet.update", "python.update"] }
+  },
+  "setup": ["base.packages", "git.identity", "node.install", "java.install", "credentials:firmen-registry", "credentials:firmen-git"],
+  "branding": {
+    "title": "DevBox",
+    "accent": "blau",
+    "notice": "Fragen zur Einrichtung im Kanal #devbox.",
+    "links": [{ "label": "Wiki", "url": "https://wiki.example.com/devbox" }]
+  }
+}

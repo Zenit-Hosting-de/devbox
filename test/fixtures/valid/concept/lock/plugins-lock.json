@@ -1,0 +1,7 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/lock.v1.json",
+  "$comment": "Concept example; digest completed from the abbreviated sha256:3f1c… in the concept.",
+  "plugins": {
+    "kubectl": { "catalog": "zenit-hosting", "version": "1.2.3", "digest": "sha256:3f1ce3bf6df5f2b9256ae5e05a01b67d002a2427e13980281de5f6c5a9074ed9", "signedBy": "https://github.com/zenit-hosting/devbox-plugins/.github/workflows/release.yml@refs/heads/main", "installedAt": "2026-10-27T09:00:00Z" }
+  }
+}

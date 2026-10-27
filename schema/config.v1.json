@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/config.v1.json",
+  "title": "DevBox configuration",
+  "description": "User configuration (~/.config/devbox/config.json) or system configuration (/etc/devbox/config.json) of DevBox.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of the schema this file follows."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    },
+    "profiles": {
+      "type": "array",
+      "description": "Profile sources, applied in this order; a later profile wins over an earlier one.",
+      "items": {
+        "type": "object",
+        "description": "Source of one profile. Remote profiles are cached under ~/.cache/devbox/profiles/.",
+        "required": ["source"],
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Location of the profile: file://, https://, git+https:// or git+ssh://.",
+            "pattern": "^(file|https|git\\+https|git\\+ssh)://"
+          },
+          "ref": {
+            "type": "string",
+            "description": "Branch, tag or commit of a Git source."
+          },
+          "path": {
+            "type": "string",
+            "description": "Path of the profile file inside a Git repository."
+          },
+          "trust": {
+            "$ref": "#/$defs/trust",
+            "description": "Sigstore identity that must have signed the profile; without it no signature is required."
+          }
+        }
+      }
+    },
+    "plugins": {
+      "type": "object",
+      "description": "Where plugins are loaded from and which ones are switched off.",
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "type": "array",
+          "description": "Plugin directories, searched in this order.",
+          "items": { "type": "string" }
+        },
+        "disabled": {
+          "type": "array",
+          "description": "IDs of plugins that are switched off.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "description": "Setting values keyed by <plugin>.<name>. Value types are checked against the plugin manifests when loading.",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]{1,31}\\.[a-z][A-Za-z0-9]{0,47}$" }
+    },
+    "repositories": {
+      "type": "object",
+      "description": "Repositories for plugins, catalogs, profiles, project templates and system packages, keyed by name.",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]{1,31}$" },
+      "additionalProperties": { "$ref": "#/$defs/repository" }
+    },
+    "server": {
+      "type": "object",
+      "description": "Web service and API.",
+      "additionalProperties": false,
+      "properties": {
+        "listen": {
+          "type": "string",
+          "description": "Address and port the service listens on.",
+          "default": "127.0.0.1:7878"
+        },
+        "auth": {
+          "description": "Login: local (Unix socket and 127.0.0.1 only, no login), pam (login with a system account), off (tests only; refuses to start on non-loopback addresses).",
+          "enum": ["local", "pam", "off"],
+          "default": "local"
+        },
+        "tls": {
+          "type": "object",
+          "description": "TLS certificate for non-loopback addresses; when empty, DevBox creates a self-signed certificate.",
+          "additionalProperties": false,
+          "properties": {
+            "cert": {
+              "type": "string",
+              "description": "Path to the certificate file (PEM)."
+            },
+            "key": {
+              "type": "string",
+              "description": "Path to the private key file (PEM)."
+            }
+          }
+        },
+        "allowedOrigins": {
+          "type": "array",
+          "description": "Additional origins accepted by the Origin check.",
+          "items": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "description": "Appearance of UI, CLI and terminal menu.",
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "type": "string",
+          "description": "Language code for UI, CLI and terminal menu, e.g. de or en.",
+          "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
+          "$comment": "Must match an installed language pack; checked when loading, not in the schema."
+        },
+        "scheme": {
+          "description": "Colour scheme.",
+          "enum": ["system", "light", "dark", "contrast"]
+        },
+        "accent": {
+          "type": "string",
+          "description": "Accent colour from the zenit-ui accents."
+        }
+      }
+    },
+    "vault": {
+      "type": "object",
+      "description": "Storage of secrets.",
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "description": "auto uses the Secret Service when the session provides one, otherwise an age-encrypted file; keyring and age force one backend. Changing the backend migrates all entries.",
+          "enum": ["auto", "keyring", "age"]
+        },
+        "passphrase": {
+          "type": "boolean",
+          "description": "Derive the age key from a passphrase asked for when the service starts, instead of the key file vault.key."
+        }
+      }
+    },
+    "history": {
+      "type": "object",
+      "description": "Retention of the session history.",
+      "additionalProperties": false,
+      "properties": {
+        "keepDays": {
+          "type": "integer",
+          "description": "Days a session is kept.",
+          "minimum": 1
+        },
+        "keepSessions": {
+          "type": "integer",
+          "description": "Maximum number of sessions kept.",
+          "minimum": 10
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "description": "Network access of the core and the plugins.",
+      "additionalProperties": false,
+      "properties": {
+        "proxy": {
+          "type": "string",
+          "description": "Proxy URL for HTTP and HTTPS."
+        },
+        "noProxy": {
+          "type": "string",
+          "description": "Comma-separated hosts that bypass the proxy."
+        },
+        "caFile": {
+          "type": "string",
+          "description": "Path to an additional CA bundle (PEM)."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "repository": {
+      "type": "object",
+      "description": "A repository with plugins, a catalog, a profile, project templates or system packages. The key of the entry is its ID in CLI, API and UI.",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Kind of repository.",
+          "enum": ["plugins", "catalog", "profile", "templates", "packages"]
+        },
+        "source": {
+          "type": "string",
+          "description": "Location: git+https://, git+ssh://, https:// (tarball or index.json) or file://.",
+          "pattern": "^(file|https|git\\+https|git\\+ssh)://"
+        },
+        "ref": {
+          "type": "string",
+          "description": "Branch, tag or commit; tags or commits are recommended for teams."
+        },
+        "path": {
+          "type": "string",
+          "description": "Sub-directory or file inside the source."
+        },
+        "credential": {
+          "type": "string",
+          "description": "Name of a credential instance (git-host or registry) for private repositories. The secret is passed only to Git or the download, never to plugins."
+        },
+        "trust": {
+          "description": "How code from the repository is released: an object with a Sigstore identity (signature required), \"prompt\" (show and confirm permissions for every new version) or \"pinned\" (only the commit named in ref, without asking).",
+          "oneOf": [{ "enum": ["prompt", "pinned"] }, { "$ref": "#/$defs/trust" }],
+          "default": "prompt"
+        },
+        "format": {
+          "description": "Package format of a packages repository.",
+          "enum": ["apt", "rpm", "pacman", "zypper"]
+        },
+        "url": {
+          "type": "string",
+          "description": "Base URL of a packages repository."
+        },
+        "suite": {
+          "type": "string",
+          "description": "Suite of a packages repository, e.g. the distribution codename (apt)."
+        },
+        "components": {
+          "type": "array",
+          "description": "Components of a packages repository (apt).",
+          "items": { "type": "string" }
+        },
+        "key": {
+          "type": "string",
+          "description": "URL of the signing key of a packages repository."
+        },
+        "when": {
+          "type": "object",
+          "description": "Limits the entry to distributions or architectures.",
+          "additionalProperties": false,
+          "properties": {
+            "distro": {
+              "type": "array",
+              "description": "Distribution IDs, e.g. ubuntu, debian, fedora.",
+              "items": { "type": "string" }
+            },
+            "arch": {
+              "type": "array",
+              "description": "CPU architectures.",
+              "items": { "enum": ["amd64", "arm64"] }
+            }
+          }
+        },
+        "locked": {
+          "type": "boolean",
+          "description": "Set in a profile: an entry with the same name in the user configuration does not override this one."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the entry is active.",
+          "default": true
+        }
+      },
+      "$comment": "AP-27 adds if/then: packages requires format, url and key; all other kinds require source."
+    },
+    "trust": {
+      "type": "object",
+      "description": "Expected Sigstore signing identity; a valid signature is required.",
+      "required": ["issuer", "identity"],
+      "additionalProperties": false,
+      "properties": {
+        "issuer": {
+          "type": "string",
+          "description": "OIDC issuer of the signing certificate.",
+          "format": "uri"
+        },
+        "identity": {
+          "type": "string",
+          "description": "Certificate identity, e.g. the URL of the release workflow."
+        }
+      }
+    }
+  }
+}

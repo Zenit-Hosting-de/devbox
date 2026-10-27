@@ -1,0 +1,38 @@
+{
+  "repositories": {
+    "team-plugins": {
+      "kind": "plugins",
+      "source": "git+https://git.example.com/platform/devbox-plugins.git",
+      "ref": "main",
+      "path": "plugins",
+      "trust": "prompt",
+      "credential": "firmen-git"
+    },
+    "firmen-katalog": {
+      "kind": "catalog",
+      "source": "https://devbox-catalog.example.com/index.json",
+      "trust": { "issuer": "https://git.example.com", "identity": "https://git.example.com/platform/devbox-catalog//.ci/release@refs/heads/main" }
+    },
+    "vorlagen": {
+      "kind": "templates",
+      "source": "git+https://git.example.com/platform/project-templates.git",
+      "ref": "v3"
+    },
+    "docker-ce": {
+      "kind": "packages",
+      "format": "apt",
+      "url": "https://download.docker.com/linux/${host:distro}",
+      "suite": "${host:codename}",
+      "components": ["stable"],
+      "key": "https://download.docker.com/linux/${host:distro}/gpg",
+      "when": { "distro": ["ubuntu", "debian"] }
+    },
+    "intern-rpm": {
+      "kind": "packages",
+      "format": "rpm",
+      "url": "https://repo.example.com/rpm/$releasever/$basearch/",
+      "key": "https://repo.example.com/RPM-GPG-KEY-example",
+      "when": { "distro": ["fedora", "rhel"] }
+    }
+  }
+}

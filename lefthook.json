@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/lefthook.json",
+  "pre-commit": {
+    "commands": {
+      "lint": {
+        "run": "make lint"
+      }
+    }
+  },
+  "commit-msg": {
+    "commands": {
+      "commitlint": {
+        "run": "npx --no -- commitlint --edit {1}"
+      }
+    }
+  }
+}

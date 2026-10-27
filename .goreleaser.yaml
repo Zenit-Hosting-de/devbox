@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# GoReleaser configuration. Packages (nfpm .deb/.rpm), AUR, cosign signatures,
+# SBOM and provenance arrive with work package AP-25.
+version: 2
+
+project_name: devbox
+
+builds:
+  - id: devbox
+    main: ./cmd/devbox
+    binary: devbox
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    # Keep in sync with LDFLAGS in the Makefile.
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .ShortCommit }} -X main.date={{ .CommitDate }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: devbox
+    formats:
+      - tar.gz
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+# release-please maintains CHANGELOG.md and the release notes.
+changelog:
+  disable: true

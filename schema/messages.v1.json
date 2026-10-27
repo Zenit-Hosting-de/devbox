@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "title": "DevBox messages",
+  "description": "Translation file of a language pack or plugin: flat object mapping dot-notation keys to ICU message format strings.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URI of the JSON Schema this document follows; enables editor completion."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    }
+  },
+  "patternProperties": {
+    "^[a-z][A-Za-z0-9]*(\\.[a-z0-9][A-Za-z0-9-]*)+$": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Message in ICU message format, keyed in dot notation with at least two segments."
+    }
+  }
+}

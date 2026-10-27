@@ -1,0 +1,18 @@
+{
+  "$comment": "Concept excerpt; version and name added to form a complete manifest.",
+  "id": "npm",
+  "version": "1.0.0",
+  "name": "npm",
+  "consumes": {
+    "registry": {
+      "apply": ["consume/apply.sh"],
+      "remove": ["consume/remove.sh"],
+      "options": {
+        "repository": { "type": "string", "label": "Repository-Name" },
+        "url": { "type": "string", "format": "uri", "label": "Vollständige Adresse" },
+        "scopes": { "type": "array", "items": { "type": "string", "pattern": "^@[a-z0-9-~][a-z0-9-._~]*$" }, "label": "Scopes" }
+      }
+    }
+  },
+  "permissions": { "credentials": ["registry"], "files": { "write": ["${env:HOME}/.npmrc"] } }
+}

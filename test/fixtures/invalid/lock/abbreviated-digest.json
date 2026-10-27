@@ -1,0 +1,12 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/lock.v1.json",
+  "plugins": {
+    "kubectl": {
+      "catalog": "team-catalog",
+      "version": "1.2.3",
+      "digest": "sha256:3f1c…",
+      "signedBy": "https://git.example.com/platform/devbox-catalog//.ci/release@refs/heads/main",
+      "installedAt": "2026-10-27T09:00:00Z"
+    }
+  }
+}

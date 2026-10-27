@@ -1,0 +1,34 @@
+{
+  "missing-version.json": {
+    "pointer": "",
+    "keyword": "required"
+  },
+  "unknown-property.json": {
+    "pointer": "",
+    "keyword": "additionalProperties"
+  },
+  "id-pattern.json": {
+    "pointer": "/id",
+    "keyword": "pattern"
+  },
+  "category-enum.json": {
+    "pointer": "/category",
+    "keyword": "enum"
+  },
+  "protocol-const.json": {
+    "pointer": "/protocol",
+    "keyword": "const"
+  },
+  "check-run-type.json": {
+    "pointer": "/checks/installed/run",
+    "keyword": "type"
+  },
+  "field-missing-label.json": {
+    "pointer": "/settings/channel",
+    "keyword": "required"
+  },
+  "field-unknown-keyword.json": {
+    "pointer": "/settings/channel",
+    "keyword": "additionalProperties"
+  }
+}

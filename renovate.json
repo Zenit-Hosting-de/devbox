@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests", ":semanticCommits"],
+  "postUpdateOptions": ["gomodTidy"],
+  "commitBody": "Signed-off-by: {{{gitAuthor}}}",
+  "packageRules": [
+    {
+      "description": "Go tools pinned through the tool directives in go.mod",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": [
+        "github.com/atombender/go-jsonschema",
+        "github.com/oapi-codegen/oapi-codegen/v2",
+        "github.com/golangci/golangci-lint/v2",
+        "mvdan.cc/gofumpt"
+      ],
+      "enabled": true,
+      "groupName": "go tools"
+    },
+    {
+      "description": "Non-major npm devDependencies in one pull request",
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm devDependencies"
+    },
+    {
+      "description": "Non-major GitHub Actions updates in one pull request",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "github actions"
+    }
+  ]
+}

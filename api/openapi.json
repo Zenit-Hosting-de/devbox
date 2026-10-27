@@ -1,0 +1,716 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "DevBox API",
+    "version": "1",
+    "summary": "The only interface between the DevBox core and its frontends (web UI, CLI, terminal menu).",
+    "description": "Skeleton from AP-02. AP-09 completes every endpoint of docs/concept.md, section \"API\". All responses are JSON with camelCase fields and RFC 3339 UTC times; errors use RFC 9457 problem details with a stable code.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Relative to the address the core listens on."
+    }
+  ],
+  "tags": [
+    {
+      "name": "info",
+      "description": "Version and capabilities of the core."
+    },
+    {
+      "name": "checks",
+      "description": "Cached check results."
+    },
+    {
+      "name": "settings",
+      "description": "Effective settings with origin and lock."
+    },
+    {
+      "name": "sessions",
+      "description": "Action runs."
+    },
+    {
+      "name": "credentials",
+      "description": "Credential instances without secrets."
+    },
+    {
+      "name": "schema",
+      "description": "Embedded JSON Schemas."
+    }
+  ],
+  "paths": {
+    "/info": {
+      "get": {
+        "tags": ["info"],
+        "operationId": "getInfo",
+        "summary": "Version, host, authentication mode, protocol version and features.",
+        "responses": {
+          "200": {
+            "description": "Information about the core.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Info"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/checks": {
+      "get": {
+        "tags": ["checks"],
+        "operationId": "listChecks",
+        "summary": "Cached check results of all plugins.",
+        "responses": {
+          "200": {
+            "description": "Status report with all cached check results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusReport"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/checks/refresh": {
+      "post": {
+        "tags": ["checks"],
+        "operationId": "refreshChecks",
+        "summary": "Run checks again; an empty body refreshes all checks.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChecksRefresh"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The checks are running; results arrive over the WebSocket topic \"checks\"."
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/settings": {
+      "patch": {
+        "tags": ["settings"],
+        "operationId": "patchSettings",
+        "summary": "Set user values; null removes the user value.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "The values were stored."
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/settings/{key}/explain": {
+      "get": {
+        "tags": ["settings"],
+        "operationId": "explainSetting",
+        "summary": "Effective value of a setting and every layer it was merged from.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Fully qualified setting key, e.g. java.vendorApi.",
+            "schema": {
+              "$ref": "#/components/schemas/SettingKey"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Origin of the effective value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingExplain"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/sessions": {
+      "post": {
+        "tags": ["sessions"],
+        "operationId": "createSession",
+        "summary": "Start an action.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The session was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/credentials/{name}/secret": {
+      "put": {
+        "tags": ["credentials"],
+        "operationId": "putCredentialSecret",
+        "summary": "Set the secret of a credential instance; starts verify and apply as a session.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name of the credential instance.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecretPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Verify and apply run as a session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/schema/{name}": {
+      "get": {
+        "tags": ["schema"],
+        "operationId": "getSchema",
+        "summary": "An embedded JSON Schema, for editors and forms.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Schema name without version suffix, e.g. config.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The JSON Schema document.",
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "DevBoxRequest": {
+        "name": "X-DevBox-Request",
+        "in": "header",
+        "required": true,
+        "description": "Required on every modifying request (CSRF protection), together with a matching Origin.",
+        "schema": {
+          "type": "string",
+          "const": "1"
+        }
+      }
+    },
+    "responses": {
+      "Problem": {
+        "description": "Error in RFC 9457 format.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Name": {
+        "description": "Identifier of a plugin, credential instance, repository or schema.",
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{1,31}$"
+      },
+      "Ref": {
+        "description": "Fully qualified check or action, <plugin>.<name>.",
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{1,31}\\.[a-z][A-Za-z0-9]{0,47}$"
+      },
+      "SettingKey": {
+        "description": "Fully qualified setting key, <plugin>.<name>.",
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{1,31}\\.[a-z][A-Za-z0-9]{0,47}$"
+      },
+      "CheckStatus": {
+        "description": "Result state of a check.",
+        "enum": ["ok", "warn", "error", "missing"]
+      },
+      "SessionState": {
+        "description": "State of a session.",
+        "enum": ["queued", "running", "success", "failed", "blocked", "stopped", "timeout"]
+      },
+      "Host": {
+        "description": "Facts about the machine.",
+        "type": "object",
+        "required": ["name", "user", "distro", "distroVersion"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Host name."
+          },
+          "user": {
+            "type": "string",
+            "description": "User the core runs as."
+          },
+          "distro": {
+            "type": "string",
+            "description": "Distribution ID, e.g. ubuntu."
+          },
+          "distroVersion": {
+            "type": "string",
+            "description": "Distribution version, e.g. 24.04."
+          },
+          "arch": {
+            "enum": ["amd64", "arm64"],
+            "description": "CPU architecture."
+          }
+        }
+      },
+      "Info": {
+        "description": "Version, host, authentication mode, protocol version and features of the core.",
+        "type": "object",
+        "required": ["vendor", "version", "protocol", "auth", "host"],
+        "additionalProperties": false,
+        "properties": {
+          "vendor": {
+            "const": "zenit-hosting",
+            "description": "Always zenit-hosting; distinguishes DevBox from other tools named devbox."
+          },
+          "version": {
+            "type": "string",
+            "description": "Version of the core."
+          },
+          "commit": {
+            "type": "string",
+            "description": "Git commit of the build."
+          },
+          "date": {
+            "type": "string",
+            "description": "Build date."
+          },
+          "protocol": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Plugin protocol version."
+          },
+          "auth": {
+            "enum": ["local", "pam", "off"],
+            "description": "Value of server.auth."
+          },
+          "host": {
+            "$ref": "#/components/schemas/Host"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional features of this build."
+          }
+        }
+      },
+      "CheckSummary": {
+        "description": "Cached result of one check.",
+        "type": "object",
+        "required": ["id", "status", "summary", "checkedAt"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Ref"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CheckStatus"
+          },
+          "summary": {
+            "type": "string",
+            "description": "One-line result."
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time of the check."
+          }
+        }
+      },
+      "StatusReport": {
+        "description": "Overview of all checks; also the output of devbox status --json.",
+        "type": "object",
+        "required": ["host", "summary", "checks"],
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/Host"
+          },
+          "summary": {
+            "description": "Number of checks per status.",
+            "type": "object",
+            "required": ["ok", "warn", "error", "missing"],
+            "additionalProperties": false,
+            "properties": {
+              "ok": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "warn": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "error": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "missing": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckSummary"
+            }
+          }
+        }
+      },
+      "ChecksRefresh": {
+        "description": "Checks to run again; without ids all checks run.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Ref"
+            }
+          }
+        }
+      },
+      "SettingLayer": {
+        "description": "Value of a setting in one configuration layer.",
+        "type": "object",
+        "required": ["layer", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "layer": {
+            "type": "string",
+            "description": "plugin, system, profile:<id>, user, env or call.",
+            "pattern": "^(plugin|system|user|env|call|profile:[a-z][a-z0-9-]{1,31})$"
+          },
+          "value": {
+            "description": "Value in this layer."
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "The profile locks the value."
+          }
+        }
+      },
+      "SettingExplain": {
+        "description": "Effective value of a setting and every layer it was merged from; also the output of devbox config explain --json.",
+        "type": "object",
+        "required": ["key", "value", "origin", "layers"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/SettingKey"
+          },
+          "value": {
+            "description": "Effective value."
+          },
+          "origin": {
+            "type": "string",
+            "description": "Layer the effective value comes from.",
+            "pattern": "^(plugin|system|user|env|call|profile:[a-z][a-z0-9-]{1,31})$"
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "A profile locks the value."
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettingLayer"
+            }
+          }
+        }
+      },
+      "SettingsPatch": {
+        "description": "User values to set; null removes the user value.",
+        "type": "object",
+        "propertyNames": {
+          "$ref": "#/components/schemas/SettingKey"
+        },
+        "minProperties": 1
+      },
+      "SessionCreate": {
+        "description": "Request to start an action.",
+        "type": "object",
+        "required": ["action"],
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/Ref"
+          },
+          "params": {
+            "type": "object",
+            "description": "Action parameters."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Report planned changes only."
+          },
+          "cols": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Terminal width."
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Terminal height."
+          }
+        }
+      },
+      "Session": {
+        "description": "Summary of a session.",
+        "type": "object",
+        "required": ["id", "action", "state", "dryRun"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^s_[0-9A-HJKMNP-TV-Z]{10,26}$",
+            "description": "Session ID."
+          },
+          "action": {
+            "$ref": "#/components/schemas/Ref"
+          },
+          "title": {
+            "type": "string",
+            "description": "Label of the action."
+          },
+          "state": {
+            "$ref": "#/components/schemas/SessionState"
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "The session is a dry run."
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start time."
+          },
+          "endedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "End time."
+          }
+        }
+      },
+      "SecretPut": {
+        "description": "New secret of a credential instance.",
+        "type": "object",
+        "required": ["secret"],
+        "additionalProperties": false,
+        "properties": {
+          "secret": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Token or password; never returned by the API."
+          },
+          "expiresAt": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Known expiry, or null."
+          }
+        }
+      },
+      "ProblemError": {
+        "description": "One field error of a problem.",
+        "type": "object",
+        "required": ["pointer", "code"],
+        "additionalProperties": false,
+        "properties": {
+          "pointer": {
+            "type": "string",
+            "description": "JSON Pointer of the field in the request body."
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable error code of the field."
+          },
+          "message": {
+            "type": "string",
+            "description": "Readable message."
+          }
+        }
+      },
+      "Problem": {
+        "description": "Error in RFC 9457 format with a stable code.",
+        "type": "object",
+        "required": ["type", "title", "status", "code"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "URI of the error type."
+          },
+          "title": {
+            "type": "string",
+            "description": "Short, readable summary."
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599,
+            "description": "HTTP status code."
+          },
+          "code": {
+            "enum": [
+              "validation",
+              "not-found",
+              "plugin-not-ready",
+              "setting-locked",
+              "permission-denied",
+              "unauthenticated",
+              "csrf",
+              "conflict",
+              "internal"
+            ],
+            "description": "Stable error code."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Readable explanation of this occurrence."
+          },
+          "instance": {
+            "type": "string",
+            "description": "Request path."
+          },
+          "traceId": {
+            "type": "string",
+            "description": "Log reference for internal errors."
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProblemError"
+            }
+          }
+        }
+      }
+    }
+  }
+}

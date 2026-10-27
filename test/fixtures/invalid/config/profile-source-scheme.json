@@ -1,0 +1,4 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/config.v1.json",
+  "profiles": [{ "source": "http://git.example.com/profile.json" }]
+}

@@ -1,0 +1,15 @@
+# Build output
+/bin/
+/dist/
+sdk/ts/dist/
+internal/api/dist/
+coverage/
+*.test
+*.out
+
+# Dependencies
+node_modules/
+
+# Local tooling
+graphify-out/
+.DS_Store

@@ -1,0 +1,1 @@
+{"id":"s_01JB8Y3K2M","action":"java.update","title":"Java aktualisieren","user":"m.muster","origin":"ui","dryRun":false,"startedAt":"2026-10-27T09:20:11Z","endedAt":"2026-10-27T09:21:40Z","state":"success","exitCode":0,"changes":2,"summary":"Temurin 21.0.5 installiert, JAVA_HOME gesetzt"}

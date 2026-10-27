@@ -1,0 +1,9 @@
+{
+  "type": "https://devbox.zenit-hosting.de/errors/setting-locked",
+  "title": "Einstellung gesperrt",
+  "status": 409,
+  "code": "setting-locked",
+  "detail": "Der Wert von java.vendorApi ist im Profil Beispiel-Team gesperrt.",
+  "instance": "/api/v1/settings",
+  "errors": [ { "pointer": "/java.vendorApi", "code": "locked", "message": "gesperrt durch profile:example-team" } ]
+}

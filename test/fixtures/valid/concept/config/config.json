@@ -1,0 +1,27 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/config.v1.json",
+  "profiles": [
+    { "source": "git+https://git.example.com/platform/devbox-profile.git", "ref": "main", "path": "profile.json" },
+    { "source": "file://${xdg:config}/devbox/local-profile.json" }
+  ],
+  "plugins": {
+    "paths": ["${xdg:data}/devbox/plugins", "/usr/share/devbox/plugins"],
+    "disabled": ["xrdp"]
+  },
+  "settings": {
+    "node.channel": "lts",
+    "java.defaultVersion": 21
+  },
+  "repositories": {
+    "zenit-hosting": {
+      "kind": "catalog",
+      "source": "https://github.com/zenit-hosting/devbox-plugins",
+      "trust": { "issuer": "https://token.actions.githubusercontent.com", "identity": "https://github.com/zenit-hosting/devbox-plugins/.github/workflows/release.yml@refs/heads/main" }
+    }
+  },
+  "server": { "listen": "127.0.0.1:7878", "auth": "local", "tls": { "cert": "", "key": "" }, "allowedOrigins": [] },
+  "ui": { "language": "de", "scheme": "system", "accent": "blau" },
+  "vault": { "backend": "auto" },
+  "history": { "keepDays": 90, "keepSessions": 500 },
+  "network": { "proxy": "${env:HTTPS_PROXY}", "noProxy": "localhost,127.0.0.1", "caFile": "" }
+}

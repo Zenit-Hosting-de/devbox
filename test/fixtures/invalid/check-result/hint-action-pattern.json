@@ -1,0 +1,10 @@
+{
+  "status": "ok",
+  "summary": "Example tool 1.2.3",
+  "hints": [
+    {
+      "text": "Update available",
+      "action": "update"
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/catalog.v1.json",
+  "$comment": "Own example with every property.",
+  "name": "Example catalog",
+  "generatedAt": "2026-10-27T08:00:00Z",
+  "plugins": {
+    "kubectl": {
+      "name": "kubectl",
+      "description": "Install kubectl and keep it up to date",
+      "category": "tool",
+      "homepage": "https://catalog.example.com/plugins/kubectl",
+      "versions": [
+        {
+          "version": "1.2.3",
+          "url": "https://catalog.example.com/packages/kubectl-1.2.3.tar.gz",
+          "digest": "sha256:3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c3f1c",
+          "signature": "https://catalog.example.com/packages/kubectl-1.2.3.tar.gz.sig",
+          "bundle": "packages/kubectl-1.2.3.tar.gz.sigstore.json",
+          "requires": {
+            "devbox": ">=1.0.0 <2.0.0",
+            "os": [
+              "linux"
+            ],
+            "arch": [
+              "amd64",
+              "arm64"
+            ],
+            "distro": [
+              "ubuntu",
+              "debian",
+              "fedora"
+            ],
+            "commands": [
+              "tar"
+            ],
+            "plugins": {
+              "base": ">=1.0.0"
+            }
+          },
+          "permissions": {
+            "network": [
+              "${kubectl.downloadUrl}"
+            ],
+            "files": {
+              "read": [
+                "${env:HOME}/.kube"
+              ],
+              "write": [
+                "${xdg:data}/devbox/bin/kubectl"
+              ]
+            },
+            "sudo": false,
+            "credentials": [
+              "registry"
+            ]
+          },
+          "publishedAt": "2026-10-20T12:00:00Z",
+          "yanked": false
+        },
+        {
+          "version": "1.2.2-rc.1",
+          "url": "packages/kubectl-1.2.2-rc.1.tar.gz",
+          "digest": "sha256:a07ea07ea07ea07ea07ea07ea07ea07ea07ea07ea07ea07ea07ea07ea07ea07e",
+          "publishedAt": "2026-09-01T12:00:00Z",
+          "yanked": true,
+          "bundle": "sigstore/kubectl-1.0.0.bundle.json"
+        }
+      ]
+    }
+  }
+}

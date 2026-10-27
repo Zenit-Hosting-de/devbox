@@ -1,0 +1,8 @@
+{
+  "host": { "name": "dev-vm-07", "user": "m.muster", "distro": "ubuntu", "distroVersion": "24.04" },
+  "summary": { "ok": 14, "warn": 2, "error": 0, "missing": 1 },
+  "checks": [
+    { "id": "java.installed", "status": "warn", "summary": "Temurin 21.0.4 (Standard), 17.0.12", "checkedAt": "2026-10-27T09:18:02Z" },
+    { "id": "credentials.expiry", "status": "warn", "summary": "firmen-git läuft in 9 Tagen ab", "checkedAt": "2026-10-27T09:18:02Z" }
+  ]
+}

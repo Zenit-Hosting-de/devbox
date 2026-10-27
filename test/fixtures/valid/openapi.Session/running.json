@@ -1,0 +1,8 @@
+{
+  "id": "s_01JB8Y3K2M",
+  "action": "java.install",
+  "title": "Install JDK",
+  "state": "running",
+  "dryRun": true,
+  "startedAt": "2026-10-27T09:20:11Z"
+}

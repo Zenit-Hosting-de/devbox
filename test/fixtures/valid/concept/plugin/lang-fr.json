@@ -1,0 +1,19 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "lang-fr",
+  "version": "1.0.0",
+  "name": "Français",
+  "description": "Langue française pour DevBox",
+  "category": "language",
+  "license": "Apache-2.0",
+  "requires": { "devbox": ">=1.0.0" },
+  "contributes": {
+    "language": {
+      "code": "fr",
+      "name": "Français",
+      "englishName": "French",
+      "fallback": "en",
+      "messages": "messages"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "node-basic",
+  "name": "Node.js project",
+  "params": {
+    "options": {
+      "type": "secret",
+      "label": "Options"
+    }
+  }
+}

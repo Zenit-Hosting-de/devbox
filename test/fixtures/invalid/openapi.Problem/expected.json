@@ -1,0 +1,6 @@
+{
+  "missing-code.json": { "pointer": "", "keyword": "required" },
+  "unknown-code.json": { "pointer": "/code", "keyword": "enum" },
+  "status-not-error.json": { "pointer": "/status", "keyword": "minimum" },
+  "error-without-pointer.json": { "pointer": "/errors/0", "keyword": "required" }
+}

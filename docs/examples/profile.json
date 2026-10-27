@@ -1,0 +1,178 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/profile.v1.json",
+  "id": "example-team",
+  "name": "Example team",
+  "version": "2026.10.1",
+  "description": "Team profile for the developer machines of the example team. All addresses are examples.",
+  "requires": {
+    "devbox": ">=1.0.0 <2.0.0"
+  },
+  "plugins": {
+    "require": {
+      "kubectl": {
+        "catalog": "team-catalog",
+        "version": "^1.2.0"
+      },
+      "helm": {
+        "catalog": "team-catalog",
+        "version": "^3.16.0"
+      }
+    },
+    "enable": ["docker"],
+    "disable": ["xrdp"]
+  },
+  "settings": {
+    "node.channel": {
+      "value": "lts"
+    },
+    "node.distUrl": {
+      "value": "https://mirror.example.com/nodejs/dist",
+      "locked": true
+    },
+    "java.vendorApi": {
+      "value": "https://mirror.example.com/adoptium/v3",
+      "locked": true
+    },
+    "java.defaultVersion": {
+      "value": 21
+    },
+    "python.defaultVersion": {
+      "value": "3.12"
+    },
+    "base.packages": {
+      "value": ["git", "curl", "jq", "unzip", "build-essential"]
+    },
+    "docker.registryMirrors": {
+      "value": ["https://docker-mirror.example.com"]
+    },
+    "cleanup.projectRoots": {
+      "value": ["${env:HOME}/projects"]
+    }
+  },
+  "credentials": {
+    "company-registry": {
+      "type": "registry",
+      "label": "Company registry",
+      "fields": {
+        "url": "https://nexus.example.com",
+        "layout": "nexus"
+      },
+      "locked": ["url", "layout"],
+      "consumers": {
+        "npm": {
+          "repository": "npm-group",
+          "scopes": ["@example"]
+        },
+        "maven": {
+          "mirror": "maven-public",
+          "releases": "maven-releases",
+          "snapshots": "maven-snapshots"
+        },
+        "gradle": {
+          "repository": "maven-public"
+        },
+        "nuget": {
+          "repository": "nuget-group"
+        },
+        "pip": {
+          "repository": "pypi-group"
+        },
+        "docker": {
+          "host": "docker.example.com"
+        }
+      }
+    },
+    "company-git": {
+      "type": "git-host",
+      "label": "Company Git",
+      "fields": {
+        "url": "https://git.example.com",
+        "flavor": "gitlab"
+      },
+      "locked": ["url", "flavor"],
+      "consumers": {
+        "git": {
+          "protocol": "https"
+        },
+        "githost": {}
+      }
+    }
+  },
+  "groups": {
+    "update-all": {
+      "label": "Update everything",
+      "actions": [
+        "base.upgrade",
+        "node.update",
+        "java.update",
+        "dotnet.update",
+        "python.update",
+        "docker.update"
+      ]
+    }
+  },
+  "setup": [
+    "base.packages",
+    "git.identity",
+    "node.install",
+    "java.install",
+    "python.install",
+    "docker.install",
+    "credentials:company-registry",
+    "credentials:company-git"
+  ],
+  "branding": {
+    "title": "Example DevBox",
+    "accent": "blue",
+    "notice": "Questions about the setup: channel #devbox on chat.example.com.",
+    "links": [
+      {
+        "label": "Wiki",
+        "url": "https://wiki.example.com/devbox"
+      },
+      {
+        "label": "Support",
+        "url": "https://support.example.com/devbox"
+      }
+    ]
+  },
+  "ui": {
+    "language": "en"
+  },
+  "repositories": {
+    "team-plugins": {
+      "kind": "plugins",
+      "source": "git+https://git.example.com/platform/devbox-plugins.git",
+      "ref": "v1.4.0",
+      "path": "plugins",
+      "trust": "prompt",
+      "credential": "company-git"
+    },
+    "team-catalog": {
+      "kind": "catalog",
+      "source": "https://devbox-catalog.example.com/index.json",
+      "trust": {
+        "issuer": "https://git.example.com",
+        "identity": "https://git.example.com/platform/devbox-catalog//.ci/release@refs/heads/main"
+      },
+      "locked": true
+    },
+    "team-templates": {
+      "kind": "templates",
+      "source": "git+https://git.example.com/platform/project-templates.git",
+      "ref": "v3",
+      "credential": "company-git"
+    },
+    "internal-apt": {
+      "kind": "packages",
+      "format": "apt",
+      "url": "https://apt.example.com/${host:distro}",
+      "suite": "${host:codename}",
+      "components": ["main"],
+      "key": "https://apt.example.com/gpg",
+      "when": {
+        "distro": ["ubuntu", "debian"]
+      }
+    }
+  }
+}

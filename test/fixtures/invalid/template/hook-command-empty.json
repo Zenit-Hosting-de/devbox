@@ -1,0 +1,9 @@
+{
+  "id": "node-basic",
+  "name": "Node.js project",
+  "hooks": {
+    "postCreate": [
+      []
+    ]
+  }
+}

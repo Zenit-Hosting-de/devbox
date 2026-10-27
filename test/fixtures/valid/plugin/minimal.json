@@ -1,0 +1,6 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "example",
+  "version": "1.0.0",
+  "name": "Example"
+}
