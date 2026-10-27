@@ -1,0 +1,49 @@
+# devbox plugin list shows all five states with their reason; for a duplicate ID the
+# first found wins and the winner notes the shadowed directory.
+
+exec devbox plugin list --json
+stdout '"id": "base",\n  *"name": "Base",\n  *"version": "1.0.0",\n  *"category": "system",\n  *"state": "ready"'
+stdout '"code": "duplicate-id",\n *"detail": ".*/team-plugins/base"'
+stdout '"id": "broken",\n  *"state": "invalid",\n  *"reasons": \[\n *\{\n *"code": "manifest-invalid",\n *"detail": ".*broken/plugin.json:.*/version: pattern'
+stdout '"state": "blocked",\n  *"reasons": \[\n *\{\n *"code": "requires-command",\n *"detail": "devbox-test-missing-command"'
+stdout '"state": "disabled",\n  *"reasons": \[\n *\{\n *"code": "disabled",\n *"detail": "user"'
+stdout '"state": "incomplete",\n  *"reasons": \[\n *\{\n *"code": "setting-missing",\n *"detail": "needs.token"'
+
+# once the setting has a value the plugin is ready
+exec devbox plugin list --set needs.token=abc
+stdout '^needs +1.0.0 +ready'
+
+# plain output, one plugin per line
+exec devbox plugin list
+stdout '^base +1.0.0 +ready +duplicate-id: '
+stdout '^off +1.0.0 +disabled +disabled: user$'
+
+exec devbox plugin info base --json
+stdout '"manifest": \{'
+! exec devbox plugin info nope
+stderr 'not-found: nope'
+
+-- home/.config/devbox/config.json --
+{
+  "plugins": {
+    "paths": ["${xdg:data}/devbox/plugins", "${env:HOME}/team-plugins"],
+    "disabled": ["off"]
+  }
+}
+-- home/.local/share/devbox/plugins/base/plugin.json --
+{ "id": "base", "version": "1.0.0", "name": "Base", "category": "system" }
+-- home/team-plugins/base/plugin.json --
+{ "id": "base", "version": "2.0.0", "name": "Base (team)", "category": "system" }
+-- home/.local/share/devbox/plugins/broken/plugin.json --
+{ "id": "broken", "version": "x", "name": "Broken" }
+-- home/.local/share/devbox/plugins/needscmd/plugin.json --
+{ "id": "needscmd", "version": "1.0.0", "name": "Needs a command", "requires": { "commands": ["devbox-test-missing-command"] } }
+-- home/.local/share/devbox/plugins/off/plugin.json --
+{ "id": "off", "version": "1.0.0", "name": "Off" }
+-- home/.local/share/devbox/plugins/needs/plugin.json --
+{
+  "id": "needs",
+  "version": "1.0.0",
+  "name": "Needs a setting",
+  "settings": { "token": { "type": "string", "label": "Token" } }
+}

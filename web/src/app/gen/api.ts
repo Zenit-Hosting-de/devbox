@@ -21,6 +21,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Plugins with state and the reasons for it. */
+        get: operations["listPlugins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugins/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One plugin with state, reasons and manifest. */
+        get: operations["getPlugin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/checks": {
         parameters: {
             query?: never;
@@ -326,6 +360,57 @@ export interface components {
             traceId?: string;
             errors?: components["schemas"]["ProblemError"][];
         };
+        /**
+         * @description State of a plugin; only ready plugins offer actions.
+         * @enum {unknown}
+         */
+        PluginState: "invalid" | "blocked" | "disabled" | "incomplete" | "ready";
+        /** @description Why a plugin is not ready, or a note about it. code is stable and translated by the frontends. */
+        PluginReason: {
+            /**
+             * @description Reason code.
+             * @enum {unknown}
+             */
+            code: "manifest-invalid" | "disabled" | "requires-devbox" | "requires-os" | "requires-arch" | "requires-distro" | "requires-command" | "requires-plugin" | "dependency-cycle" | "setting-missing" | "duplicate-id";
+            /** @description Subject of the reason: command, plugin and range, setting key, disabling layer or error location. */
+            detail?: string;
+        };
+        /** @description A found plugin with its state. */
+        PluginStatus: {
+            id: components["schemas"]["Name"];
+            /** @description Display name from the manifest. */
+            name?: string;
+            /** @description Plugin version. */
+            version?: string;
+            /** @description Category from the manifest. */
+            category?: string;
+            state: components["schemas"]["PluginState"];
+            reasons: components["schemas"]["PluginReason"][];
+            /** @description Plugin directory. */
+            path: string;
+            /** @description Directories of later plugins with the same ID that this one replaces. */
+            shadowed?: string[];
+        };
+        /** @description All found plugins, sorted by ID. */
+        PluginList: components["schemas"]["PluginStatus"][];
+        /** @description A plugin with its manifest (absent when the manifest is invalid). */
+        PluginDetail: {
+            id: components["schemas"]["Name"];
+            /** @description Display name from the manifest. */
+            name?: string;
+            /** @description Plugin version. */
+            version?: string;
+            /** @description Category from the manifest. */
+            category?: string;
+            state: components["schemas"]["PluginState"];
+            reasons: components["schemas"]["PluginReason"][];
+            /** @description Plugin directory. */
+            path: string;
+            /** @description Directories of later plugins with the same ID that this one replaces. */
+            shadowed?: string[];
+            /** @description The plugin manifest (schema/plugin.v1.json). */
+            manifest?: Record<string, never>;
+        };
     };
     responses: {
         /** @description Error in RFC 9457 format. */
@@ -364,6 +449,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Info"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listPlugins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All found plugins, sorted by ID. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getPlugin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Plugin ID. */
+                id: components["schemas"]["Name"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The plugin. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginDetail"];
                 };
             };
             default: components["responses"]["Problem"];

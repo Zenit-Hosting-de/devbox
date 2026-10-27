@@ -2,6 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
@@ -12,13 +17,15 @@ const defaultPluginPath = "${xdg:data}/devbox/plugins"
 
 // state is the loaded configuration with the plugins that define the settings.
 type state struct {
-	env     *env
-	system  *config.File
-	user    *config.File
-	defs    config.Definitions
-	layers  []config.Layer // without env and call
-	result  *config.Result
-	plugins []*plugin.Manifest
+	env      *env
+	system   *config.File
+	user     *config.File
+	defs     config.Definitions
+	layers   []config.Layer // without env and call
+	result   *config.Result
+	plugins  []*plugin.Manifest // winning valid manifests
+	cands    []plugin.Candidate
+	profiles []*config.File // in layer order
 }
 
 // load reads system and user configuration, profiles and plugin manifests and
@@ -44,7 +51,8 @@ func (a *app) load(withCall bool) (*state, error) {
 	if err != nil {
 		return nil, err
 	}
-	st.plugins, _ = plugin.FirstByID(cands)
+	st.cands = cands
+	st.plugins = plugin.Winners(cands)
 	st.defs = config.Definitions{}
 	for _, m := range st.plugins {
 		for key, field := range m.Settings() {
@@ -58,7 +66,10 @@ func (a *app) load(withCall bool) (*state, error) {
 		if err != nil {
 			return nil, err
 		}
-		st.layers = append(st.layers, profiles...)
+		for _, pf := range profiles {
+			st.profiles = append(st.profiles, pf)
+			st.layers = append(st.layers, config.ProfileLayer(pf))
+		}
 	}
 	st.layers = append(st.layers, config.SettingsLayer(config.LayerUser, st.user))
 
@@ -102,9 +113,9 @@ func pluginPaths(ctx config.Context, files ...*config.File) ([]string, error) {
 	return out, nil
 }
 
-func loadProfiles(e *env, f *config.File) ([]config.Layer, error) {
+func loadProfiles(e *env, f *config.File) ([]*config.File, error) {
 	entries, _ := f.Plain()["profiles"].([]any)
-	var layers []config.Layer
+	var out []*config.File
 	for _, raw := range entries {
 		entry, _ := raw.(map[string]any)
 		source, _ := entry["source"].(string)
@@ -117,7 +128,104 @@ func loadProfiles(e *env, f *config.File) ([]config.Layer, error) {
 		if err != nil {
 			return nil, err
 		}
-		layers = append(layers, config.ProfileLayer(pf))
+		out = append(out, pf)
 	}
-	return layers, nil
+	return out, nil
+}
+
+// evaluate determines the state of every found plugin.
+func (a *app) evaluate(st *state) []*plugin.Plugin {
+	env := plugin.Env{
+		Version: a.build.Version,
+		OS:      runtime.GOOS,
+		Arch:    st.env.ctx.Host.Arch,
+		Distro:  st.env.ctx.Host.Distro,
+		LookPath: func(name string) (string, error) {
+			return lookPath(name, a.io.Getenv("PATH"))
+		},
+		Disabled: disabledSources(st),
+		MissingSettings: func(m *plugin.Manifest) []string {
+			var missing []string
+			for key, field := range m.Settings() {
+				if _, hasDefault := field["default"]; hasDefault {
+					continue
+				}
+				if s, ok := st.result.Get(key); !ok || s.Value == nil {
+					missing = append(missing, key)
+				}
+			}
+			sort.Strings(missing)
+			return missing
+		},
+	}
+	return plugin.Evaluate(st.cands, env)
+}
+
+// disabledSources merges plugins.disabled of the system file, plugins.disable and
+// plugins.enable of the profiles and plugins.disabled of the user file, in layer order.
+func disabledSources(st *state) func(string) string {
+	src := map[string]string{}
+	fromConfig := func(f *config.File, name string) {
+		plugins, _ := f.Plain()["plugins"].(map[string]any)
+		ids, _ := plugins["disabled"].([]any)
+		for _, id := range ids {
+			if s, ok := id.(string); ok {
+				src[s] = name
+			}
+		}
+	}
+	fromConfig(st.system, config.LayerSystem)
+	for _, pf := range st.profiles {
+		doc := pf.Plain()
+		name := config.LayerProfilePrefix + fmt.Sprint(doc["id"])
+		plugins, _ := doc["plugins"].(map[string]any)
+		for _, id := range anyStrings(plugins["disable"]) {
+			src[id] = name
+		}
+		for _, id := range anyStrings(plugins["enable"]) {
+			delete(src, id)
+		}
+	}
+	fromConfig(st.user, config.LayerUser)
+	return func(id string) string { return src[id] }
+}
+
+func anyStrings(v any) []string {
+	list, _ := v.([]any)
+	out := make([]string, 0, len(list))
+	for _, e := range list {
+		if s, ok := e.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// lookPath looks a command up in the given PATH (the environment of the call, not of
+// the process, so tests and the service see the same result).
+func lookPath(name, pathEnv string) (string, error) {
+	if strings.Contains(name, "/") {
+		return name, statExecutable(name)
+	}
+	for _, dir := range filepath.SplitList(pathEnv) {
+		if dir == "" {
+			continue
+		}
+		p := filepath.Join(dir, name)
+		if statExecutable(p) == nil {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("%s: not found in PATH", name)
+}
+
+func statExecutable(p string) error {
+	info, err := os.Stat(p)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+		return fmt.Errorf("%s: not executable", p)
+	}
+	return nil
 }

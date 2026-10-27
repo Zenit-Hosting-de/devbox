@@ -153,6 +153,74 @@ type Info struct {
 // Name Identifier of a plugin, credential instance, repository or schema.
 type Name = string
 
+// PluginDetail A plugin with its manifest (absent when the manifest is invalid).
+type PluginDetail struct {
+	// Category Category from the manifest.
+	Category *string `json:"category,omitempty"`
+
+	// Id Identifier of a plugin, credential instance, repository or schema.
+	Id Name `json:"id"`
+
+	// Manifest The plugin manifest (schema/plugin.v1.json).
+	Manifest *map[string]interface{} `json:"manifest,omitempty"`
+
+	// Name Display name from the manifest.
+	Name *string `json:"name,omitempty"`
+
+	// Path Plugin directory.
+	Path    string         `json:"path"`
+	Reasons []PluginReason `json:"reasons"`
+
+	// Shadowed Directories of later plugins with the same ID that this one replaces.
+	Shadowed *[]string `json:"shadowed,omitempty"`
+
+	// State State of a plugin; only ready plugins offer actions.
+	State PluginState `json:"state"`
+
+	// Version Plugin version.
+	Version *string `json:"version,omitempty"`
+}
+
+// PluginList All found plugins, sorted by ID.
+type PluginList = []PluginStatus
+
+// PluginReason Why a plugin is not ready, or a note about it. code is stable and translated by the frontends.
+type PluginReason struct {
+	// Code Reason code.
+	Code interface{} `json:"code"`
+
+	// Detail Subject of the reason: command, plugin and range, setting key, disabling layer or error location.
+	Detail *string `json:"detail,omitempty"`
+}
+
+// PluginState State of a plugin; only ready plugins offer actions.
+type PluginState = interface{}
+
+// PluginStatus A found plugin with its state.
+type PluginStatus struct {
+	// Category Category from the manifest.
+	Category *string `json:"category,omitempty"`
+
+	// Id Identifier of a plugin, credential instance, repository or schema.
+	Id Name `json:"id"`
+
+	// Name Display name from the manifest.
+	Name *string `json:"name,omitempty"`
+
+	// Path Plugin directory.
+	Path    string         `json:"path"`
+	Reasons []PluginReason `json:"reasons"`
+
+	// Shadowed Directories of later plugins with the same ID that this one replaces.
+	Shadowed *[]string `json:"shadowed,omitempty"`
+
+	// State State of a plugin; only ready plugins offer actions.
+	State PluginState `json:"state"`
+
+	// Version Plugin version.
+	Version *string `json:"version,omitempty"`
+}
+
 // Problem Error in RFC 9457 format with a stable code.
 type Problem struct {
 	// Code Stable error code.
