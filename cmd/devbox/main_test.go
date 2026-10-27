@@ -1,51 +1,31 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
+	"os"
 	"testing"
+
+	"github.com/rogpeppe/go-internal/testscript"
+
+	"github.com/Zenit-Hosting-de/devbox/internal/cli"
 )
 
-func TestRunVersion(t *testing.T) {
-	tests := []struct {
-		name     string
-		args     []string
-		wantCode int
-	}{
-		{name: "plain", args: []string{"version"}, wantCode: exitOK},
-		{name: "json", args: []string{"version", "--json"}, wantCode: exitOK},
-		{name: "no command", args: nil, wantCode: exitInvalidUsage},
-		{name: "unknown command", args: []string{"unknown"}, wantCode: exitInvalidUsage},
-		{name: "unknown flag", args: []string{"version", "--yaml"}, wantCode: exitInvalidUsage},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var out bytes.Buffer
-			if got := run(tt.args, &out); got != tt.wantCode {
-				t.Fatalf("run(%q) = %d, want %d", tt.args, got, tt.wantCode)
-			}
-		})
-	}
+func TestMain(m *testing.M) {
+	testscript.Main(m, map[string]func(){
+		"devbox": func() { os.Exit(cli.Main(os.Args[1:], build(), cli.OSIO())) },
+	})
 }
 
-func TestRunVersionJSONHasVendor(t *testing.T) {
-	var out bytes.Buffer
-	if code := run([]string{"version", "--json"}, &out); code != exitOK {
-		t.Fatalf("exit code %d", code)
-	}
-	var info versionInfo
-	dec := json.NewDecoder(&out)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&info); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if info.Vendor != vendor {
-		t.Errorf("vendor = %q, want %q", info.Vendor, vendor)
-	}
-	if info.Protocol != protocol {
-		t.Errorf("protocol = %d, want %d", info.Protocol, protocol)
-	}
-	if info.Version == "" {
-		t.Error("version is empty")
-	}
+// TestScripts runs the CLI flows in test/testscript (*.txtar).
+func TestScripts(t *testing.T) {
+	testscript.Run(t, testscript.Params{
+		Dir: "../../test/testscript",
+		Setup: func(e *testscript.Env) error {
+			e.Setenv("HOME", e.WorkDir+"/home")
+			e.Setenv("DEVBOX_SYSTEM_CONFIG", e.WorkDir+"/etc/devbox/config.json")
+			for _, k := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR"} {
+				e.Setenv(k, "")
+			}
+			return nil
+		},
+	})
 }

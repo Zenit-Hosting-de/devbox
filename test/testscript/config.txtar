@@ -1,0 +1,156 @@
+# devbox config: explain with origin and lock, get, set, unset, env and --set layers.
+
+# explain --json matches the example in docs/concept.md
+exec devbox config explain java.vendorApi --json
+cmp stdout explain.json
+
+exec devbox config explain java.vendorApi
+stdout '^java.vendorApi = "https://mirror.example.com/adoptium/v3"$'
+stdout '^  \* profile:example-team: "https://mirror.example.com/adoptium/v3" \[locked\]$'
+
+# a locked value cannot be set, from the file, the environment or the call
+! exec devbox config set java.vendorApi https://other.example.com
+stderr 'setting-locked: java.vendorApi: locked by profile:example-team'
+! exists home/.config/devbox/config.json.bak
+env DEVBOX_SET__JAVA__VENDORAPI=https://other.example.com
+! exec devbox config get java.vendorApi
+stderr 'setting-locked'
+env DEVBOX_SET__JAVA__VENDORAPI=
+! exec devbox config get java.vendorApi --set java.vendorApi=https://other.example.com
+stderr 'setting-locked'
+
+# get resolves placeholders; the profile sets 17, the default would be 21
+exec devbox config get java.defaultVersion
+stdout '^17$'
+exec devbox config get java.installDir
+stdout '/home/.local/share/jdk$'
+
+# set writes the user file; the value is checked against the field
+exec devbox config set java.keepPatches 3
+exec devbox config get java.keepPatches
+stdout '^3$'
+! exec devbox config set java.keepPatches 9
+stderr '^devbox: validation: java.keepPatches:'
+! exec devbox config set java.unknown 1
+stderr 'not-found'
+
+# environment and call override the user file, call wins
+env DEVBOX_SET__JAVA__KEEPPATCHES=4
+exec devbox config get java.keepPatches
+stdout '^4$'
+exec devbox config get java.keepPatches --set java.keepPatches=5
+stdout '^5$'
+env DEVBOX_SET__JAVA__KEEPPATCHES=
+exec devbox config explain java.keepPatches --json
+stdout '"origin": "user"'
+
+# unset removes the user value again
+exec devbox config unset java.keepPatches
+exec devbox config get java.keepPatches
+stdout '^1$'
+
+exec devbox config validate
+
+-- explain.json --
+{
+  "key": "java.vendorApi",
+  "value": "https://mirror.example.com/adoptium/v3",
+  "origin": "profile:example-team",
+  "locked": true,
+  "layers": [
+    {
+      "layer": "plugin",
+      "value": "https://api.adoptium.net/v3"
+    },
+    {
+      "layer": "profile:example-team",
+      "value": "https://mirror.example.com/adoptium/v3",
+      "locked": true
+    }
+  ]
+}
+-- home/.config/devbox/config.json --
+{
+  "profiles": [
+    { "source": "file://${env:HOME}/profile.json" }
+  ]
+}
+-- home/profile.json --
+{
+  "id": "example-team",
+  "name": "Example team",
+  "version": "2026.10.1",
+  "settings": {
+    "java.vendorApi": { "value": "https://mirror.example.com/adoptium/v3", "locked": true },
+    "java.defaultVersion": { "value": 17 }
+  }
+}
+-- home/.local/share/devbox/plugins/java/plugin.json --
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "java",
+  "version": "1.0.0",
+  "name": "Java",
+  "description": "JDKs installieren, wechseln und aktuell halten",
+  "category": "runtime",
+  "icon": "coffee",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "homepage": "https://github.com/zenit-hosting/devbox/tree/main/plugins/java",
+  "requires": {
+    "devbox": ">=1.0.0",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["tar"],
+    "plugins": { "base": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": ["${java.vendorApi}", "https://github.com", "https://objects.githubusercontent.com"],
+    "files": {
+      "read": ["${env:HOME}"],
+      "write": ["${java.installDir}", "${xdg:config}/devbox/env.d/java.sh"]
+    },
+    "sudo": false,
+    "credentials": []
+  },
+  "settings": {
+    "vendorApi": { "type": "string", "format": "uri", "default": "https://api.adoptium.net/v3", "label": "Adresse der Release-API", "help": "Adoptium-kompatible API. Für einen Spiegel im eigenen Netz ändern." },
+    "defaultVersion": { "type": "integer", "enum": [8, 11, 17, 21, 25], "default": 21, "label": "Standard-JDK" },
+    "installDir": { "type": "string", "format": "path", "default": "${xdg:data}/jdk", "label": "Installationsort", "advanced": true },
+    "keepPatches": { "type": "integer", "minimum": 1, "maximum": 5, "default": 1, "label": "Patchstände je Version behalten" }
+  },
+  "checks": {
+    "installed": { "label": "Installierte JDKs", "run": ["checks/installed.sh"], "timeout": "5s", "cache": "10m", "refreshOn": ["session.finished:java.*"] },
+    "latest": { "label": "Neue Versionen", "run": ["checks/latest.sh"], "timeout": "20s", "cache": "6h", "network": true }
+  },
+  "actions": {
+    "install": {
+      "label": "JDK installieren",
+      "run": ["actions/install.sh"],
+      "params": {
+        "version": { "type": "integer", "enum": [8, 11, 17, 21, 25], "default": "${java.defaultVersion}", "label": "Version" },
+        "makeDefault": { "type": "boolean", "default": true, "label": "Danach als Standard setzen" }
+      },
+      "timeout": "15m"
+    },
+    "update": { "label": "Aktualisieren und aufräumen", "run": ["actions/update.sh"], "timeout": "30m" },
+    "use": {
+      "label": "Standard-JDK wechseln",
+      "run": ["actions/use.sh"],
+      "params": { "version": { "type": "string", "label": "Version", "optionsFrom": "java.installed#/data/items/*/version" } }
+    },
+    "remove": {
+      "label": "JDK entfernen",
+      "run": ["actions/remove.sh"],
+      "params": { "version": { "type": "string", "label": "Version", "optionsFrom": "java.installed#/data/items/*/version" } },
+      "confirm": "Das JDK wird gelöscht. Projekte, die es über JAVA_HOME nutzen, brauchen danach ein anderes.",
+      "danger": true
+    }
+  },
+  "contributes": {
+    "groups": { "update-all": ["java.update"] },
+    "setup": [{ "action": "java.install", "after": ["base.packages"] }],
+    "overview": { "check": "java.installed", "primaryAction": "java.update" }
+  },
+  "i18n": { "default": "de", "dir": "i18n" }
+}
