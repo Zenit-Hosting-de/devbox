@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -363,4 +364,169 @@ func TestMasker(t *testing.T) {
 	if got, want := out.String(), "x "+Mask+" y "+Mask+" z a"; got != want {
 		t.Errorf("masked = %q, want %q", got, want)
 	}
+}
+
+func TestTerminalResize(t *testing.T) {
+	f := newFixture(t)
+	f.script("winch.sh", `trap 'stty size' WINCH
+echo ready
+for _ in $(seq 1 100); do sleep 0.05; done`)
+	spec := f.spec(KindAction, "winch.sh")
+	spec.Cols, spec.Rows = 80, 24
+
+	var (
+		mu       sync.Mutex
+		out      bytes.Buffer
+		term     Terminal
+		started  bool
+		order    []string
+		terminal int
+	)
+	cb := Callbacks{
+		Output: writerFunc(func(p []byte) { mu.Lock(); out.Write(p); mu.Unlock() }),
+		Terminal: func(tm Terminal) {
+			mu.Lock()
+			defer mu.Unlock()
+			if tm == nil { // the PTY is about to be closed
+				order = append(order, "closed")
+				return
+			}
+			term, terminal = tm, terminal+1
+			order = append(order, "terminal")
+		},
+		Started: func() {
+			mu.Lock()
+			defer mu.Unlock()
+			started = true
+			order = append(order, "started")
+		},
+	}
+	seen := func(text string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return strings.Contains(out.String(), text)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan *Result, 1)
+	go func() {
+		res, err := f.runner.Run(ctx, spec, cb)
+		if err != nil {
+			t.Error(err)
+		}
+		done <- res
+	}()
+	waitFor(t, func() bool { return seen("ready") })
+
+	mu.Lock()
+	tm := term
+	mu.Unlock()
+	if tm == nil || !started || terminal != 1 || strings.Join(order, ",") != "terminal,started" {
+		t.Fatalf("terminal %v, started %v, calls %d, order %v", tm, started, terminal, order)
+	}
+	if err := tm.Resize(0, 10); err == nil {
+		t.Error("a zero size was accepted")
+	}
+	if err := tm.Resize(100, 40); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return seen("40 100") })
+
+	cancel()
+	res := <-done
+	if res.State != StateStopped {
+		t.Errorf("state = %s", res.State)
+	}
+	if err := tm.Resize(90, 30); err == nil {
+		t.Error("resizing a finished terminal must fail")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if got := strings.Join(order, ","); got != "terminal,started,closed" {
+		t.Errorf("order = %s, want the handle to be dropped once at the end", got)
+	}
+}
+
+// Resizing while the process ends and after the PTY was closed must neither race with
+// the close nor touch a reused descriptor (run with -race).
+func TestTerminalResizeAroundTheEnd(t *testing.T) {
+	f := newFixture(t)
+	f.script("short.sh", `echo ready
+sleep 0.3`)
+	spec := f.spec(KindAction, "short.sh")
+
+	var (
+		mu     sync.Mutex
+		term   Terminal
+		out    bytes.Buffer
+		closed bool
+	)
+	cb := Callbacks{
+		Output: writerFunc(func(p []byte) { mu.Lock(); out.Write(p); mu.Unlock() }),
+		Terminal: func(tm Terminal) {
+			mu.Lock()
+			defer mu.Unlock()
+			if tm == nil {
+				closed = true
+				return
+			}
+			term = tm
+		},
+	}
+	done := make(chan *Result, 1)
+	go func() {
+		res, err := f.runner.Run(context.Background(), spec, cb)
+		if err != nil {
+			t.Error(err)
+		}
+		done <- res
+	}()
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return term != nil })
+	mu.Lock()
+	tm := term
+	mu.Unlock()
+
+	// Hammer Resize from several goroutines until the run is over and the PTY closed.
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for i := range uint16(4) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for n := uint16(0); ; n++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				_ = tm.Resize(60+i+n%20, 20+n%10)
+			}
+		}()
+	}
+	res := <-done
+	close(stop)
+	wg.Wait()
+	if res.State != StateSuccess {
+		t.Errorf("state = %s", res.State)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !closed {
+		t.Error("the receiver was not told that the terminal is gone")
+	}
+	if err := tm.Resize(90, 30); !errors.Is(err, errTerminalClosed) {
+		t.Errorf("resize after the end = %v, want errTerminalClosed", err)
+	}
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("condition not met in time")
 }

@@ -39,12 +39,11 @@ func TestInfo(t *testing.T) {
 	if ui["language"] != "de" || ui["scheme"] != "dark" || ui["accent"] != "teal" {
 		t.Errorf("ui = %v", ui)
 	}
-	if feats := info["features"].([]any); len(feats) != 0 {
-		t.Errorf("features = %v: the UI is not built and nothing else listens", feats)
+	if feats := info["features"].([]any); len(feats) != 1 || feats[0] != FeatureWS {
+		t.Errorf("features = %v: the UI is not built and no socket listens, only the WebSocket is there", feats)
 	}
 
 	e.srv.SetSocket(true)
-	e.srv.SetWebSocket(true)
 	e.srv.ui = &uiFiles{fsys: fstest.MapFS{"index.html": {Data: []byte("<html></html>")}}}
 	feats := e.get("/info").json(t)["features"].([]any)
 	if len(feats) != 3 {

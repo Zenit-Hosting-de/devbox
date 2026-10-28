@@ -39,9 +39,12 @@ type Options struct {
 	// and --allow-origin).
 	Origins []string
 	// Auth is the value of server.auth shown in /info.
-	Auth        string
-	Logger      *slog.Logger
+	Auth   string
+	Logger *slog.Logger
+	// Broadcaster additionally receives everything the WebSocket hub receives.
 	Broadcaster Broadcaster
+	// WebSocket tunes the WebSocket; the zero value is the production setting.
+	WebSocket WSOptions
 }
 
 // Server is the REST API.
@@ -53,6 +56,8 @@ type Server struct {
 	errorBase string
 	guard     *guard
 	bc        Broadcaster
+	hub       *Hub
+	wsOpts    WSOptions
 	locks     *runner.Locks
 	cfgMu     sync.Mutex
 	live      *registry
@@ -84,6 +89,12 @@ func New(opts Options) (*Server, error) {
 	}
 	env := opts.Env
 	env.Validator = v
+	wsOpts := opts.WebSocket.withDefaults()
+	hub := newHub(wsOpts.hub())
+	bc := Broadcaster(hub)
+	if _, nop := opts.Broadcaster.(NopBroadcaster); !nop {
+		bc = multiBroadcaster{hub, opts.Broadcaster}
+	}
 	s := &Server{
 		opts:      opts,
 		log:       opts.Logger,
@@ -91,7 +102,9 @@ func New(opts Options) (*Server, error) {
 		validator: v,
 		errorBase: errorBase(v),
 		guard:     newGuard(opts.Listen, opts.Origins),
-		bc:        opts.Broadcaster,
+		bc:        bc,
+		hub:       hub,
+		wsOpts:    wsOpts,
 		locks:     runner.NewLocks(),
 		live:      newRegistry(),
 		checks:    newCheckCache(),
@@ -100,6 +113,7 @@ func New(opts Options) (*Server, error) {
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.routes()
+	s.SetWebSocket(true)
 	return s, nil
 }
 
@@ -152,6 +166,7 @@ func (s *Server) routes() {
 	s.route("GET /api/v1/sessions/{id}/log", s.getSessionLog)
 	s.route("POST /api/v1/sessions/{id}/cancel", s.cancelSession)
 	s.route("GET /api/v1/schema/{name}", s.getSchema)
+	s.route("GET /api/v1/ws", s.serveWS)
 	// Everything else below /api is unknown; the UI answers all other paths.
 	unknown := func(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, notFound("no such endpoint"))
@@ -161,7 +176,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/", s.serveUI)
 }
 
-// Register adds a handler to the API; later work packages use it for the WebSocket.
+// Register adds a handler to the API.
 func (s *Server) Register(pattern string, h http.Handler) { s.mux.Handle(pattern, h) }
 
 // load reads the configuration and the plugins again.
@@ -236,6 +251,7 @@ func (s *Server) Serve(ctx context.Context, lns ...net.Listener) error {
 		}()
 	}
 	s.StartChecks()
+	s.startJanitor()
 
 	var serveErr error
 	select {
@@ -263,6 +279,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.closing = true
 	s.runMu.Unlock()
 	s.cancel()
+	s.hub.close()
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()

@@ -342,8 +342,48 @@ short placeholder page for the UI; the API works either way.
 
 **Not available yet:** the PAM login (`/auth/*`), the login rate limit, TLS and
 non-loopback addresses; the command line client over the Unix socket; setting a
-credential secret over the API (`PUT /credentials/{name}/secret`); the WebSocket
-(`/ws`); and the endpoints for groups, setup, profiles and plugin catalogs.
+credential secret over the API (`PUT /credentials/{name}/secret`); and the endpoints for
+groups, setup, profiles and plugin catalogs.
+
+### WebSocket
+
+`GET /api/v1/ws` upgrades to a WebSocket that carries everything the web UI shows live.
+One connection serves one browser window. Messages are JSON objects with a `type`;
+terminal bytes are Base64. The messages are described by `WsClientMessage` and
+`WsServerMessage` in `api/openapi.json`. Over TCP the upgrade needs an allowed `Origin`
+(the same rule as for modifying requests); otherwise the answer is `403` with the problem
+code `csrf`. Over the Unix socket no `Origin` is needed.
+
+| Direction | Message                                  | Meaning                                                                                                                                    |
+| --------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| to core   | `subscribe` `topics`, optional `fromSeq` | Topics: `checks`, `sessions`, `settings`, `session:<id>`. `fromSeq` applies to the session topics of the message.                          |
+| to core   | `unsubscribe` `topics`                   | Leave topics.                                                                                                                              |
+| to core   | `input` `session`, `data`                | Keyboard input for the PTY of a running session (at most 64 KiB decoded), for example a `sudo` password. It is never logged.               |
+| to core   | `resize` `session`, `cols`, `rows`       | New terminal size. Before the process has a terminal the size is kept and applied at the start.                                            |
+| to client | `output`, `event`                        | Terminal output and protocol messages of a session. Both carry `seq`; output and events of a session share one counter.                    |
+| to client | `session`, `check`, `settings`           | A session was created or changed (progress at most 4 times per second), a check finished, settings were changed through the API.           |
+| to client | `gap`, `error`                           | The requested `fromSeq` is older than the buffer; a client message was refused (`validation`, `not-found`, `conflict`), the connection stays open. |
+| both      | `ping`, `pong`                           | The core sends a `ping` every 30 seconds and answers a `ping` with a `pong`. A connection that sent nothing for 75 seconds is closed.      |
+
+**Resuming.** Subscribing to `session:<id>` first sends the current `session` summary and
+then every buffered `output` and `event` message with `seq` of at least `fromSeq` (all
+buffered messages without `fromSeq`), in order, followed by the live ones without gap or
+duplicate. A window that lost its connection keeps the last `seq` it saw and subscribes
+again with `fromSeq` one higher. If `fromSeq` is older than the buffer, a `gap` message
+(`fromSeq`, `firstSeq`) comes first and streaming continues at `firstSeq`; the missing
+part is in `GET /sessions/{id}/log`.
+
+**Buffer.** The core keeps the last 2 MiB of payload per session in memory. The buffers
+of finished sessions stay for 10 minutes, at most 32 of them. A session that is neither
+running nor buffered is answered with an `error` of code `not-found` and the `topic`;
+its output is then only available over REST.
+
+**Slow clients.** Messages are queued per connection. A client that falls more than 1024
+messages behind is closed with status 1008 (`slow consumer`); it reconnects and resumes
+with `fromSeq`. A server shutdown closes connections with status 1001.
+
+Not available yet: the `credentials` topic, which waits for the credential operations of
+the API.
 
 ## Not yet available
 

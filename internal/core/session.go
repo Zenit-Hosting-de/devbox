@@ -26,6 +26,9 @@ type Sink struct {
 	Warn func(text string)
 	// Queued is called when the session waits for a lock, Started when it runs.
 	Queued, Started func()
+	// Terminal is called once when the PTY of the action exists, with a handle to
+	// resize it.
+	Terminal func(t runner.Terminal)
 	// Input is copied to the terminal of the action.
 	Input io.Reader
 	// ConfigLock is held while a "setting" message is written to the user file.
@@ -78,9 +81,10 @@ func RunSession(ctx context.Context, st *State, r *runner.Runner, spec runner.Sp
 	}
 	var mu sync.Mutex
 	cb := runner.Callbacks{
-		Output:  &outputWriter{mu: &mu, sess: sess, sink: sink},
-		Queued:  sink.Queued,
-		Started: sink.Started,
+		Output:   &outputWriter{mu: &mu, sess: sess, sink: sink},
+		Queued:   sink.Queued,
+		Started:  sink.Started,
+		Terminal: sink.Terminal,
 	}
 	cb.Message = func(msg map[string]any) {
 		mu.Lock()
