@@ -14,7 +14,8 @@ import (
 const EnvPrefix = "DEVBOX_SET__"
 
 // Coerce converts a value given as text (environment, command line) to the type of
-// the field. Values that are not text are returned unchanged.
+// the field. Values that are not text are returned unchanged. Array fields also accept
+// plain text (see splitList) besides a JSON array.
 func Coerce(field map[string]any, v any) (any, error) {
 	s, ok := v.(string)
 	if !ok {
@@ -39,6 +40,9 @@ func Coerce(field map[string]any, v any) (any, error) {
 		}
 		return b, nil
 	case "array", "object":
+		if typ == "array" && !strings.HasPrefix(strings.TrimSpace(s), "[") {
+			return splitList(s), nil
+		}
 		doc, err := jsonfile.Parse([]byte(s))
 		if err != nil {
 			return nil, fmt.Errorf("%q is not a JSON %s: %w", s, typ, err)
@@ -47,6 +51,18 @@ func Coerce(field map[string]any, v any) (any, error) {
 	default:
 		return s, nil
 	}
+}
+
+// splitList turns plain text into a list: one value is a one-element list, several
+// values are separated by ";". Empty parts are dropped. JSON arrays do not come here.
+func splitList(s string) []any {
+	out := []any{}
+	for _, part := range strings.Split(s, ";") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // EnvLayer collects DEVBOX_SET__ variables from environ ("NAME=value" entries).

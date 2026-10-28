@@ -153,7 +153,9 @@ devbox cred remove company                   # runs every consumer's remove, the
 
 `cred set` stores the secret, runs the verification of the type (for `registry` a request
 to the registry; the paths per layout are the setting `registry.verifyPaths`) and, when it
-succeeds, applies every consumer. Consumers run one after another, each as a session in
+succeeds, applies every consumer. Array options of `--consumer` (like `scopes`) take JSON
+(`scopes=["@a","@b"]`) or plain values, one (`scopes=@a`) or several separated by `;`
+(`scopes=@a;@b`); the same goes for array settings in `--set`. Consumers run one after another, each as a session in
 `devbox history`; one failing consumer does not stop the others, and the exit code is 1 if
 any failed. Consumers of disabled plugins are skipped. `cred remove` keeps the secret when a
 consumer fails to remove it, unless `--force` is given; for an instance a profile prepares,
