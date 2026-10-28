@@ -8,7 +8,10 @@ MAKEFLAGS += --no-print-directory
 # ---------------------------------------------------------------------------
 # Build metadata (injected into cmd/devbox via -ldflags)
 # ---------------------------------------------------------------------------
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 0.0.0-dev)
+# Semantic version from the newest release tag (vX.Y.Z, or devbox-vX.Y.Z from before
+# 0.1.1), without prefix; commits after the tag and local changes go into build
+# metadata (0.1.0+3.gabc1234.dirty), so requires.devbox ranges still match.
+VERSION ?= $(or $(shell git describe --tags --match 'v[0-9]*' --match 'devbox-v[0-9]*' --dirty 2>/dev/null | sed -e 's/^devbox-//' -e 's/^v//' -e 's/-\([0-9][0-9]*\)-g\([0-9a-f]*\)/+\1.g\2/' -e 's/-dirty$$/.dirty/' -e 's/^\([0-9.]*\)\.dirty$$/\1+dirty/'),0.0.0-dev)
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    ?= $(shell TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)

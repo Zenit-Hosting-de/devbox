@@ -37,9 +37,11 @@ type fakeReleases struct {
 type fakeRelease struct {
 	version    string
 	prerelease bool
-	draft      bool
-	noAssets   bool
-	corrupt    bool // checksums.txt lists a wrong checksum
+	// component tags the release like release-please with a component: devbox-vX.Y.Z.
+	component bool
+	draft     bool
+	noAssets  bool
+	corrupt   bool // checksums.txt lists a wrong checksum
 }
 
 var fakeArches = []string{"amd64", "arm64"}
@@ -113,7 +115,7 @@ func (f *fakeReleases) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			list = append(list, map[string]any{
-				"tag_name":   "v" + rel.version,
+				"tag_name":   rel.tag(),
 				"prerelease": rel.prerelease,
 				"draft":      rel.draft,
 				"assets":     assets,
@@ -153,11 +155,11 @@ var (
 // cmdReleases is the testscript command
 //
 //	releases start                          start a server, set $RELEASES to its release list
-//	releases add VERSION [FLAG…]            publish a release; FLAG is prerelease, draft, noassets or corrupt
+//	releases add VERSION [FLAG…]            publish a release; FLAG is prerelease, draft, noassets, corrupt or component
 //	releases corrupt VERSION                make checksums.txt of a published release wrong
 func cmdReleases(ts *testscript.TestScript, neg bool, args []string) {
 	if neg || len(args) == 0 {
-		ts.Fatalf("usage: releases start | releases add VERSION [prerelease|draft|noassets|corrupt]… | releases corrupt VERSION")
+		ts.Fatalf("usage: releases start | releases add VERSION [prerelease|draft|noassets|corrupt|component]… | releases corrupt VERSION")
 	}
 	key := ts.Getenv("WORK")
 	releasesMu.Lock()
@@ -183,6 +185,8 @@ func cmdReleases(ts *testscript.TestScript, neg bool, args []string) {
 			switch flag {
 			case "prerelease":
 				rel.prerelease = true
+			case "component":
+				rel.component = true
 			case "draft":
 				rel.draft = true
 			case "noassets":
@@ -203,4 +207,12 @@ func cmdReleases(ts *testscript.TestScript, neg bool, args []string) {
 	default:
 		ts.Fatalf("releases: unknown command %q", strings.Join(args, " "))
 	}
+}
+
+// tag is the tag name of the release: vX.Y.Z, or devbox-vX.Y.Z for component tags.
+func (r *fakeRelease) tag() string {
+	if r.component {
+		return "devbox-v" + r.version
+	}
+	return "v" + r.version
 }
