@@ -1,0 +1,68 @@
+# devbox run: messages on fd 3, --json event lines, dry run, defaults from settings,
+# setting messages, confirmations.
+
+chmod 755 home/.local/share/devbox/plugins/demo/act.sh
+
+# the default of a parameter refers to a setting
+exec devbox run demo.install
+stdout 'version=21 dryRun=false'
+
+# dry run: the plugin sees DEVBOX_DRY_RUN=1 and the request says so
+exec devbox run demo.install -p version=17 --dry-run
+stdout 'version=17 dryRun=true env=1'
+
+# --json prints the session events as JSON Lines (event.v1.json envelopes)
+exec devbox run demo.install --json
+stdout '^\{"seq":0,"time":"[^"]+","event":\{"id":"download","label":"Download","state":"running","type":"step"\}\}$'
+stdout '^\{"seq":1,.*"type":"change"'
+stdout '^\{"seq":2,.*"type":"result"'
+! stdout 'version=21'
+
+# a setting message stores the plugin's own setting in the user file
+exec devbox run demo.remember
+exec devbox config get demo.lastVersion
+stdout '^21$'
+
+# a confirmation needs --yes without a terminal
+! exec devbox run demo.remove
+stderr 'demo.remove: not confirmed'
+exec devbox run demo.remove --yes
+stdout 'removed'
+
+-- home/.local/share/devbox/plugins/demo/plugin.json --
+{
+  "id": "demo",
+  "version": "1.0.0",
+  "name": "Demo",
+  "settings": {
+    "defaultVersion": { "type": "integer", "default": 21, "label": "Default version" },
+    "lastVersion": { "type": "integer", "default": 0, "label": "Last version" }
+  },
+  "actions": {
+    "install": {
+      "label": "Install",
+      "run": ["act.sh", "install"],
+      "params": { "version": { "type": "integer", "default": "${demo.defaultVersion}", "label": "Version" } }
+    },
+    "remember": { "label": "Remember", "run": ["act.sh", "remember"] },
+    "remove": { "label": "Remove", "run": ["act.sh", "remove"], "confirm": "Removes everything.", "danger": true }
+  }
+}
+-- home/.local/share/devbox/plugins/demo/act.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+field() { grep -o "\"$1\":[^,}]*" "$DEVBOX_REQUEST" | head -n1 | cut -d: -f2 | tr -d '"'; }
+case "$1" in
+install)
+  echo "version=$(field version) dryRun=$(field dryRun) env=$DEVBOX_DRY_RUN"
+  printf '%s\n' '{"type":"step","id":"download","label":"Download","state":"running"}' >&3
+  printf '%s\n' '{"type":"change","kind":"file","op":"create","target":"~/.local/share/demo","summary":"unpacked"}' >&3
+  printf '%s\n' '{"type":"result","summary":"installed"}' >&3
+  ;;
+remember)
+  printf '%s\n' '{"type":"setting","key":"lastVersion","value":21}' >&3
+  ;;
+remove)
+  echo removed
+  ;;
+esac
