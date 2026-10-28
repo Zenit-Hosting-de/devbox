@@ -1,0 +1,223 @@
+package sdk
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/Zenit-Hosting-de/devbox/internal/jsonfile"
+)
+
+// Comment syntax of the block markers.
+type Comment struct{ Start, End string }
+
+// CommentFor picks the comment syntax by file name: XML files use <!-- -->,
+// everything else "#".
+func CommentFor(path string) Comment {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".xml", ".config", ".props", ".targets", ".csproj":
+		return Comment{Start: "<!--", End: "-->"}
+	}
+	return Comment{Start: "#"}
+}
+
+func (c Comment) line(text string) string {
+	if c.End == "" {
+		return c.Start + " " + text
+	}
+	return c.Start + " " + text + " " + c.End
+}
+
+// Markers returns the first and last line of a block.
+func Markers(name string, c Comment) (begin, end string) {
+	return c.line(">>> devbox:" + name + " >>>"), c.line("<<< devbox:" + name + " <<<")
+}
+
+// SetBlock returns content with the marked block for name replaced by body, or
+// appended (after a blank line) when there is none. Running it twice gives the same
+// result.
+func SetBlock(content []byte, name string, body []byte, c Comment) []byte {
+	begin, end := Markers(name, c)
+	block := begin + "\n" + strings.TrimRight(string(body), "\n") + "\n" + end + "\n"
+	lines, from, to := findBlock(string(content), begin, end)
+	if from >= 0 {
+		return []byte(strings.Join(lines[:from], "") + block + strings.Join(lines[to+1:], ""))
+	}
+	text := string(content)
+	switch {
+	case text == "":
+	case strings.HasSuffix(text, "\n\n"):
+	case strings.HasSuffix(text, "\n"):
+		text += "\n"
+	default:
+		text += "\n\n"
+	}
+	return []byte(text + block)
+}
+
+// RemoveBlock returns content without the marked block (and one blank line before it).
+func RemoveBlock(content []byte, name string, c Comment) []byte {
+	begin, end := Markers(name, c)
+	lines, from, to := findBlock(string(content), begin, end)
+	if from < 0 {
+		return content
+	}
+	if from > 0 && strings.TrimSpace(lines[from-1]) == "" {
+		from--
+	}
+	return []byte(strings.Join(lines[:from], "") + strings.Join(lines[to+1:], ""))
+}
+
+// findBlock splits text into lines (with their newlines) and finds the marker lines.
+func findBlock(text, begin, end string) (lines []string, from, to int) {
+	lines = strings.SplitAfter(text, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	from, to = -1, -1
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		if from < 0 && t == begin {
+			from = i
+		} else if from >= 0 && t == end {
+			to = i
+			break
+		}
+	}
+	if to < 0 {
+		return lines, -1, -1
+	}
+	return lines, from, to
+}
+
+func readOptional(path string) ([]byte, error) {
+	data, err := os.ReadFile(path) //nolint:gosec // paths come from the plugin, which declares them
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return data, err
+}
+
+// Block writes the marked block for name into the file.
+func (e Env) Block(path, name string, body []byte, mode os.FileMode) error {
+	path = e.ExpandHome(path)
+	old, err := readOptional(path)
+	if err != nil {
+		return err
+	}
+	_, err = e.Write(path, SetBlock(old, name, body, CommentFor(path)), mode, "devbox:"+name+" block")
+	return err
+}
+
+// BlockRemove removes the marked block for name from the file.
+func (e Env) BlockRemove(path, name string) error {
+	path = e.ExpandHome(path)
+	old, err := readOptional(path)
+	if err != nil || old == nil {
+		return err
+	}
+	_, err = e.Write(path, RemoveBlock(old, name, CommentFor(path)), 0o600, "devbox:"+name+" block removed")
+	return err
+}
+
+// JSONSet sets the value at a JSON Pointer in a JSON file and keeps its formatting.
+// A missing file is created as an object.
+func (e Env) JSONSet(path, pointer string, value any) error {
+	path = e.ExpandHome(path)
+	old, err := readOptional(path)
+	if err != nil {
+		return err
+	}
+	if old == nil {
+		old = []byte("{}\n")
+	}
+	updated, err := jsonfile.SetPointer(old, pointer, value)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	_, err = e.Write(path, updated, 0o644, pointer+" set")
+	return err
+}
+
+// Download fetches url to dest through the proxy of the environment, reports
+// progress, and checks the SHA-256 checksum when one is given. In a dry run only the
+// change is reported.
+func (e Env) Download(ctx context.Context, client *http.Client, url, dest, sha string) error {
+	dest = e.ExpandHome(dest)
+	if e.DryRun() {
+		return e.Emit(map[string]any{"type": "change", "kind": "file", "op": "create", "target": e.display(dest), "summary": "download " + url})
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download %s: %s", url, resp.Status)
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(dest), "."+filepath.Base(dest)+".*.part")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	hash := sha256.New()
+	pr := &progress{env: e, total: resp.ContentLength}
+	if _, err := io.Copy(io.MultiWriter(tmp, hash, pr), resp.Body); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("download %s: %w", url, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if sha != "" {
+		if got := hex.EncodeToString(hash.Sum(nil)); !strings.EqualFold(got, sha) {
+			return fmt.Errorf("download %s: sha256 %s, want %s", url, got, sha)
+		}
+	}
+	if err := os.Rename(tmp.Name(), dest); err != nil {
+		return err
+	}
+	return e.Emit(map[string]any{"type": "change", "kind": "file", "op": "create", "target": e.display(dest), "summary": "downloaded " + url})
+}
+
+// progress reports download progress in steps of 10 percent (or null without size).
+type progress struct {
+	env   Env
+	total int64
+	done  int64
+	last  int
+}
+
+func (p *progress) Write(b []byte) (int, error) {
+	p.done += int64(len(b))
+	if p.total <= 0 {
+		if p.last == 0 {
+			p.last = -1
+			_ = p.env.Emit(map[string]any{"type": "progress", "percent": nil})
+		}
+		return len(b), nil
+	}
+	pct := int(p.done * 100 / p.total)
+	if pct >= p.last+10 || pct == 100 && p.last != 100 {
+		p.last = pct
+		_ = p.env.Emit(map[string]any{"type": "progress", "percent": json.Number(strconv.Itoa(pct)), "text": fmt.Sprintf("%d / %d", p.done, p.total)})
+	}
+	return len(b), nil
+}

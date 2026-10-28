@@ -220,7 +220,7 @@ func lookPath(name, pathEnv string) (string, error) {
 }
 
 func statExecutable(p string) error {
-	info, err := os.Stat(p)
+	info, err := os.Stat(p) //nolint:gosec // looks up commands in the user's PATH on purpose
 	if err != nil {
 		return err
 	}

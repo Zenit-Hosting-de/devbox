@@ -256,7 +256,7 @@ func fdOf(v any) (int, bool) {
 
 func (a *app) newRunner(st *state) (*runner.Runner, error) {
 	dirs := st.env.ctx.XDG
-	bin, err := os.Executable()
+	bin, err := selfPath(a.io.Getenv("PATH"))
 	if err != nil {
 		return nil, err
 	}
@@ -283,6 +283,19 @@ func (a *app) newRunner(st *state) (*runner.Runner, error) {
 		CacheDir:   filepath.Join(dirs.Cache, "devbox"),
 	}
 	return runner.New(env, st.env.validator), nil
+}
+
+// selfPath returns how this binary was started (absolute), so plugins can call it as
+// $DEVBOX_BIN under the same name; it falls back to the executable path.
+func selfPath(pathEnv string) (string, error) {
+	if arg := os.Args[0]; filepath.IsAbs(arg) {
+		return arg, nil
+	} else if strings.Contains(arg, "/") {
+		return filepath.Abs(arg)
+	} else if p, err := lookPath(arg, pathEnv); err == nil {
+		return p, nil
+	}
+	return os.Executable()
 }
 
 func uiLanguage(st *state) string {
