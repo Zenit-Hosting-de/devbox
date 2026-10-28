@@ -100,24 +100,27 @@ dev: ## Run the core in the foreground
 	$(GO) run ./cmd/devbox
 
 .PHONY: test
-test: ## Run Go tests (race detector), workspace tests and plugin bats tests
+test: ## Run Go tests (race detector), CLI flows (testscript), workspace tests and plugin bats tests
 	@# The race detector needs cgo; release builds stay CGO_ENABLED=0.
 	CGO_ENABLED=1 $(GO) test -race $(GO_PACKAGES)
+	$(GO) test -run TestScripts ./cmd/devbox
 	npm test --workspaces --if-present
 ifneq ($(strip $(BATS_DIRS)),)
-	bats $(BATS_DIRS)
+	CGO_ENABLED=0 $(GO) build -o $(BINARY) ./cmd/devbox
+	PATH="$(CURDIR)/$(BIN_DIR):$$PATH" bats $(BATS_DIRS)
 endif
 
 .PHONY: lint
 lint: ## Run golangci-lint, shellcheck, ESLint, Prettier and the JSON/literal checks
 	$(GOLANGCI_LINT) run $(GO_PKG_DIRS)
 	@files=$$(git ls-files -co --exclude-standard -- '*.sh' '*.bash' | while IFS= read -r f; do [ -f "$$f" ] && echo "$$f"; done || true); \
-	if [ -n "$$files" ]; then echo "shellcheck"; echo "$$files" | xargs shellcheck; fi
+	if [ -n "$$files" ]; then echo "shellcheck"; echo "$$files" | xargs shellcheck -x --source-path=SCRIPTDIR; fi
 	$(NPX) eslint .
 	npm run --silent format:check
 	$(GO) run ./internal/tools/jsoncheck
 	$(GO) run ./internal/tools/literalcheck
-	@# AP-13: devbox plugin validate for every plugin.
+	CGO_ENABLED=0 $(GO) build -o $(BINARY) ./cmd/devbox
+	@for dir in plugins/*/; do echo "plugin validate $$dir"; $(BINARY) plugin validate "$$dir"; done
 
 .PHONY: e2e
 e2e: ## End-to-end tests (Playwright, arrives with AP-14)

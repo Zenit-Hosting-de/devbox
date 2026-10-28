@@ -1,0 +1,28 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "{{id}}",
+  "version": "0.1.0",
+  "name": "{{name}}",
+  "description": "Describe what the plugin sets up",
+  "category": "tool",
+  "license": "Apache-2.0",
+  "requires": { "os": ["linux"] },
+  "permissions": {
+    "files": { "write": ["${{{id}}.configFile}"] }
+  },
+  "settings": {
+    "configFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/{{id}}/config",
+      "label": "Configuration file"
+    },
+    "greeting": { "type": "string", "default": "hello", "label": "Greeting" }
+  },
+  "checks": {
+    "status": { "label": "Status", "run": ["checks/status.sh"], "timeout": "5s", "cache": "10m" }
+  },
+  "actions": {
+    "apply": { "label": "Apply", "run": ["actions/apply.sh"], "timeout": "5m" }
+  }
+}

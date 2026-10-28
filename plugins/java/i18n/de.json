@@ -1,0 +1,23 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "Java",
+  "plugin.description": "JDKs installieren, wechseln und aktuell halten",
+  "settings.vendorApi.label": "Adresse der Release-API",
+  "settings.vendorApi.help": "Adoptium-kompatible API. Für einen Spiegel im eigenen Netz ändern.",
+  "settings.defaultVersion.label": "Standard-JDK",
+  "settings.installDir.label": "Installationsort",
+  "settings.keepPatches.label": "Patchstände je Version behalten",
+  "settings.envFile.label": "Datei für die Shell-Umgebung",
+  "settings.envFile.help": "Setzt JAVA_HOME und PATH für neue Shells.",
+  "checks.installed.label": "Installierte JDKs",
+  "checks.latest.label": "Neue Versionen",
+  "actions.install.label": "JDK installieren",
+  "actions.install.params.version.label": "Version",
+  "actions.install.params.makeDefault.label": "Danach als Standard setzen",
+  "actions.update.label": "Aktualisieren und aufräumen",
+  "actions.use.label": "Standard-JDK wechseln",
+  "actions.use.params.version.label": "Version",
+  "actions.remove.label": "JDK entfernen",
+  "actions.remove.params.version.label": "Version",
+  "actions.remove.confirm": "Das JDK wird gelöscht. Projekte, die es über JAVA_HOME nutzen, brauchen danach ein anderes."
+}

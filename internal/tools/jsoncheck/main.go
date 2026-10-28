@@ -14,8 +14,10 @@ import (
 	"github.com/Zenit-Hosting-de/devbox/internal/tools/repofiles"
 )
 
-// Fixtures under test/fixtures/invalid are invalid on purpose; internal/schema tests them.
-var exclude = []string{"test/fixtures/invalid/", "node_modules/"}
+// Fixtures under test/fixtures/invalid are invalid on purpose; internal/schema tests
+// them. Plugin templates contain {{id}} placeholders and are validated after
+// `devbox plugin new` (cmd/devbox testscript plugin_dev.txtar).
+var exclude = []string{"test/fixtures/invalid/", "node_modules/", "templates/plugin/"}
 
 func main() {
 	os.Exit(run(context.Background(), os.Stdout))

@@ -163,7 +163,7 @@ func callString(f func(string) string, id string) string {
 func requirements(m *Manifest, env Env) []Reason {
 	req, _ := m.Doc["requires"].(map[string]any)
 	var reasons []Reason
-	if rng, ok := req["devbox"].(string); ok && !versionIn(env.Version, rng) {
+	if rng, ok := req["devbox"].(string); ok && !isDevBuild(env.Version) && !versionIn(env.Version, rng) {
 		reasons = append(reasons, Reason{Code: ReasonRequiresDevbox, Detail: rng})
 	}
 	check := func(key, have, code string) {
@@ -193,6 +193,10 @@ func requirements(m *Manifest, env Env) []Reason {
 	}
 	return reasons
 }
+
+// isDevBuild reports whether the version is a development build ("…-dev"), which
+// satisfies every DevBox requirement so plugins can be developed before a release.
+func isDevBuild(version string) bool { return strings.HasSuffix(version, "-dev") }
 
 type dep struct{ id, rng string }
 

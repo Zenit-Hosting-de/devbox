@@ -135,6 +135,45 @@ func (a *app) sdkCommand() *cobra.Command {
 			},
 		},
 		download,
+		&cobra.Command{
+			Use: "fetch URL", Args: cobra.ExactArgs(1),
+			RunE: func(c *cobra.Command, args []string) error {
+				e, err := env()
+				if err != nil {
+					return err
+				}
+				client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}
+				return e.Fetch(c.Context(), client, args[0], a.io.Stdout)
+			},
+		},
+		&cobra.Command{
+			Use: "json-get FILE|- POINTER", Args: cobra.ExactArgs(2),
+			RunE: func(_ *cobra.Command, args []string) error {
+				var data []byte
+				var err error
+				if args[0] == "-" {
+					data, err = io.ReadAll(a.io.Stdin)
+				} else {
+					data, err = os.ReadFile(args[0]) //nolint:gosec // plugin-chosen file
+				}
+				if err != nil {
+					return err
+				}
+				values, err := sdk.JSONGet(data, args[1])
+				if err != nil {
+					return &exitError{code: ExitInvalid, err: err}
+				}
+				if len(values) == 0 {
+					return &exitError{code: ExitFailed, err: fmt.Errorf("json-get: nothing at %s", args[1])}
+				}
+				for _, v := range values {
+					if _, err := fmt.Fprintln(a.io.Stdout, sdk.Format(v)); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		},
 	)
 	return cmd
 }

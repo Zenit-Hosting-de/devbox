@@ -114,6 +114,13 @@ func TestEvaluateStates(t *testing.T) {
 			t.Errorf("%s: state %s, want blocked by the cycle", id, p.State)
 		}
 	}
+	devEnv := testEnv()
+	devEnv.Version = "0.0.0-dev"
+	for _, p := range Evaluate(cands, devEnv) {
+		if p.ID == "newer" && p.State != StateReady {
+			t.Errorf("a development build must satisfy every devbox range: %s %v", p.State, p.Reasons)
+		}
+	}
 	if w := Winners(cands); len(w) != len(got)-1 { // broken has no manifest
 		t.Errorf("winners = %d, want %d", len(w), len(got)-1)
 	}

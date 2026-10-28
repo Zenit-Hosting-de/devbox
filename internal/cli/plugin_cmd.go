@@ -17,6 +17,7 @@ func (a *app) pluginCommand() *cobra.Command {
 		&cobra.Command{Use: "list", Args: cobra.NoArgs, RunE: a.pluginList},
 		&cobra.Command{Use: "info ID", Args: cobra.ExactArgs(1), RunE: a.pluginInfo},
 	)
+	cmd.AddCommand(a.pluginDevCommands()...)
 	return cmd
 }
 
