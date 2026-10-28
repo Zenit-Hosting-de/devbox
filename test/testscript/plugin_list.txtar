@@ -3,7 +3,7 @@
 
 exec devbox plugin list --json
 stdout '"id": "base",\n  *"name": "Base",\n  *"version": "1.0.0",\n  *"category": "system",\n  *"state": "ready"'
-stdout '"code": "duplicate-id",\n *"detail": ".*/team-plugins/base"'
+stdout '"code": "duplicate-id",\n *"detail": ".*/team-plugins/base[",]'
 stdout '"id": "broken",\n  *"state": "invalid",\n  *"reasons": \[\n *\{\n *"code": "manifest-invalid",\n *"detail": ".*broken/plugin.json:.*/version: pattern'
 stdout '"state": "blocked",\n  *"reasons": \[\n *\{\n *"code": "requires-command",\n *"detail": "devbox-test-missing-command"'
 stdout '"state": "disabled",\n  *"reasons": \[\n *\{\n *"code": "disabled",\n *"detail": "user"'

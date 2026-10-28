@@ -1,0 +1,16 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "Basis",
+  "plugin.description": "Grundpakete und Systemupdates über den Paketmanager der Distribution",
+  "settings.packages.label": "Grundpakete",
+  "settings.packages.help": "Pakete, die jeder Rechner bekommt. Namen wie im Paketmanager der Distribution.",
+  "settings.extraPackages.label": "Zusätzliche Pakete",
+  "settings.extraPackages.help": "Weitere Pakete, z. B. aus einem Team-Profil.",
+  "settings.upgradeMode.label": "Systemupdate",
+  "settings.upgradeMode.help": "safe lässt installierte Pakete stehen; full darf Pakete auch entfernen oder ersetzen (apt full-upgrade, zypper dist-upgrade).",
+  "settings.manager.label": "Paketmanager",
+  "settings.manager.help": "auto nimmt den ersten aus apt, dnf, pacman und zypper, der im PATH liegt.",
+  "checks.packages.label": "Grundpakete",
+  "actions.packages.label": "Grundpakete installieren",
+  "actions.upgrade.label": "System aktualisieren"
+}
