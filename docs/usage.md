@@ -284,12 +284,73 @@ bundled plugins are searched last. The protocol, the environment and the `devbox
 helpers are described in [concept.md](concept.md#plugin-protokoll) (German) and in
 [templates/plugin/](../templates/plugin/).
 
+## Web service (`devbox serve`)
+
+`devbox serve` starts the REST API (`/api/v1`, described in `api/openapi.json`) and
+serves the web interface from the same binary. It logs JSON lines to stderr: one line
+`listening` with the URL (port `0` prints the real port), one line per request (method,
+path, status, duration; never bodies or query strings).
+
+```sh
+devbox serve                    # http://127.0.0.1:7878 (server.listen)
+devbox serve --listen 127.0.0.1:0 --open
+```
+
+| Flag                 | Meaning                                                                                                                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--listen ADDR`      | Address to listen on. Default: `server.listen` (user file, then system file, then the schema default `127.0.0.1:7878`).                                                                           |
+| `--open`             | Open the URL with `$BROWSER`, else `xdg-open`. A failure is only a warning.                                                                                                                       |
+| `--socket PATH`      | Unix socket. Default `$XDG_RUNTIME_DIR/devbox/api.sock` (directory 0700, socket 0600, a stale socket is replaced). Without `XDG_RUNTIME_DIR` and `--socket` the socket is skipped with a warning. |
+| `--allow-origin URL` | Allow one more origin for this run, on top of `server.allowedOrigins`. Repeatable.                                                                                                                |
+
+**Listen address and login.** `server.auth` is `local` (default) or `off`; both are
+accepted on loopback addresses only (`127.0.0.0/8`, `::1`, `localhost`). `off` logs a
+warning and behaves like `local` in this milestone. A non-loopback address, or
+`server.auth` set to `pam`, makes `devbox serve` exit with code 2: both need the PAM
+login and TLS, which are not available yet.
+
+**Protection of the TCP port.** Every request needs a `Host` header that names the listen
+address (or `localhost`, `127.0.0.1`, `[::1]` with the same port), which stops DNS
+rebinding. Modifying requests (`POST`, `PUT`, `PATCH`, `DELETE`) also need the header
+`X-DevBox-Request: 1` and an `Origin` that is the origin of the server itself,
+`server.allowedOrigins` or `--allow-origin`; otherwise the answer is `403` with the
+problem code `csrf`. Requests over the Unix socket skip these checks, because the file
+mode (0600 in a 0700 directory) is the protection. Responses carry a strict
+`Content-Security-Policy`, `X-Content-Type-Options: nosniff` and `Referrer-Policy:
+no-referrer`.
+
+**Development.** The Angular dev server on `http://localhost:4200` calls the API when the
+service is started with `devbox serve --allow-origin http://localhost:4200` (`make dev`
+does this once the web UI is in). Without a web build (`make build`) the binary serves a
+short placeholder page for the UI; the API works either way.
+
+**Behaviour.**
+
+- The configuration and the plugins are read again for every request, so the files stay
+  the single source of truth. `PATCH /settings` writes the user file like
+  `devbox config set`; actions started over the API run, are recorded and pruned exactly
+  like `devbox run` (origin `ui` for a browser, `api` otherwise).
+- Actions of one plugin queue behind each other, also across requests. Starting an
+  action that is already queued or running answers `409 conflict`; an action with a
+  `confirm` prompt needs `"yes": true` unless it is a dry run.
+- Check results are cached in memory only (nothing is written to disk in this
+  milestone). All checks run when the service starts, results older than the `cache`
+  time of the check are refreshed when read, and the checks of a plugin run again after
+  one of its actions has finished.
+- On SIGINT or SIGTERM the service stops accepting requests, stops live sessions (they
+  end as `stopped` and are recorded in the history) and waits for them.
+
+**Not available yet:** the PAM login (`/auth/*`), the login rate limit, TLS and
+non-loopback addresses; the command line client over the Unix socket; setting a
+credential secret over the API (`PUT /credentials/{name}/secret`); the WebSocket
+(`/ws`); and the endpoints for groups, setup, profiles and plugin catalogs.
+
 ## Not yet available
 
 These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary yet:
 
 - install script, distribution packages
-- web UI, `devbox serve`, `devbox service …`, terminal menu (`devbox` without arguments)
+- web UI (the placeholder page only), `devbox service …`, terminal menu (`devbox` without arguments)
 - `devbox setup`, `devbox group run` (for example `update-all`), `devbox check`,
   `devbox actions`, `devbox status --strict` (exit codes 5 and 6)
 - the registry consumers `npm`, `maven`, `nuget`, `pip`, `docker` and the credential types

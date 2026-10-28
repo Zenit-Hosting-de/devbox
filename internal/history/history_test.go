@@ -289,3 +289,33 @@ func TestDefaultsMatchSchema(t *testing.T) {
 		t.Errorf("schema defaults %d/%d, constants %d/%d", p["keepDays"].Default, p["keepSessions"].Default, DefaultKeepDays, DefaultKeepSessions)
 	}
 }
+
+func TestWriteSeqReturnsTheSequenceNumberOfTheChunk(t *testing.T) {
+	s := newStore(t)
+	sess, err := s.Create(id(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := sess.WriteSeq([]byte("a")); got != 0 {
+		t.Errorf("first chunk took seq %d, want 0", got)
+	}
+	if got := sess.WriteSeq(nil); got != -1 {
+		t.Errorf("an empty chunk takes no seq, got %d", got)
+	}
+	if ev := sess.Event(map[string]any{"type": "log"}, base); ev.Seq != 1 {
+		t.Errorf("event seq %d, want 1", ev.Seq)
+	}
+	if n, err := sess.Write([]byte("bc")); n != 2 || err != nil {
+		t.Errorf("Write = %d, %v", n, err)
+	}
+	if got := sess.WriteSeq([]byte("d")); got != 3 {
+		t.Errorf("seq %d, want 3: Write and WriteSeq share the counter", got)
+	}
+	if err := sess.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(s.LogPath(id(1)))
+	if err != nil || string(data) != "abcd" {
+		t.Errorf("log = %q, %v", data, err)
+	}
+}

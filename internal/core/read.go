@@ -50,6 +50,25 @@ func Settings(st *State) []SettingItem {
 	return items
 }
 
+// PluginDetail is a plugin with its manifest and the resolved defaults of its action
+// parameters (api/openapi.json, PluginDetail).
+type PluginDetail struct {
+	plugin.Status
+	Manifest         map[string]any            `json:"manifest,omitempty"`
+	ResolvedDefaults map[string]map[string]any `json:"resolvedDefaults,omitempty"`
+}
+
+// PluginDetail returns the JSON form of a plugin; withManifest adds the manifest and
+// the resolved defaults.
+func (st *State) PluginDetail(p *plugin.Plugin, withManifest bool) PluginDetail {
+	d := PluginDetail{Status: p.Status()}
+	if withManifest && p.Manifest != nil {
+		d.Manifest = p.Manifest.Doc
+		d.ResolvedDefaults = st.ResolvedDefaults(p.Manifest)
+	}
+	return d
+}
+
 // CredentialsPath is the credentials directory file.
 func (st *State) CredentialsPath() string {
 	return filepath.Join(st.DataDir(), credentials.FileName)

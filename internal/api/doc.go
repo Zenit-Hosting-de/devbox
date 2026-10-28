@@ -1,4 +1,8 @@
-// Package api serves the HTTP and WebSocket API, authentication, TLS and the embedded web UI.
+// Package api serves the REST API of DevBox (api/openapi.json) and the embedded web UI.
 //
-// The implementation arrives in a later work package; see docs/concept.md.
+// Every request loads the configuration and the plugins again, so the files stay the
+// single source of truth. Checks are cached in memory, actions run as sessions that
+// are recorded in the history exactly like those of the CLI. Authentication beyond
+// the loopback check, TLS and the WebSocket arrive in later work packages; see
+// docs/concept.md.
 package api

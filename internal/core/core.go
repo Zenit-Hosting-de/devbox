@@ -36,6 +36,9 @@ type Env struct {
 	ConfigPath string
 	// Sets are the --set key=value layers of the call.
 	Sets []string
+	// Validator is reused when set (the server loads the state for every request);
+	// otherwise each call creates one.
+	Validator *schema.Validator
 }
 
 // Base is what every command needs before plugins are loaded: the validator, the
@@ -49,9 +52,12 @@ type Base struct {
 
 // NewBase detects the host and the directories.
 func NewBase(env Env) (*Base, error) {
-	v, err := schema.New()
-	if err != nil {
-		return nil, err
+	v := env.Validator
+	if v == nil {
+		var err error
+		if v, err = schema.New(); err != nil {
+			return nil, err
+		}
 	}
 	dirs, err := platform.XDG(env.Getenv)
 	if err != nil {

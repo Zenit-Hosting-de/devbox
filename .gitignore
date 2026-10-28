@@ -2,7 +2,8 @@
 /bin/
 /dist/
 sdk/ts/dist/
-internal/api/dist/
+internal/api/dist/*
+!internal/api/dist/.gitkeep
 coverage/
 *.test
 *.out

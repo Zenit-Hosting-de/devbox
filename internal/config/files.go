@@ -140,25 +140,43 @@ func ProfilePath(ctx Context, source string, relPath string) (string, error) {
 	return p, nil
 }
 
-// Set writes a user value into the configuration file at path. The value must be
-// valid for the field and the key must not be locked by a profile.
-func Set(v *schema.Validator, path string, defs Definitions, current *Result, key string, value any) error {
-	field, ok := defs[key]
-	if !ok {
+// CheckKey checks that a plugin defines the key and that no profile locks it.
+func CheckKey(defs Definitions, current *Result, key string) error {
+	if _, ok := defs[key]; !ok {
 		return &Error{Code: CodeNotFound, Key: key, Detail: "no plugin defines this setting"}
 	}
 	if by := current.LockedBy(key); by != "" {
 		return &Error{Code: CodeSettingLocked, Key: key, Detail: "locked by " + by}
 	}
+	return nil
+}
+
+// Check validates a user value for a key without writing it and returns the value to
+// store. The key must be defined by a plugin and must not be locked by a profile.
+func Check(defs Definitions, current *Result, key string, value any) (any, error) {
+	if err := CheckKey(defs, current, key); err != nil {
+		return nil, err
+	}
+	field := defs[key]
 	coerced, err := Coerce(field, value)
 	if err != nil {
-		return &Error{Code: CodeValidation, Key: key, Detail: err.Error()}
+		return nil, &Error{Code: CodeValidation, Key: key, Detail: err.Error()}
 	}
 	// Placeholders are stored as written; validate the plain value only.
 	if s, isText := coerced.(string); !isText || !strings.Contains(s, "${") {
 		if err := validateValue(key, field, coerced); err != nil {
-			return err
+			return nil, err
 		}
+	}
+	return coerced, nil
+}
+
+// Set writes a user value into the configuration file at path. The value must be
+// valid for the field and the key must not be locked by a profile.
+func Set(v *schema.Validator, path string, defs Definitions, current *Result, key string, value any) error {
+	coerced, err := Check(defs, current, key, value)
+	if err != nil {
+		return err
 	}
 	return update(v, path, func(settings *jsonfile.Object) { settings.Set(key, coerced) })
 }
