@@ -132,6 +132,8 @@ func (a *app) run(ctx context.Context, ref string, f runFlags) error {
 		ev := sess.Event(msg, time.Now())
 		if a.jsonOut {
 			_ = json.NewEncoder(a.io.Stdout).Encode(ev)
+		} else {
+			a.renderMessage(msg, spec.DryRun)
 		}
 		if msg["type"] == "setting" {
 			key := pluginID + "." + fmt.Sprint(msg["key"])
@@ -164,6 +166,33 @@ func (a *app) run(ctx context.Context, ref string, f runFlags) error {
 		return &exitError{code: exitInterrupted, err: fmt.Errorf("%s: %s", ref, res.State)}
 	default:
 		return &exitError{code: ExitFailed, err: fmt.Errorf("%s: %s", ref, res.State)}
+	}
+}
+
+// renderMessage prints a protocol message as one readable line in text mode.
+func (a *app) renderMessage(msg map[string]any, dryRun bool) {
+	str := func(k string) string { v, _ := msg[k].(string); return v }
+	switch msg["type"] {
+	case "step":
+		mark := map[string]string{"running": "▸", "done": "✓", "skipped": "–", "failed": "✗"}[str("state")]
+		_, _ = fmt.Fprintf(a.io.Stdout, "%s %s\n", mark, str("label"))
+	case "change":
+		op := map[string]string{"create": "+", "update": "~", "delete": "-"}[str("op")]
+		prefix := ""
+		if dryRun {
+			prefix = "(dry run) "
+		}
+		_, _ = fmt.Fprintf(a.io.Stdout, "  %s%s %s: %s\n", prefix, op, str("target"), str("summary"))
+	case "log":
+		if lvl := str("level"); lvl != "info" {
+			_, _ = fmt.Fprintf(a.io.Stderr, "%s: %s\n", lvl, str("text"))
+		} else {
+			_, _ = fmt.Fprintln(a.io.Stdout, str("text"))
+		}
+	case "notice":
+		_, _ = fmt.Fprintf(a.io.Stdout, "note: %s\n", str("text"))
+	case "result":
+		_, _ = fmt.Fprintf(a.io.Stdout, "→ %s\n", str("summary"))
 	}
 }
 
