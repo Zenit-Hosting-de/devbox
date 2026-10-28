@@ -1,0 +1,135 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "maven",
+  "version": "1.0.0",
+  "name": "Maven",
+  "description": "Install and update Apache Maven and configure registries in settings.xml",
+  "category": "consumer",
+  "icon": "package",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["tar", "sha512sum"],
+    "plugins": { "base": ">=1.0.0", "java": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": ["${maven.distUrl}", "${maven.metadataUrl}"],
+    "files": {
+      "read": ["${env:HOME}"],
+      "write": ["${maven.installDir}", "${maven.envFile}", "${maven.settingsPath}"]
+    },
+    "sudo": false,
+    "credentials": ["registry"]
+  },
+  "settings": {
+    "distUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://archive.apache.org/dist/maven/maven-3",
+      "label": "Download address",
+      "help": "Directory with one folder per version (VERSION/binaries/apache-maven-VERSION-bin.tar.gz and its .sha512). Change it to use a mirror in the own network.",
+      "advanced": true
+    },
+    "metadataUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/maven-metadata.xml",
+      "label": "Version list",
+      "help": "maven-metadata.xml that lists the released versions. Only 3.x releases are considered.",
+      "advanced": true
+    },
+    "version": {
+      "type": "string",
+      "default": "latest",
+      "label": "Maven version",
+      "help": "A version such as 3.9.9, or latest for the newest 3.x release."
+    },
+    "installDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:data}/maven",
+      "label": "Install location",
+      "advanced": true
+    },
+    "envFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d/maven.sh",
+      "label": "Shell environment file",
+      "help": "Sets MAVEN_HOME and PATH for new shells.",
+      "advanced": true
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["file"],
+      "default": "file",
+      "label": "How credentials are stored",
+      "help": "Maven reads passwords only from settings.xml, so the credential is written into that file (mode 0600)."
+    },
+    "settingsPath": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.m2/settings.xml",
+      "label": "Maven settings file"
+    }
+  },
+  "checks": {
+    "installed": {
+      "label": "Installed Maven",
+      "run": ["checks/installed.sh"],
+      "timeout": "5s",
+      "cache": "10m",
+      "refreshOn": ["session.finished:maven.*"]
+    },
+    "latest": {
+      "label": "New version",
+      "run": ["checks/latest.sh"],
+      "timeout": "20s",
+      "cache": "6h",
+      "network": true
+    }
+  },
+  "actions": {
+    "install": {
+      "label": "Install Maven",
+      "run": ["actions/install.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "default": "${maven.version}",
+          "label": "Version"
+        }
+      },
+      "timeout": "15m"
+    },
+    "update": { "label": "Update and clean up", "run": ["actions/update.sh"], "timeout": "30m" },
+    "remove": {
+      "label": "Remove Maven",
+      "run": ["actions/remove.sh"],
+      "confirm": "All installed Maven versions are deleted. The settings file stays as it is.",
+      "danger": true
+    }
+  },
+  "consumes": {
+    "registry": {
+      "apply": ["consume/apply.sh"],
+      "remove": ["consume/remove.sh"],
+      "options": {
+        "repository": { "type": "string", "label": "Repository name" },
+        "url": { "type": "string", "format": "uri", "label": "Full repository address" },
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "label": "Server id" },
+        "mirrorOf": { "type": "string", "label": "Mirror of" },
+        "snapshots": { "type": "boolean", "default": false, "label": "Also use for snapshots" }
+      }
+    }
+  },
+  "contributes": {
+    "groups": { "update-all": ["maven.update"] },
+    "setup": [{ "action": "maven.install", "after": ["java.install"] }],
+    "overview": { "check": "maven.installed", "primaryAction": "maven.update" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

@@ -8,6 +8,7 @@ last in the plugin search order, so a team can replace any of them.
 | Plugin | Work package |
 | --- | --- |
 | `java` | AP-13 (reference plugin) |
+| `maven` | AP-18 (install, update, registry consumer for `settings.xml`; mode `file` only, Maven reads no passwords from the environment) |
 
 The remaining plugins follow in AP-17 to AP-19, the language packs `lang-de` and
 `lang-en` in AP-28.

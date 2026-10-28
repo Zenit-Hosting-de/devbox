@@ -1,0 +1,204 @@
+# AP-18 maven: install and update from a fake download server (SHA-512 verified), and
+# the consumer of registry credentials that keeps marked blocks in settings.xml:
+# well-formed, idempotent, dry run, mode 0600, remove leaves the file as before.
+
+maven start
+maven release 3.9.8
+maven release 3.9.9
+registry start
+registry accept alice m4v3n&t0k3n
+env SETS=--set=maven.distUrl=$MAVEN_DIST
+env METAS=--set=maven.metadataUrl=$MAVEN_META
+
+# --- install and update ---------------------------------------------------------
+
+exec devbox plugin test --apply --set maven.distUrl=$MAVEN_DIST --set maven.metadataUrl=$MAVEN_META $REPO/plugins/maven
+stdout '^ok +validate +maven'
+stdout '^ok +check +maven.installed +missing'
+stdout '^ok +dry-run +maven.install'
+stdout '^ok +apply +maven.install +[1-9][0-9]* changes'
+stdout '^ok +repeat +maven.install +no changes'
+stdout '^ok +repeat +maven.update +no changes'
+stdout '^skipped +apply +maven.remove +danger'
+! stdout '^failed'
+
+# the bundled plugin used for real: "latest" is the newest final 3.x release
+exec devbox run maven.install $SETS $METAS --json
+stdout '"kind":"file","op":"create","summary":"Maven 3.9.9","target":".*/maven/3.9.9","type":"change"'
+stdout '"summary":"Maven 3.9.9","type":"result"'
+exists home/.local/share/maven/3.9.9/bin/mvn
+! exists home/.local/share/maven/3.10.0-alpha-1
+! exists home/.local/share/maven/4.0.0-rc-1
+exec home/.local/share/maven/current/bin/mvn
+stdout 'Apache Maven 3.9.9'
+grep 'export MAVEN_HOME=".*/home/.local/share/maven/current"' home/.config/devbox/env.d/maven.sh
+grep 'export PATH="\$MAVEN_HOME/bin:\$PATH"' home/.config/devbox/env.d/maven.sh
+exec devbox run maven.install $SETS $METAS --json
+! stdout '"type":"change"'
+
+# a wrong checksum stops the install and leaves nothing behind
+maven badsum 3.9.8
+! exec devbox run maven.install -p version=3.9.8 $SETS $METAS
+stderr 'SHA-512 of Maven 3.9.8 does not match'
+! exists home/.local/share/maven/3.9.8
+exec home/.local/share/maven/current/bin/mvn
+stdout 'Apache Maven 3.9.9'
+
+# update: a newer release replaces the old one
+maven release 3.9.10
+exec devbox run maven.update $SETS $METAS --json
+stdout '"summary":"Maven 3.9.10","target":".*/maven/3.9.10"'
+stdout '"op":"delete","summary":"old version","target":".*/maven/3.9.9"'
+exec home/.local/share/maven/current/bin/mvn
+stdout 'Apache Maven 3.9.10'
+! exists home/.local/share/maven/3.9.9
+exec devbox run maven.update $SETS $METAS --json
+! stdout '"type":"change"'
+
+exec devbox run maven.remove --yes
+! exists home/.local/share/maven/3.9.10
+! exists home/.local/share/maven/current
+! grep 'MAVEN_HOME' home/.config/devbox/env.d/maven.sh
+
+# --- consumer: a settings.xml of the user stays as it is ---------------------------
+
+cp home/.m2/settings.xml orig.xml
+exec devbox cred add reg --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'maven:repository=maven-group,mirrorOf=*,snapshots=true'
+stdin token.txt
+exec devbox cred set reg --from-stdin
+stdout '✓ reg verified'
+stdout '✓ maven apply'
+! stdout 'm4v3n'
+! stderr 'm4v3n'
+
+maven xml home/.m2/settings.xml
+maven count home/.m2/settings.xml servers 1
+maven count home/.m2/settings.xml server 2
+maven count home/.m2/settings.xml mirrors 1
+maven count home/.m2/settings.xml mirror 1
+maven count home/.m2/settings.xml profiles 1
+maven count home/.m2/settings.xml profile 1
+maven count home/.m2/settings.xml activeProfiles 1
+maven count home/.m2/settings.xml activeProfile 2
+grep '<!-- >>> devbox:maven:reg >>> -->' home/.m2/settings.xml
+grep '<!-- <<< devbox:maven:reg <<< -->' home/.m2/settings.xml
+grep '<!-- >>> devbox:maven:reg:mirror >>> -->' home/.m2/settings.xml
+grep '<id>reg</id>' home/.m2/settings.xml
+grep '<username>alice</username>' home/.m2/settings.xml
+grep '<password>m4v3n&amp;t0k3n</password>' home/.m2/settings.xml
+grep '<mirrorOf>\*</mirrorOf>' home/.m2/settings.xml
+grep '<url>'$REGISTRY'/repository/maven-group/</url>' home/.m2/settings.xml
+grep '<enabled>true</enabled>' home/.m2/settings.xml
+grep '<activeProfile>devbox-reg</activeProfile>' home/.m2/settings.xml
+grep '<id>own</id>' home/.m2/settings.xml
+grep '<activeProfile>user-profile</activeProfile>' home/.m2/settings.xml
+grep 'devbox:maven-section:mirrors' home/.m2/settings.xml
+! grep 'devbox:maven-section:servers' home/.m2/settings.xml
+exec stat -c %a home/.m2/settings.xml
+stdout '^600$'
+
+# applying again (and a dry run) changes nothing
+cp home/.m2/settings.xml first.xml
+exec devbox cred apply reg
+cmp home/.m2/settings.xml first.xml
+exec devbox cred apply reg --dry-run
+cmp home/.m2/settings.xml first.xml
+
+# changed options replace the blocks: no mirror any more, no snapshots
+exec devbox cred add reg --consumer 'maven:repository=maven-releases,id=corp'
+exec devbox cred apply reg
+maven xml home/.m2/settings.xml
+maven count home/.m2/settings.xml mirror 1
+grep '<id>corp</id>' home/.m2/settings.xml
+! grep '<id>reg</id>' home/.m2/settings.xml
+grep '/repository/maven-releases/' home/.m2/settings.xml
+! grep 'mirror:' home/.m2/settings.xml
+
+# the user's own entries survive; remove restores the file exactly
+exec devbox cred remove reg
+stdout '✓ maven remove'
+maven xml home/.m2/settings.xml
+cmp home/.m2/settings.xml orig.xml
+exec stat -c %a home/.m2/settings.xml
+stdout '^600$'
+
+# --- consumer: no settings.xml yet ------------------------------------------------
+
+rm home/.m2/settings.xml
+exec devbox cred add art --type registry --field url=$REGISTRY --field layout=artifactory --field username=alice --consumer 'maven:repository=libs-release'
+stdin token.txt
+exec devbox cred set art --from-stdin
+stdout '✓ maven apply'
+maven xml home/.m2/settings.xml
+maven count home/.m2/settings.xml settings 1
+maven count home/.m2/settings.xml server 1
+maven count home/.m2/settings.xml mirror 0
+grep '/artifactory/libs-release/' home/.m2/settings.xml
+exec stat -c %a home/.m2/settings.xml
+stdout '^600$'
+
+# a second instance joins the same sections; each remove takes only its own blocks
+exec devbox cred add second --type registry --field url=$REGISTRY --field username=alice --consumer 'maven:url=https://maven.example.com/releases/,mirrorOf=central'
+stdin token.txt
+exec devbox cred set second --from-stdin
+maven xml home/.m2/settings.xml
+maven count home/.m2/settings.xml servers 1
+maven count home/.m2/settings.xml server 2
+maven count home/.m2/settings.xml mirror 1
+grep '<url>https://maven.example.com/releases/</url>' home/.m2/settings.xml
+exec devbox cred remove art
+maven xml home/.m2/settings.xml
+maven count home/.m2/settings.xml server 1
+! grep 'devbox:maven:art' home/.m2/settings.xml
+grep 'devbox:maven:second' home/.m2/settings.xml
+exec devbox cred remove second
+maven xml home/.m2/settings.xml
+maven count home/.m2/settings.xml servers 0
+maven count home/.m2/settings.xml settings 1
+! grep 'devbox' home/.m2/settings.xml
+! grep 'm4v3n' home/.m2/settings.xml
+
+# the secret never shows up in the history
+exec devbox history --json
+! stdout 'm4v3n'
+stdout 'maven.apply'
+stdout 'maven.remove'
+
+# a credential without user name or a layout without address is refused
+exec devbox cred add anon --type registry --field url=$REGISTRY --consumer 'maven:repository=x'
+stdin token.txt
+! exec devbox cred set anon --from-stdin
+stderr 'has no field username'
+exec devbox cred add lab --type registry --field url=$REGISTRY --field layout=gitlab --field username=alice --consumer maven
+stdin token.txt
+! exec devbox cred set lab --from-stdin
+stderr 'layout gitlab needs the option url'
+
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "paths": ["${xdg:data}/devbox/plugins"] },
+  "vault": { "backend": "age" }
+}
+-- home/.local/share/devbox/plugins/base/plugin.json --
+{ "id": "base", "version": "1.0.0", "name": "Base stand-in" }
+-- home/.local/share/devbox/plugins/java/plugin.json --
+{ "id": "java", "version": "1.0.0", "name": "Java stand-in" }
+-- token.txt --
+m4v3n&t0k3n
+-- home/.m2/settings.xml --
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
+  <localRepository>/data/m2</localRepository>
+
+  <servers>
+    <server>
+      <id>own</id>
+      <username>me</username>
+      <password>{encrypted}</password>
+    </server>
+  </servers>
+
+  <activeProfiles>
+    <activeProfile>user-profile</activeProfile>
+  </activeProfiles>
+</settings>

@@ -47,11 +47,39 @@ func Markers(name string, c Comment) (begin, end string) {
 // appended (after a blank line) when there is none. Running it twice gives the same
 // result.
 func SetBlock(content []byte, name string, body []byte, c Comment) []byte {
+	out, _ := SetBlockBefore(content, name, body, c, "")
+	return out
+}
+
+// SetBlockBefore is SetBlock with an insertion point: when the block is new and
+// before is not empty, the block is inserted directly before the first line that
+// equals before (ignoring surrounding white space) instead of being appended. The
+// marker lines are indented one level deeper than that line; an existing block keeps
+// the indentation of its marker. It is an error when before is not in the content.
+func SetBlockBefore(content []byte, name string, body []byte, c Comment, before string) ([]byte, error) {
 	begin, end := Markers(name, c)
-	block := begin + "\n" + strings.TrimRight(string(body), "\n") + "\n" + end + "\n"
 	lines, from, to := findBlock(string(content), begin, end)
+	indent := ""
 	if from >= 0 {
-		return []byte(strings.Join(lines[:from], "") + block + strings.Join(lines[to+1:], ""))
+		indent = leadingSpace(lines[from])
+	}
+	if from < 0 && before != "" {
+		at := -1
+		for i, l := range lines {
+			if strings.TrimSpace(l) == before {
+				at = i
+				break
+			}
+		}
+		if at < 0 {
+			return nil, fmt.Errorf("no line %q to insert the block %s before", before, name)
+		}
+		indent = leadingSpace(lines[at]) + "  "
+		return []byte(strings.Join(lines[:at], "") + renderBlock(begin, end, body, indent) + strings.Join(lines[at:], "")), nil
+	}
+	block := renderBlock(begin, end, body, indent)
+	if from >= 0 {
+		return []byte(strings.Join(lines[:from], "") + block + strings.Join(lines[to+1:], "")), nil
 	}
 	text := string(content)
 	switch {
@@ -62,17 +90,24 @@ func SetBlock(content []byte, name string, body []byte, c Comment) []byte {
 	default:
 		text += "\n\n"
 	}
-	return []byte(text + block)
+	return []byte(text + block), nil
 }
 
-// RemoveBlock returns content without the marked block (and one blank line before it).
+func leadingSpace(s string) string { return s[:len(s)-len(strings.TrimLeft(s, " \t"))] }
+
+func renderBlock(begin, end string, body []byte, indent string) string {
+	return indent + begin + "\n" + strings.TrimRight(string(body), "\n") + "\n" + indent + end + "\n"
+}
+
+// RemoveBlock returns content without the marked block (and one blank line before it,
+// unless the block is indented: those sit inside a structure, not after a blank line).
 func RemoveBlock(content []byte, name string, c Comment) []byte {
 	begin, end := Markers(name, c)
 	lines, from, to := findBlock(string(content), begin, end)
 	if from < 0 {
 		return content
 	}
-	if from > 0 && strings.TrimSpace(lines[from-1]) == "" {
+	if from > 0 && leadingSpace(lines[from]) == "" && strings.TrimSpace(lines[from-1]) == "" {
 		from--
 	}
 	return []byte(strings.Join(lines[:from], "") + strings.Join(lines[to+1:], ""))
@@ -110,12 +145,22 @@ func readOptional(path string) ([]byte, error) {
 
 // Block writes the marked block for name into the file.
 func (e Env) Block(path, name string, body []byte, mode os.FileMode) error {
+	return e.BlockBefore(path, name, body, mode, "")
+}
+
+// BlockBefore is Block for a new block that goes before the line "before" (see
+// SetBlockBefore) instead of at the end of the file, e.g. inside an XML section.
+func (e Env) BlockBefore(path, name string, body []byte, mode os.FileMode, before string) error {
 	path = e.ExpandHome(path)
 	old, err := readOptional(path)
 	if err != nil {
 		return err
 	}
-	_, err = e.Write(path, SetBlock(old, name, body, CommentFor(path)), mode, "devbox:"+name+" block")
+	updated, err := SetBlockBefore(old, name, body, CommentFor(path), before)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	_, err = e.Write(path, updated, mode, "devbox:"+name+" block")
 	return err
 }
 

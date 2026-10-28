@@ -575,6 +575,7 @@ Beispiel:
 | `devbox sdk secret` | Geheimnis eines Abnehmers lesen (nur mit Recht) |
 | `devbox sdk emit step download running "Laden"` | Nachricht auf Deskriptor 3 schreiben |
 | `devbox sdk block ~/.npmrc npm < inhalt` | markierten Block in einer Datei anlegen oder ersetzen, mit Sicherung und `change`-Nachricht, im Probelauf nur melden |
+| `devbox sdk block --before "</servers>" datei.xml name < inhalt` | neuen Block vor die erste Zeile mit diesem Text setzen (z. B. in einen XML-Abschnitt) statt ans Dateiende; Dateien mit Endung `.xml` bekommen `<!-- -->` als Markierung |
 | `devbox sdk block-remove ~/.npmrc npm` | markierten Block entfernen |
 | `devbox sdk json-set ~/.config/x.json /pfad/zum/wert '"neu"'` | Wert in einer JSON-Datei setzen, Formatierung bleibt |
 | `devbox sdk download URL ZIEL --sha256 …` | Download mit Proxy, CA-Datei, Fortschritt und Prüfsumme |

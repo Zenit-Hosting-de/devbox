@@ -58,7 +58,7 @@ func (a *app) sdkCommand() *cobra.Command {
 			return err
 		}
 	}
-	var mode string
+	var mode, before string
 	var sha string
 	block := &cobra.Command{
 		Use: "block FILE NAME", Args: cobra.ExactArgs(2),
@@ -75,10 +75,11 @@ func (a *app) sdkCommand() *cobra.Command {
 			if err != nil {
 				return &exitError{code: ExitInvalid, err: fmt.Errorf("--mode %q: %w", mode, err)}
 			}
-			return e.Block(args[0], args[1], body, os.FileMode(perm))
+			return e.BlockBefore(args[0], args[1], body, os.FileMode(perm), before)
 		},
 	}
 	block.Flags().StringVar(&mode, "mode", "644", "mode for a new file (octal), e.g. 600 for files with secrets")
+	block.Flags().StringVar(&before, "before", "", "insert a new block before the first line equal to this text (e.g. </servers>) instead of at the end")
 	download := &cobra.Command{
 		Use: "download URL DEST", Args: cobra.ExactArgs(2),
 		RunE: func(c *cobra.Command, args []string) error {
