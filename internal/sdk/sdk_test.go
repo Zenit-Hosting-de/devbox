@@ -236,3 +236,65 @@ func TestJSONGet(t *testing.T) {
 		}
 	}
 }
+
+// TestBlockBeforeInsertsInsideXML covers the insertion point of a new block: inside
+// an XML section, idempotent, replaced in place, and removed without a trace.
+func TestBlockBeforeInsertsInsideXML(t *testing.T) {
+	e := newEnv(t, false)
+	path := filepath.Join(e.vars["HOME"], "settings.xml")
+	orig := "<settings>\n  <servers>\n    <server><id>own</id></server>\n  </servers>\n</settings>\n"
+	if err := os.WriteFile(path, []byte(orig), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := e.BlockBefore(path, "maven:a", []byte("    <server><id>a</id></server>"), 0o600, "</servers>"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, _ := os.ReadFile(path)
+	want := "<settings>\n  <servers>\n    <server><id>own</id></server>\n" +
+		"    <!-- >>> devbox:maven:a >>> -->\n    <server><id>a</id></server>\n    <!-- <<< devbox:maven:a <<< -->\n" +
+		"  </servers>\n</settings>\n"
+	if string(got) != want {
+		t.Errorf("file =\n%s\nwant\n%s", got, want)
+	}
+	if e.changes() != 1 {
+		t.Errorf("%d change messages, want 1", e.changes())
+	}
+	// A changed body stays at its place.
+	if err := e.BlockBefore(path, "maven:a", []byte("    <server><id>b</id></server>"), 0o600, "</servers>"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(path)
+	if !strings.Contains(string(got), "<id>b</id>") || strings.Contains(string(got), "<id>a</id>") {
+		t.Errorf("body not replaced:\n%s", got)
+	}
+	if err := e.BlockRemove(path, "maven:a"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(path)
+	if string(got) != orig {
+		t.Errorf("after remove:\n%s\nwant\n%s", got, orig)
+	}
+	// Without the anchor line nothing is written.
+	if err := e.BlockBefore(path, "maven:c", []byte("x"), 0o600, "</mirrors>"); err == nil {
+		t.Error("missing anchor line: want an error")
+	}
+	got, _ = os.ReadFile(path)
+	if string(got) != orig {
+		t.Errorf("file changed despite the error:\n%s", got)
+	}
+}
+
+func TestSetBlockBeforeKeepsPlainBehaviour(t *testing.T) {
+	c := CommentFor("x.conf")
+	in := []byte("a=1\n")
+	plain := SetBlock(in, "demo", []byte("b=2"), c)
+	same, err := SetBlockBefore(in, "demo", []byte("b=2"), c, "")
+	if err != nil || string(plain) != string(same) {
+		t.Errorf("plain = %q, %q, %v", plain, same, err)
+	}
+	if string(plain) != "a=1\n\n# >>> devbox:demo >>>\nb=2\n# <<< devbox:demo <<<\n" {
+		t.Errorf("plain = %q", plain)
+	}
+}

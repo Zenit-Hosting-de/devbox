@@ -58,7 +58,7 @@ func (a *app) sdkCommand() *cobra.Command {
 			return err
 		}
 	}
-	var mode string
+	var mode, before, style, removeStyle, hasStyle string
 	var sha string
 	block := &cobra.Command{
 		Use: "block FILE NAME", Args: cobra.ExactArgs(2),
@@ -75,10 +75,45 @@ func (a *app) sdkCommand() *cobra.Command {
 			if err != nil {
 				return &exitError{code: ExitInvalid, err: fmt.Errorf("--mode %q: %w", mode, err)}
 			}
-			return e.Block(args[0], args[1], body, os.FileMode(perm))
+			return e.BlockAs(args[0], args[1], body, os.FileMode(perm), before, style)
 		},
 	}
 	block.Flags().StringVar(&mode, "mode", "644", "mode for a new file (octal), e.g. 600 for files with secrets")
+	block.Flags().StringVar(&before, "before", "", "insert a new block before the first line equal to this text (e.g. </servers>) instead of at the end")
+	block.Flags().StringVar(&style, "comment", "auto", "comment syntax of the markers: auto (by file name), xml or hash")
+	hasLine := &cobra.Command{
+		Use: "has-line FILE TEXT", Args: cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			e, err := env()
+			if err != nil {
+				return err
+			}
+			c, err := sdk.CommentStyle(hasStyle, args[0])
+			if err != nil {
+				return &exitError{code: ExitInvalid, err: err}
+			}
+			data, err := os.ReadFile(e.ExpandHome(args[0])) //nolint:gosec // plugin-chosen file
+			if err != nil {
+				return &exitError{code: ExitFailed, err: err}
+			}
+			if !sdk.HasLine(data, args[1], c) {
+				return &exitError{code: ExitFailed, err: fmt.Errorf("has-line: no line %q in %s", args[1], args[0])}
+			}
+			return nil
+		},
+	}
+	hasLine.Flags().StringVar(&hasStyle, "comment", "auto", "comment syntax: with xml, lines inside <!-- --> do not count")
+	blockRemove := &cobra.Command{
+		Use: "block-remove FILE NAME", Args: cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			e, err := env()
+			if err != nil {
+				return err
+			}
+			return e.BlockRemoveAs(args[0], args[1], removeStyle)
+		},
+	}
+	blockRemove.Flags().StringVar(&removeStyle, "comment", "auto", "comment syntax of the markers: auto (by file name), xml or hash")
 	download := &cobra.Command{
 		Use: "download URL DEST", Args: cobra.ExactArgs(2),
 		RunE: func(c *cobra.Command, args []string) error {
@@ -131,16 +166,8 @@ func (a *app) sdkCommand() *cobra.Command {
 			},
 		},
 		block,
-		&cobra.Command{
-			Use: "block-remove FILE NAME", Args: cobra.ExactArgs(2),
-			RunE: func(_ *cobra.Command, args []string) error {
-				e, err := env()
-				if err != nil {
-					return err
-				}
-				return e.BlockRemove(args[0], args[1])
-			},
-		},
+		blockRemove,
+		hasLine,
 		&cobra.Command{
 			Use: "json-set FILE POINTER VALUE", Args: cobra.ExactArgs(3),
 			RunE: func(_ *cobra.Command, args []string) error {

@@ -89,8 +89,9 @@ are removed after `history.keepDays` (default 90) or beyond `history.keepSession
 
 The bundled plugins today are `system` (machine data, environment loader, self-update),
 `base` (base packages through apt, dnf, pacman or zypper), `java` (JDKs from an
-Adoptium-compatible API) and `node` (Node.js from nodejs.org/dist or a mirror, see
-[Node.js](#nodejs)).
+Adoptium-compatible API), `node` (Node.js from nodejs.org/dist or a mirror, see
+[Node.js](#nodejs)), `maven` (Maven and `settings.xml`), `npm` (`.npmrc`), `registry`
+(the credential type for package registries) and `credentials` (expiry warnings).
 
 ```bash
 devbox plugin list                      # ID, version, state (ready, blocked, …) and reasons
