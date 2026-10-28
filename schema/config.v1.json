@@ -152,12 +152,14 @@
         "keepDays": {
           "type": "integer",
           "description": "Days a session is kept.",
-          "minimum": 1
+          "minimum": 1,
+          "default": 90
         },
         "keepSessions": {
           "type": "integer",
           "description": "Maximum number of sessions kept.",
-          "minimum": 10
+          "minimum": 10,
+          "default": 500
         }
       }
     },

@@ -11,11 +11,12 @@ stdout 'version=21 dryRun=false'
 exec devbox run demo.install -p version=17 --dry-run
 stdout 'version=17 dryRun=true env=1'
 
-# --json prints the session events as JSON Lines (event.v1.json envelopes)
+# --json prints the session events as JSON Lines (event.v1.json envelopes); seq is
+# shared with the terminal output, which goes to the session log only
 exec devbox run demo.install --json
-stdout '^\{"seq":0,"time":"[^"]+","event":\{"id":"download","label":"Download","state":"running","type":"step"\}\}$'
-stdout '^\{"seq":1,.*"type":"change"'
-stdout '^\{"seq":2,.*"type":"result"'
+stdout '^\{"seq":[0-9]+,"time":"[^"]+","event":\{"id":"download","label":"Download","state":"running","type":"step"\}\}$'
+stdout '^\{"seq":[0-9]+,.*"type":"change"'
+stdout '^\{"seq":[0-9]+,.*"type":"result"'
 ! stdout 'version=21'
 
 # a setting message stores the plugin's own setting in the user file
