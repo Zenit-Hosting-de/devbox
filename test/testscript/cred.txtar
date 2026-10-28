@@ -76,6 +76,14 @@ exec devbox cred list
 stdout '^mine +token +user +set +- +bad,demo,off$'
 stdout '^team-token +token +profile:example-team +set, expires 2000-01-01 +- +demo$'
 
+# array options take a plain value, several separated by ';', or JSON
+exec devbox cred add plain --type token --consumer 'demo:scopes=@a;@b'
+exec devbox cred add plain1 --type token --consumer 'demo:scopes=@a'
+exec grep -c '"@a"' $DATA/credentials.json
+stdout '^[2-9]'
+! exec devbox cred add plain2 --type token --consumer 'demo:scopes=[@a'
+stderr 'not a JSON array'
+
 # every consumer run is a session of the history, started from the CLI
 exec devbox history --json
 stdout '"action": "demo.apply"'

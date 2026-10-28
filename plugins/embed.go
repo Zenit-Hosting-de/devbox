@@ -6,5 +6,5 @@ import "embed"
 
 // FS holds the bundled plugin directories.
 //
-//go:embed all:base all:credentials all:java all:npm all:registry
+//go:embed all:base all:credentials all:java all:node all:npm all:registry all:system
 var FS embed.FS
