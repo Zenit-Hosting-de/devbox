@@ -39,16 +39,11 @@ check_name() {
   [[ $1 != *--* ]] || fail "instance name $1 contains two hyphens, which XML comments do not allow"
 }
 
-# has_line FILE TEXT: is there a line that equals TEXT (ignoring white space)?
+# has_line FILE TEXT: is there a line that equals TEXT (ignoring white space) outside
+# of XML comments? Maven's stock settings.xml keeps example sections in a comment.
 has_line() {
-  local line
   [ -f "$1" ] || return 1
-  while IFS= read -r line || [ -n "$line" ]; do
-    line=${line#"${line%%[![:space:]]*}"}
-    line=${line%"${line##*[![:space:]]}"}
-    [ "$line" = "$2" ] && return 0
-  done <"$1"
-  return 1
+  sdk has-line "$1" "$2" --comment xml 2>/dev/null
 }
 
 # repo_url: the address of the repository, from the option url or the layout.
@@ -103,7 +98,7 @@ ensure_section() {
   if [[ $content =~ \<$1[[:space:]]*/\> ]]; then
     fail "$SETTINGS has an empty <$1/> element; write it as <$1></$1> first"
   fi
-  printf '  <%s>\n  </%s>\n' "$1" "$1" | sdk block "$SETTINGS" "maven-section:$1" --before "</settings>" --mode 600
+  printf '  <%s>\n  </%s>\n' "$1" "$1" | sdk block "$SETTINGS" "maven-section:$1" --comment xml --before "</settings>" --mode 600
 }
 
 # put_block SECTION NAME: writes the block NAME (body on stdin) into <SECTION>.
@@ -116,7 +111,7 @@ put_block() {
     return 0
   fi
   is_dry_run || ensure_section "$section"
-  printf '%s\n' "$body" | sdk block "$SETTINGS" "$name" --before "</$section>" --mode 600
+  printf '%s\n' "$body" | sdk block "$SETTINGS" "$name" --comment xml --before "</$section>" --mode 600
 }
 
 # secure_file: the file holds a password, so only the owner may read it.
@@ -138,7 +133,7 @@ drop_empty_sections() {
     content=$(<"$SETTINGS")
     re="<!-- >>> devbox:maven-section:$s >>> -->[[:space:]]*<$s>[[:space:]]*</$s>[[:space:]]*<!-- <<< devbox:maven-section:$s <<< -->"
     if [[ $content =~ $re ]]; then
-      sdk block-remove "$SETTINGS" "maven-section:$s"
+      sdk block-remove "$SETTINGS" "maven-section:$s" --comment xml
     fi
   done
 }

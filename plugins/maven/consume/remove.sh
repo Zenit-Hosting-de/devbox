@@ -8,7 +8,7 @@ set -euo pipefail
 name=$(sdk instance)
 check_name "$name"
 for b in "maven:$name" "maven:$name:mirror" "maven:$name:profile" "maven:$name:active"; do
-  sdk block-remove "$SETTINGS" "$b"
+  sdk block-remove "$SETTINGS" "$b" --comment xml
 done
 drop_empty_sections
 sdk emit result "Maven credential $name removed from $SETTINGS"

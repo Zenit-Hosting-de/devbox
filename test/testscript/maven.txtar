@@ -158,6 +158,37 @@ maven count home/.m2/settings.xml settings 1
 ! grep 'devbox' home/.m2/settings.xml
 ! grep 'm4v3n' home/.m2/settings.xml
 
+# the stock settings.xml keeps its example sections in a comment: they are not anchors
+cp stock.xml home/.m2/settings.xml
+exec devbox cred add stock --type registry --field url=$REGISTRY --field username=alice --consumer 'maven:repository=maven-group'
+stdin token.txt
+exec devbox cred set stock --from-stdin
+stdout '✓ maven apply'
+maven xml home/.m2/settings.xml
+maven count home/.m2/settings.xml servers 1
+maven count home/.m2/settings.xml activeProfiles 1
+maven count home/.m2/settings.xml activeProfile 1
+grep '<activeProfile>devbox-stock</activeProfile>' home/.m2/settings.xml
+cp home/.m2/settings.xml first.xml
+exec devbox cred apply stock
+cmp home/.m2/settings.xml first.xml
+exec devbox cred remove stock
+maven xml home/.m2/settings.xml
+cmp home/.m2/settings.xml stock.xml
+
+# a settings file without the extension .xml gets XML comment markers as well
+cp custom.json home/.config/devbox/config.json
+exec devbox cred add corp --type registry --field url=$REGISTRY --field username=alice --consumer 'maven:repository=maven-group'
+stdin token.txt
+exec devbox cred set corp --from-stdin
+stdout '✓ maven apply'
+maven xml home/.m2/settings-corp
+grep '<!-- >>> devbox:maven:corp >>> -->' home/.m2/settings-corp
+! grep '# >>>' home/.m2/settings-corp
+exec devbox cred remove corp
+maven xml home/.m2/settings-corp
+! grep 'devbox' home/.m2/settings-corp
+
 # the secret never shows up in the history
 exec devbox history --json
 ! stdout 'm4v3n'
@@ -185,6 +216,41 @@ stderr 'layout gitlab needs the option url'
 { "id": "java", "version": "1.0.0", "name": "Java stand-in" }
 -- token.txt --
 m4v3n&t0k3n
+-- stock.xml --
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
+  <!-- localRepository
+  <localRepository>/path/to/local/repo/</localRepository>
+  -->
+
+  <!-- servers
+   | This is a list of authentication profiles, keyed by the server-id.
+   |-->
+  <servers>
+    <!-- server
+    <server>
+      <id>deploymentRepo</id>
+    </server>
+    -->
+  </servers>
+
+  <profiles>
+  </profiles>
+
+  <!-- activeProfiles
+   | List of profiles that are active for all builds.
+   |
+  <activeProfiles>
+    <activeProfile>alwaysActiveProfile</activeProfile>
+  </activeProfiles>
+  -->
+</settings>
+-- custom.json --
+{
+  "plugins": { "paths": ["${xdg:data}/devbox/plugins"] },
+  "vault": { "backend": "age" },
+  "settings": { "maven.settingsPath": "${env:HOME}/.m2/settings-corp" }
+}
 -- home/.m2/settings.xml --
 <?xml version="1.0" encoding="UTF-8"?>
 <settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">

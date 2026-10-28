@@ -31,7 +31,7 @@ if [ -n "$mirror_of" ]; then
   printf '    <mirror>\n      <id>%s</id>\n      <mirrorOf>%s</mirrorOf>\n      <url>%s</url>\n    </mirror>\n' \
     "$e_id" "$(xml_escape "$mirror_of")" "$e_url" | put_block mirrors "maven:$name:mirror"
 else
-  sdk block-remove "$SETTINGS" "maven:$name:mirror"
+  sdk block-remove "$SETTINGS" "maven:$name:mirror" --comment xml
 fi
 
 printf '    <profile>\n      <id>devbox-%s</id>\n      <repositories>\n        <repository>\n          <id>%s</id>\n          <url>%s</url>\n          <releases>\n            <enabled>true</enabled>\n          </releases>\n          <snapshots>\n            <enabled>%s</enabled>\n          </snapshots>\n        </repository>\n      </repositories>\n    </profile>\n' \

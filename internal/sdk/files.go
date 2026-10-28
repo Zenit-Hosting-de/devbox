@@ -31,6 +31,70 @@ func CommentFor(path string) Comment {
 	return Comment{Start: "#"}
 }
 
+// CommentStyle picks the comment syntax by name: "xml" for <!-- -->, "hash" for "#"
+// and "" or "auto" by the file name (see CommentFor).
+func CommentStyle(style, path string) (Comment, error) {
+	switch style {
+	case "", "auto":
+		return CommentFor(path), nil
+	case "xml":
+		return Comment{Start: "<!--", End: "-->"}, nil
+	case "hash":
+		return Comment{Start: "#"}, nil
+	}
+	return Comment{}, fmt.Errorf("unknown comment style %q (use auto, xml or hash)", style)
+}
+
+// outsideComments reports for every line whether it starts outside an XML comment.
+// It is only meaningful for the XML comment syntax.
+func outsideComments(lines []string) []bool {
+	out := make([]bool, len(lines))
+	in := false
+	for i, l := range lines {
+		out[i] = !in
+		for rest := l; ; {
+			if in {
+				k := strings.Index(rest, "-->")
+				if k < 0 {
+					break
+				}
+				rest, in = rest[k+3:], false
+			} else {
+				k := strings.Index(rest, "<!--")
+				if k < 0 {
+					break
+				}
+				rest, in = rest[k+4:], true
+			}
+		}
+	}
+	return out
+}
+
+// findLine returns the index of the first line that equals text (ignoring white
+// space), or -1. With the XML comment syntax, lines inside a comment do not count.
+func findLine(lines []string, text string, c Comment) int {
+	var outside []bool
+	if c.End == "-->" {
+		outside = outsideComments(lines)
+	}
+	for i, l := range lines {
+		if outside != nil && !outside[i] {
+			continue
+		}
+		if strings.TrimSpace(l) == text {
+			return i
+		}
+	}
+	return -1
+}
+
+// HasLine reports whether content has a line that equals text (ignoring white
+// space); with the XML comment syntax, lines inside a comment do not count.
+func HasLine(content []byte, text string, c Comment) bool {
+	return findLine(strings.SplitAfter(string(content), "\n"), text, c) >= 0
+}
+
 func (c Comment) line(text string) string {
 	if c.End == "" {
 		return c.Start + " " + text
@@ -53,7 +117,8 @@ func SetBlock(content []byte, name string, body []byte, c Comment) []byte {
 
 // SetBlockBefore is SetBlock with an insertion point: when the block is new and
 // before is not empty, the block is inserted directly before the first line that
-// equals before (ignoring surrounding white space) instead of being appended. The
+// equals before (ignoring surrounding white space; with XML comments, lines inside a
+// comment do not count) instead of being appended. The
 // marker lines are indented one level deeper than that line; an existing block keeps
 // the indentation of its marker. It is an error when before is not in the content.
 func SetBlockBefore(content []byte, name string, body []byte, c Comment, before string) ([]byte, error) {
@@ -64,13 +129,7 @@ func SetBlockBefore(content []byte, name string, body []byte, c Comment, before 
 		indent = leadingSpace(lines[from])
 	}
 	if from < 0 && before != "" {
-		at := -1
-		for i, l := range lines {
-			if strings.TrimSpace(l) == before {
-				at = i
-				break
-			}
-		}
+		at := findLine(lines, before, c)
 		if at < 0 {
 			return nil, fmt.Errorf("no line %q to insert the block %s before", before, name)
 		}
@@ -151,12 +210,21 @@ func (e Env) Block(path, name string, body []byte, mode os.FileMode) error {
 // BlockBefore is Block for a new block that goes before the line "before" (see
 // SetBlockBefore) instead of at the end of the file, e.g. inside an XML section.
 func (e Env) BlockBefore(path, name string, body []byte, mode os.FileMode, before string) error {
+	return e.BlockAs(path, name, body, mode, before, "")
+}
+
+// BlockAs is BlockBefore with an explicit comment style (see CommentStyle).
+func (e Env) BlockAs(path, name string, body []byte, mode os.FileMode, before, style string) error {
+	c, err := CommentStyle(style, path)
+	if err != nil {
+		return err
+	}
 	path = e.ExpandHome(path)
 	old, err := readOptional(path)
 	if err != nil {
 		return err
 	}
-	updated, err := SetBlockBefore(old, name, body, CommentFor(path), before)
+	updated, err := SetBlockBefore(old, name, body, c, before)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
@@ -166,12 +234,21 @@ func (e Env) BlockBefore(path, name string, body []byte, mode os.FileMode, befor
 
 // BlockRemove removes the marked block for name from the file.
 func (e Env) BlockRemove(path, name string) error {
+	return e.BlockRemoveAs(path, name, "")
+}
+
+// BlockRemoveAs is BlockRemove with an explicit comment style (see CommentStyle).
+func (e Env) BlockRemoveAs(path, name, style string) error {
+	c, err := CommentStyle(style, path)
+	if err != nil {
+		return err
+	}
 	path = e.ExpandHome(path)
 	old, err := readOptional(path)
 	if err != nil || old == nil {
 		return err
 	}
-	_, err = e.Write(path, RemoveBlock(old, name, CommentFor(path)), 0o600, "devbox:"+name+" block removed")
+	_, err = e.Write(path, RemoveBlock(old, name, c), 0o600, "devbox:"+name+" block removed")
 	return err
 }
 
