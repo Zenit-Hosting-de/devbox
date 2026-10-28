@@ -23,6 +23,10 @@
       "description": "Version and capabilities of the core."
     },
     {
+      "name": "plugins",
+      "description": "Found plugins and their states."
+    },
+    {
       "name": "checks",
       "description": "Cached check results."
     },
@@ -56,6 +60,61 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Info"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/plugins": {
+      "get": {
+        "tags": ["plugins"],
+        "operationId": "listPlugins",
+        "summary": "Plugins with state and the reasons for it.",
+        "responses": {
+          "200": {
+            "description": "All found plugins, sorted by ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/plugins/{id}": {
+      "get": {
+        "tags": ["plugins"],
+        "operationId": "getPlugin",
+        "summary": "One plugin with state, reasons and manifest.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Plugin ID.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The plugin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDetail"
                 }
               }
             }
@@ -708,6 +767,135 @@
             "items": {
               "$ref": "#/components/schemas/ProblemError"
             }
+          }
+        }
+      },
+      "PluginState": {
+        "description": "State of a plugin; only ready plugins offer actions.",
+        "enum": ["invalid", "blocked", "disabled", "incomplete", "ready"]
+      },
+      "PluginReason": {
+        "description": "Why a plugin is not ready, or a note about it. code is stable and translated by the frontends.",
+        "type": "object",
+        "required": ["code"],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "manifest-invalid",
+              "disabled",
+              "requires-devbox",
+              "requires-os",
+              "requires-arch",
+              "requires-distro",
+              "requires-command",
+              "requires-plugin",
+              "dependency-cycle",
+              "setting-missing",
+              "duplicate-id"
+            ],
+            "description": "Reason code."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Subject of the reason: command, plugin and range, setting key, disabling layer or error location."
+          }
+        }
+      },
+      "PluginStatus": {
+        "description": "A found plugin with its state.",
+        "type": "object",
+        "required": ["id", "state", "reasons", "path"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name from the manifest."
+          },
+          "version": {
+            "type": "string",
+            "description": "Plugin version."
+          },
+          "category": {
+            "type": "string",
+            "description": "Category from the manifest."
+          },
+          "state": {
+            "$ref": "#/components/schemas/PluginState"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PluginReason"
+            }
+          },
+          "path": {
+            "type": "string",
+            "description": "Plugin directory."
+          },
+          "shadowed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Directories of later plugins with the same ID that this one replaces."
+          }
+        }
+      },
+      "PluginList": {
+        "description": "All found plugins, sorted by ID.",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/PluginStatus"
+        }
+      },
+      "PluginDetail": {
+        "description": "A plugin with its manifest (absent when the manifest is invalid).",
+        "type": "object",
+        "required": ["id", "state", "reasons", "path"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name from the manifest."
+          },
+          "version": {
+            "type": "string",
+            "description": "Plugin version."
+          },
+          "category": {
+            "type": "string",
+            "description": "Category from the manifest."
+          },
+          "state": {
+            "$ref": "#/components/schemas/PluginState"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PluginReason"
+            }
+          },
+          "path": {
+            "type": "string",
+            "description": "Plugin directory."
+          },
+          "shadowed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Directories of later plugins with the same ID that this one replaces."
+          },
+          "manifest": {
+            "type": "object",
+            "description": "The plugin manifest (schema/plugin.v1.json)."
           }
         }
       }

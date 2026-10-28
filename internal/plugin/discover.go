@@ -105,20 +105,23 @@ func (m *Manifest) Settings() map[string]map[string]any {
 	return out
 }
 
-// FirstByID keeps the first valid manifest of every ID (search order decides) and
-// returns the shadowed duplicates separately.
-func FirstByID(cands []Candidate) (winners []*Manifest, shadowed []*Manifest) {
+// Winners returns the valid manifests that win their ID: the first candidate of an
+// ID wins even when it is invalid, as in Evaluate.
+func Winners(cands []Candidate) []*Manifest {
 	seen := map[string]bool{}
+	var out []*Manifest
 	for _, c := range cands {
-		if c.Manifest == nil {
+		id := filepath.Base(c.Dir)
+		if c.Manifest != nil {
+			id = c.Manifest.ID
+		}
+		if seen[id] {
 			continue
 		}
-		if seen[c.Manifest.ID] {
-			shadowed = append(shadowed, c.Manifest)
-			continue
+		seen[id] = true
+		if c.Manifest != nil {
+			out = append(out, c.Manifest)
 		}
-		seen[c.Manifest.ID] = true
-		winners = append(winners, c.Manifest)
 	}
-	return winners, shadowed
+	return out
 }
