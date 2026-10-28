@@ -44,8 +44,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      # The binary does not embed the web UI yet; add the Node steps here (npm ci,
-      # npm run build) with the work package that does.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+      # Builds the web UI into internal/api/dist/ui, which the binary embeds.
+      - run: npm ci
+      - run: npm run build
+      - name: Check that the build left the checkout clean
+        run: git status --porcelain && test -z "$(git status --porcelain)"
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           distribution: goreleaser
