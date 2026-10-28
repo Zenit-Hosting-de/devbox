@@ -23,7 +23,8 @@ host_field() { sdk json-get "$DEVBOX_REQUEST" "/host/$1" 2>/dev/null || true; }
 
 # is_release_version VERSION: true for a released version (1.2.3, v1.2.3, 1.2.3-rc.1);
 # false for development builds: 0.0.0-dev, a bare commit id, or the output of
-# `git describe` between tags (1.2.3-4-gabcdef, 1.2.3-dirty).
+# `git describe` between tags (1.2.3-4-gabcdef, 1.2.3-dirty, or as build metadata
+# 1.2.3+4.gabcdef.dirty from make build).
 is_release_version() {
   local v=${1#v}
   [ "$v" != 0.0.0-dev ] || return 1
