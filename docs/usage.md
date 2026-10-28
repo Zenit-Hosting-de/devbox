@@ -7,7 +7,9 @@ development; features that are planned but not built yet are listed at the
 
 ## Build and install
 
-There is no release, install script or distribution package yet. Build from source:
+There is no install script or distribution package yet, and no release has binaries yet
+(the first one is the release after this change, see [Updating DevBox](#updating-devbox)).
+Build from source:
 
 ```bash
 git clone https://github.com/Zenit-Hosting-de/devbox.git
@@ -22,6 +24,45 @@ devbox version
 `make build` builds the npm workspaces and then `bin/devbox` with `CGO_ENABLED=0`, so
 the binary has no runtime dependencies. If only the CLI is needed,
 `CGO_ENABLED=0 go build -o bin/devbox ./cmd/devbox` is enough.
+
+## Updating DevBox
+
+Releases carry one archive per architecture and a checksum file:
+
+```text
+devbox_<version>_linux_amd64.tar.gz
+devbox_<version>_linux_arm64.tar.gz
+checksums.txt
+```
+
+`<version>` has no leading `v` (tag `v0.2.0` gives `devbox_0.2.0_linux_amd64.tar.gz`); the
+binary `devbox` is at the top level of the archive. The `system` plugin updates DevBox
+from them:
+
+```bash
+devbox status                           # system.version: installed version against the newest release
+devbox run system.update --dry-run      # shows which file would be replaced
+devbox run system.update
+```
+
+`system.update` asks the release list (`system.releaseUrl`, GitHub releases of the
+DevBox repository by default), takes the newest release of the channel
+(`system.updateChannel`: `stable`, or `prerelease` to include release candidates) that
+has a binary for this machine, downloads the archive and `checksums.txt`, verifies the
+SHA-256 sum and replaces the binary atomically. The previous binary stays next to it as
+`devbox.previous`; to go back, `mv ~/.local/bin/devbox.previous ~/.local/bin/devbox`.
+
+- A binary in a folder without write access (for example a package install in
+  `/usr/bin`) is not touched: the action ends with exit code 3 and says so. Update such
+  an installation with the package manager.
+- A development build (`0.0.0-dev` or any build that is not a tagged release) is not
+  replaced and not compared with releases. `-p force=true` replaces it anyway.
+- A wrong checksum aborts the update and leaves the binary as it is.
+- To use a mirror in the own network, point `system.releaseUrl` at a list in the same JSON
+  format and with the same asset names.
+
+Releases with binaries start with the first release after the one that introduced the
+`system` plugin; earlier releases have no archives and are ignored by `system.update`.
 
 ## Where files live
 
@@ -44,8 +85,9 @@ are removed after `history.keepDays` (default 90) or beyond `history.keepSession
 
 ## First session
 
-The bundled plugins today are `base` (base packages through apt, dnf, pacman or zypper)
-and `java` (JDKs from an Adoptium-compatible API).
+The bundled plugins today are `system` (machine data, environment loader, self-update),
+`base` (base packages through apt, dnf, pacman or zypper) and `java` (JDKs from an
+Adoptium-compatible API).
 
 ```bash
 devbox plugin list                      # ID, version, state (ready, blocked, …) and reasons
@@ -73,12 +115,21 @@ devbox run java.install -p version=21   # parameters with -p name=value, repeata
 ```
 
 Plugins such as `java` write environment files to `~/.config/devbox/env.d/` (for
-example `JAVA_HOME` and `PATH`). The loader that sources them in every shell arrives with
-the `system` plugin; until then add this once to `~/.bashrc` or `~/.zshrc`:
+example `JAVA_HOME` and `PATH`). Run the environment loader of the `system` plugin once
+so that every new shell sources them:
 
 ```bash
-for f in ~/.config/devbox/env.d/*.sh; do [ -r "$f" ] && . "$f"; done
+devbox run system.envLoader --dry-run   # shows the blocks it would write
+devbox run system.envLoader
 ```
+
+It adds a marked block (`# >>> devbox:system >>>`) to `~/.bashrc` and `~/.zshrc` (setting
+`system.shells`, folder `system.envDir`) and leaves the rest of those files alone. The
+simple `export NAME=VALUE` lines of the environment files are also written to
+`~/.config/environment.d/60-devbox.conf` (mode 0600), which graphical sessions and systemd
+user services read at the next login; turn that off with `system.systemd=false`. Run the
+loader again after a plugin has written a new environment file, so the systemd file picks
+it up.
 
 `devbox run` prints the steps, the planned or applied changes, notices and the result.
 Actions that ask for confirmation (for example `java.remove`) prompt on the terminal;
@@ -173,7 +224,7 @@ helpers are described in [concept.md](concept.md#plugin-protokoll) (German) and 
 
 These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary yet:
 
-- install script, distribution packages, self-update
+- install script, distribution packages
 - web UI, `devbox serve`, `devbox service …`, terminal menu (`devbox` without arguments)
 - `devbox setup`, `devbox group run` (for example `update-all`), `devbox check`,
   `devbox actions`, `devbox status --strict` (exit codes 5 and 6)

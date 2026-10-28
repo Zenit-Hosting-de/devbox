@@ -8,6 +8,7 @@ last in the plugin search order, so a team can replace any of them.
 | Plugin | Work package |
 | --- | --- |
 | `java` | AP-13 (reference plugin) |
+| `system` | AP-17 |
 
 The remaining plugins follow in AP-17 to AP-19, the language packs `lang-de` and
 `lang-en` in AP-28.
