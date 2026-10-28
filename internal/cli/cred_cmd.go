@@ -210,7 +210,7 @@ func (a *app) credCommand() *cobra.Command {
 	add.Flags().StringVar(&addType, "type", "", "credential type, e.g. registry")
 	add.Flags().StringVar(&addLabel, "label", "", "display name")
 	add.Flags().StringArrayVar(&addFields, "field", nil, "field value (name=value)")
-	add.Flags().StringArrayVar(&addConsumers, "consumer", nil, "consumer plugin with options (plugin[:name=value,…])")
+	add.Flags().StringArrayVar(&addConsumers, "consumer", nil, "consumer plugin with options (plugin[:name=value,…]); array options take JSON or plain values separated by ';'")
 
 	var fromStdin bool
 	var expires string

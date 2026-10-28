@@ -1,0 +1,194 @@
+# AP-17: the bundled system plugin. Self-update against a fake release list (the source
+# is redirected by a setting) and the environment loader in a fake HOME. DEVBOX_TEST_VERSION
+# makes the test binary report a released version; without it the binary is a development
+# build.
+
+# DEVBOX_BIN is the first devbox in PATH: each copy below is put first to be the one that updates
+env ORIGPATH=$PATH
+releases start
+releases add 0.1.0
+releases add 0.2.0
+releases add 0.3.0-rc.1 prerelease
+releases add 0.8.0 noassets
+releases add 0.9.0 draft
+
+# the plugin passes devbox plugin test, including the actions applied twice
+exec devbox plugin test --apply --set system.releaseUrl=$RELEASES $REPO/plugins/system
+stdout '^ok +validate +system'
+stdout '^ok +check +system.host +ok'
+stdout '^ok +dry-run +system.envLoader'
+stdout '^ok +apply +system.envLoader'
+stdout '^ok +repeat +system.envLoader +no changes'
+stdout '^ok +repeat +system.update +no changes'
+! stdout '^failed'
+exec devbox plugin info system --json
+stdout '"state": "ready"'
+
+# a copy of the devbox binary in a folder of its own is the one that gets replaced
+mkdir bin orig
+exec sh -c 'cp "$(command -v devbox)" bin/devbox && cp bin/devbox orig/devbox'
+chmod 0755 bin/devbox
+chmod 0755 orig/devbox
+
+# a development build is left alone unless it is forced
+env PATH=$WORK/bin:$ORIGPATH
+exec devbox run system.update --set system.releaseUrl=$RELEASES --json
+stdout 'Development build 0.0.0-dev is not replaced'
+cmp bin/devbox orig/devbox
+! exists bin/devbox.previous
+
+# version check, a development build is not compared
+exec devbox status --set system.releaseUrl=http://127.0.0.1:1/releases
+stdout 'system.version +ok +Development build 0.0.0-dev, not compared with releases'
+stdout 'system.host +ok'
+
+# version check: an older release is reported with the newest stable release with binaries
+# (not the pre-release, the draft or the release without binaries)
+env DEVBOX_TEST_VERSION=0.1.0
+exec devbox status --set system.releaseUrl=$RELEASES
+stdout 'system.version +warn +DevBox 0.1.0, 0.2.0 is available'
+exec devbox status --set system.releaseUrl=$RELEASES --set system.updateChannel=prerelease
+stdout 'system.version +warn +DevBox 0.1.0, 0.3.0-rc.1 is available'
+env DEVBOX_TEST_VERSION=0.2.0
+exec devbox status --set system.releaseUrl=$RELEASES
+stdout 'system.version +ok +DevBox 0.2.0 is up to date'
+
+# dry run: reports the replacement, downloads and changes nothing
+env DEVBOX_TEST_VERSION=0.1.0
+env PATH=$WORK/bin:$ORIGPATH
+exec devbox run system.update --dry-run --set system.releaseUrl=$RELEASES --json
+stdout '"kind":"file","op":"update","summary":"replace 0.1.0 with 0.2.0","target":".*/bin/devbox","type":"change"'
+stdout '"summary":"DevBox would be updated to 0.2.0"'
+cmp bin/devbox orig/devbox
+! exists bin/devbox.previous
+
+# update: checksum verified, binary replaced, the old one kept
+env PATH=$WORK/bin:$ORIGPATH
+exec devbox run system.update --set system.releaseUrl=$RELEASES --json
+stdout '"kind":"file","op":"update","summary":"replaced 0.1.0 with 0.2.0","target":".*/bin/devbox","type":"change"'
+stdout '"summary":"DevBox updated to 0.2.0"'
+exec sh -c './bin/devbox'
+stdout '^devbox 0.2.0$'
+exec sh -c 'ls -A bin'
+! stdout '\.devbox\.'
+cmp bin/devbox.previous orig/devbox
+exec sh -c 'test -x bin/devbox'
+
+# second update from the new version: nothing to do
+mkdir again
+cp orig/devbox again/devbox
+chmod 0755 again/devbox
+env DEVBOX_TEST_VERSION=0.2.0
+env PATH=$WORK/again:$ORIGPATH
+exec devbox run system.update --set system.releaseUrl=$RELEASES --json
+stdout '"summary":"DevBox 0.2.0 is up to date"'
+! stdout '"type":"change"'
+cmp again/devbox orig/devbox
+! exists again/devbox.previous
+
+# pre-release channel
+mkdir pre
+cp orig/devbox pre/devbox
+chmod 0755 pre/devbox
+env PATH=$WORK/pre:$ORIGPATH
+exec devbox run system.update --set system.releaseUrl=$RELEASES --set system.updateChannel=prerelease
+exec sh -c './pre/devbox'
+stdout '^devbox 0.3.0-rc.1$'
+
+# a binary folder that is not writable (package install): blocked, exit code 3, nothing changed
+env DEVBOX_TEST_VERSION=0.1.0
+mkdir ro
+cp orig/devbox ro/devbox
+chmod 0755 ro/devbox
+chmod 0555 ro
+env PATH=$WORK/ro:$ORIGPATH
+! exec devbox run system.update --set system.releaseUrl=$RELEASES --json
+stdout '"level":"error","text":".*ro is not writable.*package manager'
+stderr 'blocked \(exit 3\)'
+cmp ro/devbox orig/devbox
+chmod 0755 ro
+
+# a wrong checksum fails and replaces nothing
+releases add 0.2.1 corrupt
+env DEVBOX_TEST_VERSION=0.2.0
+mkdir bad
+cp orig/devbox bad/devbox
+chmod 0755 bad/devbox
+env PATH=$WORK/bad:$ORIGPATH
+! exec devbox run system.update --set system.releaseUrl=$RELEASES --json
+stdout 'does not match its checksum; the binary was not replaced'
+cmp bad/devbox orig/devbox
+! exists bad/devbox.previous
+exec sh -c 'ls -A bad'
+! stdout '\.devbox\.'
+
+# an unreachable release list is blocked, not a crash
+env PATH=$WORK/bad:$ORIGPATH
+! exec devbox run system.update --set system.releaseUrl=http://127.0.0.1:1/releases --json
+stdout 'Release list not reachable'
+stderr 'blocked \(exit 3\)'
+cmp bad/devbox orig/devbox
+
+# environment loader: the startup file keeps its content, the block is added once
+env PATH=$ORIGPATH
+env DEVBOX_TEST_VERSION=
+exec devbox run system.envLoader --dry-run --json
+stdout '"kind":"file","op":"update","summary":"devbox:system block","target":"~/.bashrc"'
+stdout '"kind":"file","op":"create","summary":"devbox:system block","target":"~/.zshrc"'
+! exists home/.zshrc
+exec devbox run system.envLoader --json
+stdout '"summary":"Environment loader is set up"'
+stdout '"kind":"restart-shell"'
+grep '^alias ll=' home/.bashrc
+grep '^# >>> devbox:system >>>$' home/.bashrc
+grep '^for f in "\$HOME/.config/devbox/env.d"/\*.sh; do$' home/.bashrc
+grep '^for f in "\$HOME/.config/devbox/env.d"/\*.sh\(N\); do$' home/.zshrc
+exists home/.config/devbox/env.d
+
+# systemd: simple export lines become NAME=VALUE, commands are left out, mode 0600
+grep '^JAVA_HOME="/opt/jdk"$' home/.config/environment.d/60-devbox.conf
+grep '^PATH="\$JAVA_HOME/bin:\$PATH"$' home/.config/environment.d/60-devbox.conf
+! grep 'BAD' home/.config/environment.d/60-devbox.conf
+exec stat -c %a home/.config/environment.d/60-devbox.conf
+stdout '^600$'
+
+# the loader works: a new shell sees the variable of an environment file
+exec bash -c '. "$HOME/.bashrc"; echo "java=$JAVA_HOME"'
+stdout '^java=/opt/jdk$'
+
+# idempotent: a second run changes nothing
+exec devbox run system.envLoader --json
+! stdout '"type":"change"'
+! stdout '"type":"notice"'
+grep -count=1 '^# >>> devbox:system >>>$' home/.bashrc
+
+# another environment file is picked up by the next run
+cp extra.sh home/.config/devbox/env.d/extra.sh
+exec devbox run system.envLoader --json
+stdout '"target":"~/.config/environment.d/60-devbox.conf"'
+grep '^EXTRA_HOME="/opt/extra"$' home/.config/environment.d/60-devbox.conf
+
+# only the configured shells and no systemd file when switched off
+env HOME=$WORK/home2
+exec devbox run system.envLoader --set system.shells=["bash"] --set system.systemd=false --json
+exists home2/.bashrc
+! exists home2/.zshrc
+! exists home2/.config/environment.d/60-devbox.conf
+
+# no startup files yet: the missing files are not reported on stderr
+env HOME=$WORK/home3
+mkdir home3
+exec devbox run system.envLoader --json
+! stderr .
+exists home3/.bashrc
+
+-- home/.bashrc --
+alias ll='ls -l'
+-- home/.config/devbox/env.d/java.sh --
+# >>> devbox:java >>>
+export JAVA_HOME="/opt/jdk"
+export PATH="$JAVA_HOME/bin:$PATH"
+export BAD=$(date)
+# <<< devbox:java <<<
+-- extra.sh --
+export EXTRA_HOME="/opt/extra"

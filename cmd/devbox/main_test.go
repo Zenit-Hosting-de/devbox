@@ -34,6 +34,8 @@ func TestScripts(t *testing.T) {
 			"adoptium": cmdAdoptium,
 			"maven":    cmdMaven,
 			"registry": cmdRegistry,
+			"releases": cmdReleases,
+			"nodedist": cmdNodeDist,
 		},
 		Setup: func(e *testscript.Env) error {
 			e.Setenv("HOME", e.WorkDir+"/home")

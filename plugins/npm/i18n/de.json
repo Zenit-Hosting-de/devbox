@@ -1,0 +1,20 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "npm",
+  "plugin.description": "Paket-Registries und ihre Zugangsdaten in die npm-Konfiguration schreiben",
+  "settings.mode.label": "Ablage der Tokens",
+  "settings.mode.help": "file: Das Token steht in der npm-Konfigurationsdatei (Modus 0600). env: Die Datei verweist auf eine Umgebungsvariable, das Token wird aus einer Datei für die Shell-Umgebung exportiert.",
+  "settings.npmrc.label": "npm-Konfigurationsdatei",
+  "settings.defaultRegistry.label": "Standard-Registry",
+  "settings.defaultRegistry.help": "Wird von der Aktion „Standard-Registry setzen“ geschrieben. Zugangsdaten ohne Scopes ersetzen sie.",
+  "settings.alwaysAuth.label": "Zugangsdaten immer senden",
+  "settings.alwaysAuth.help": "Ergänzt always-auth für Registries mit Zugangsdaten, für Werkzeuge, die sie nicht von selbst senden.",
+  "settings.envFile.label": "Datei für die Shell-Umgebung",
+  "settings.envFile.help": "Exportiert die Token-Variablen im Modus env.",
+  "checks.config.label": "Wirksame Registry",
+  "actions.configure.label": "Standard-Registry setzen",
+  "actions.configure.params.registry.label": "Registry",
+  "consumes.registry.options.repository.label": "Repository-Name",
+  "consumes.registry.options.url.label": "Vollständige Adresse",
+  "consumes.registry.options.scopes.label": "Scopes"
+}
