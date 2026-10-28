@@ -430,7 +430,9 @@ func (w *wsConn) resize(m clientMessage) {
 	if !ok {
 		return
 	}
-	l.Resize(m.Cols, m.Rows)
+	if err := l.Resize(m.Cols, m.Rows); err != nil {
+		w.fail(codeConflict, m.Session+" is not running", "")
+	}
 }
 
 // startJanitor drops the buffers of finished sessions that outlived their retention

@@ -154,8 +154,10 @@ type LiveSession struct {
 	resizer  func(cols, rows uint16)
 	// resizePending is set when a size was requested while there was no terminal yet.
 	resizePending bool
-	cols          uint16
-	rows          uint16
+	// terminalGone is set when the terminal was closed; it never gets a size again.
+	terminalGone bool
+	cols         uint16
+	rows         uint16
 }
 
 // ID returns the session ID.
@@ -208,17 +210,34 @@ func (l *LiveSession) SetResizer(f func(cols, rows uint16)) {
 	}
 }
 
+// terminalClosed drops the resizer for good: the terminal of the process is closed.
+func (l *LiveSession) terminalClosed() {
+	l.mu.Lock()
+	l.terminalGone = true
+	l.resizer = nil
+	l.resizePending = false
+	l.mu.Unlock()
+}
+
+// errNotRunning is returned by Resize when the session has no running process.
+var errNotRunning = errors.New("the session is not running")
+
 // Resize remembers the terminal size and applies it when the process has a terminal;
-// otherwise the size is applied as soon as it has one.
-func (l *LiveSession) Resize(cols, rows uint16) {
+// otherwise the size is applied as soon as it has one. It fails once the session has
+// finished or its terminal was closed.
+func (l *LiveSession) Resize(cols, rows uint16) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.final != nil || l.terminalGone {
+		return errNotRunning
+	}
 	l.cols, l.rows = cols, rows
 	if l.resizer == nil {
 		l.resizePending = true
-		return
+		return nil
 	}
 	l.resizer(cols, rows)
+	return nil
 }
 
 // Running reports whether the process of the session runs.

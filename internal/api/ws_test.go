@@ -433,15 +433,63 @@ func TestLiveSessionKeepsASizeUntilTheTerminalExists(t *testing.T) {
 		t.Errorf("the size of the start must not be applied again: %v", applied)
 	}
 	l = newLive(specWith(80, 24), "demo.install", "", "", "", func() {})
-	l.Resize(100, 40) // the process has no terminal yet
-	l.Resize(120, 50)
+	mustResize(t, l, 100, 40) // the process has no terminal yet
+	mustResize(t, l, 120, 50)
 	l.SetResizer(apply)
 	if len(applied) != 1 || applied[0] != [2]uint16{120, 50} {
 		t.Errorf("applied = %v, want the last size once", applied)
 	}
-	l.Resize(90, 30)
+	mustResize(t, l, 90, 30)
 	if len(applied) != 2 || applied[1] != [2]uint16{90, 30} {
 		t.Errorf("applied = %v, want the new size at once", applied)
+	}
+}
+
+func mustResize(t *testing.T, l *LiveSession, cols, rows uint16) {
+	t.Helper()
+	if err := l.Resize(cols, rows); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLiveSessionRefusesASizeAfterTheTerminalClosed(t *testing.T) {
+	l := newLive(specWith(80, 24), "demo.install", "", "", "", func() {})
+	calls := 0
+	l.SetResizer(func(uint16, uint16) { calls++ })
+	mustResize(t, l, 100, 40)
+	l.terminalClosed()
+	if err := l.Resize(90, 30); !errors.Is(err, errNotRunning) {
+		t.Errorf("resize after the terminal closed = %v, want errNotRunning", err)
+	}
+	l.SetResizer(func(uint16, uint16) { calls++ }) // a late resizer must not be fed either
+	if err := l.Resize(90, 30); err == nil || calls != 1 {
+		t.Errorf("err = %v, calls = %d, want the closed terminal to stay closed", err, calls)
+	}
+
+	f := newLive(specWith(80, 24), "demo.install", "", "", "", func() {})
+	f.finish(Session{ID: f.id, State: "success"})
+	if err := f.Resize(90, 30); !errors.Is(err, errNotRunning) {
+		t.Errorf("resize after the end = %v, want errNotRunning", err)
+	}
+}
+
+func TestLiveSessionResizeRacesWithTheClose(t *testing.T) {
+	l := newLive(specWith(80, 24), "demo.install", "", "", "", func() {})
+	l.SetResizer(func(uint16, uint16) {})
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for n := range 200 {
+				_ = l.Resize(uint16(80+n%10), 24)
+			}
+		}()
+	}
+	l.terminalClosed()
+	wg.Wait()
+	if err := l.Resize(80, 24); err == nil {
+		t.Error("a closed terminal took a size")
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/creack/pty"
 
@@ -111,9 +112,11 @@ type Callbacks struct {
 	Queued func()
 	// Started is called when the process runs.
 	Started func()
-	// Terminal is called once for an action, right after its PTY was created and
-	// before Started, with a handle to change the size of the terminal. The handle
-	// is only valid while the action runs; later calls return an error.
+	// Terminal is called for an action right after its PTY was created and before
+	// Started, with a handle to change the size of the terminal. It is called once
+	// more with nil as soon as the PTY is about to be closed, so the receiver can
+	// drop the handle. The handle is only valid while the action runs; later calls
+	// return an error.
 	Terminal func(t Terminal)
 	// Debug receives the stderr of checks.
 	Debug io.Writer
@@ -126,16 +129,61 @@ type Terminal interface {
 	Resize(cols, rows uint16) error
 }
 
-// ptyTerminal resizes the PTY master.
-type ptyTerminal struct{ tty *os.File }
+// ptyTerminal resizes the PTY master. Resizing and closing are serialised so that a
+// resize never reaches a closed descriptor or one whose number was reused.
+type ptyTerminal struct {
+	mu     sync.Mutex
+	tty    *os.File
+	closed bool
+}
 
 // Resize implements Terminal.
-func (t ptyTerminal) Resize(cols, rows uint16) error {
+func (t *ptyTerminal) Resize(cols, rows uint16) error {
 	if cols == 0 || rows == 0 {
 		return errors.New("the terminal size must not be zero")
 	}
-	if err := pty.Setsize(t.tty, &pty.Winsize{Cols: cols, Rows: rows}); err != nil {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return errTerminalClosed
+	}
+	if err := setWinsize(t.tty, &pty.Winsize{Cols: cols, Rows: rows}); err != nil {
 		return fmt.Errorf("resize terminal: %w", err)
+	}
+	return nil
+}
+
+// close closes the PTY master once; later resizes fail.
+func (t *ptyTerminal) close() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return
+	}
+	t.closed = true
+	_ = t.tty.Close()
+}
+
+// errTerminalClosed is returned by Resize after the PTY was closed.
+var errTerminalClosed = errors.New("the terminal is closed")
+
+// setWinsize applies the size through the raw connection of f, which keeps the
+// descriptor open during the call (unlike f.Fd(), it neither races with Close nor
+// switches the file to blocking mode).
+func setWinsize(f *os.File, ws *pty.Winsize) error {
+	sc, err := f.SyscallConn()
+	if err != nil {
+		return err
+	}
+	var errno syscall.Errno
+	if err := sc.Control(func(fd uintptr) {
+		//nolint:gosec // expected unsafe pointer for the ioctl call
+		_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, fd, syscall.TIOCSWINSZ, uintptr(unsafe.Pointer(ws)))
+	}); err != nil {
+		return err
+	}
+	if errno != 0 {
+		return errno
 	}
 	return nil
 }
@@ -403,9 +451,18 @@ func (r *Runner) runAction(ctx context.Context, cmd *exec.Cmd, spec Spec, timeou
 		_ = msgR.Close()
 		return nil, fmt.Errorf("start %s: %w", cmd.Path, err)
 	}
-	defer func() { _ = tty.Close() }()
+	term := &ptyTerminal{tty: tty}
+	// closeTTY drops the handle of the receiver first, then closes the PTY.
+	closeTTY := func() {
+		if cb.Terminal != nil {
+			cb.Terminal(nil)
+		}
+		term.close()
+	}
+	var closeOnce sync.Once
+	defer closeOnce.Do(closeTTY)
 	if cb.Terminal != nil {
-		cb.Terminal(ptyTerminal{tty: tty})
+		cb.Terminal(term)
 	}
 	if cb.Started != nil {
 		cb.Started()
@@ -438,7 +495,7 @@ func (r *Runner) runAction(ctx context.Context, cmd *exec.Cmd, spec Spec, timeou
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		_ = tty.Close()
+		closeOnce.Do(closeTTY)
 		_ = msgR.Close()
 		<-done
 	}

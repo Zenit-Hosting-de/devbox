@@ -156,6 +156,10 @@ func (s *Server) runLive(ctx context.Context, cancel context.CancelFunc, st *cor
 			s.bc.SessionChanged(live.Session())
 		},
 		Terminal: func(t runner.Terminal) {
+			if t == nil { // the terminal is closed: no more resizing
+				live.terminalClosed()
+				return
+			}
 			live.SetResizer(func(cols, rows uint16) {
 				if err := t.Resize(cols, rows); err != nil {
 					s.log.Debug("session", "id", id, "resize", err.Error())

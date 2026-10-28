@@ -320,7 +320,9 @@ func TestLiveInput(t *testing.T) {
 	e.waitLog(id, "hello") // the terminal echoes what it is given
 	var resized [2]uint16
 	live.SetResizer(func(cols, rows uint16) { resized = [2]uint16{cols, rows} })
-	live.Resize(100, 30)
+	if err := live.Resize(100, 30); err != nil {
+		t.Fatal(err)
+	}
 	if resized != [2]uint16{100, 30} {
 		t.Errorf("resizer got %v", resized)
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -386,6 +387,10 @@ for _ in $(seq 1 100); do sleep 0.05; done`)
 		Terminal: func(tm Terminal) {
 			mu.Lock()
 			defer mu.Unlock()
+			if tm == nil { // the PTY is about to be closed
+				order = append(order, "closed")
+				return
+			}
 			term, terminal = tm, terminal+1
 			order = append(order, "terminal")
 		},
@@ -434,6 +439,83 @@ for _ in $(seq 1 100); do sleep 0.05; done`)
 	}
 	if err := tm.Resize(90, 30); err == nil {
 		t.Error("resizing a finished terminal must fail")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if got := strings.Join(order, ","); got != "terminal,started,closed" {
+		t.Errorf("order = %s, want the handle to be dropped once at the end", got)
+	}
+}
+
+// Resizing while the process ends and after the PTY was closed must neither race with
+// the close nor touch a reused descriptor (run with -race).
+func TestTerminalResizeAroundTheEnd(t *testing.T) {
+	f := newFixture(t)
+	f.script("short.sh", `echo ready
+sleep 0.3`)
+	spec := f.spec(KindAction, "short.sh")
+
+	var (
+		mu     sync.Mutex
+		term   Terminal
+		out    bytes.Buffer
+		closed bool
+	)
+	cb := Callbacks{
+		Output: writerFunc(func(p []byte) { mu.Lock(); out.Write(p); mu.Unlock() }),
+		Terminal: func(tm Terminal) {
+			mu.Lock()
+			defer mu.Unlock()
+			if tm == nil {
+				closed = true
+				return
+			}
+			term = tm
+		},
+	}
+	done := make(chan *Result, 1)
+	go func() {
+		res, err := f.runner.Run(context.Background(), spec, cb)
+		if err != nil {
+			t.Error(err)
+		}
+		done <- res
+	}()
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return term != nil })
+	mu.Lock()
+	tm := term
+	mu.Unlock()
+
+	// Hammer Resize from several goroutines until the run is over and the PTY closed.
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for i := range uint16(4) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for n := uint16(0); ; n++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				_ = tm.Resize(60+i+n%20, 20+n%10)
+			}
+		}()
+	}
+	res := <-done
+	close(stop)
+	wg.Wait()
+	if res.State != StateSuccess {
+		t.Errorf("state = %s", res.State)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !closed {
+		t.Error("the receiver was not told that the terminal is gone")
+	}
+	if err := tm.Resize(90, 30); !errors.Is(err, errTerminalClosed) {
+		t.Errorf("resize after the end = %v, want errTerminalClosed", err)
 	}
 }
 
