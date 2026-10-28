@@ -239,6 +239,8 @@ type Violation struct {
 	Message string
 	// Leaf is true for the innermost failures that explain the error.
 	Leaf bool
+	// Properties names the offending keys of an additionalProperties failure.
+	Properties []string
 }
 
 // ValidationError lists every violation found while validating one document.
@@ -297,12 +299,16 @@ func newValidationError(target string, doc any, root *jsonschema.ValidationError
 		}
 		keywords := ve.ErrorKind.KeywordPath()
 		if len(keywords) > 0 {
-			out.Violations = append(out.Violations, Violation{
+			vi := Violation{
 				Pointer: pointer,
 				Keyword: keywords[len(keywords)-1],
 				Message: ve.ErrorKind.LocalizedString(printer),
 				Leaf:    len(ve.Causes) == 0,
-			})
+			}
+			if ap, ok := ve.ErrorKind.(*kind.AdditionalProperties); ok {
+				vi.Properties = append([]string(nil), ap.Properties...)
+			}
+			out.Violations = append(out.Violations, vi)
 		}
 		for _, cause := range ve.Causes {
 			walk(cause, override)

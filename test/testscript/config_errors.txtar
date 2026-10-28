@@ -1,0 +1,29 @@
+# devbox config: strict reading with file, line and pointer; placeholder cycles.
+
+# unknown key in the user file
+! exec devbox config validate
+stderr 'config.json:3: /colour: additionalProperties'
+
+cp good.json home/.config/devbox/config.json
+
+# a cycle is reported with its path
+! exec devbox config get cyc.first
+stderr 'placeholder cycle: cyc.first -> cyc.second -> cyc.first'
+
+-- home/.config/devbox/config.json --
+{
+  "settings": {},
+  "colour": "blue"
+}
+-- good.json --
+{}
+-- home/.local/share/devbox/plugins/cyc/plugin.json --
+{
+  "id": "cyc",
+  "version": "1.0.0",
+  "name": "Cycle",
+  "settings": {
+    "first": { "type": "string", "default": "${cyc.second}", "label": "First" },
+    "second": { "type": "string", "default": "x-${cyc.first}", "label": "Second" }
+  }
+}

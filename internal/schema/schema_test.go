@@ -500,3 +500,40 @@ func TestPointer(t *testing.T) {
 		}
 	}
 }
+
+func TestCompileField(t *testing.T) {
+	f, err := CompileField(map[string]any{
+		"type": "integer", "enum": []any{8, 11, 17, 21, 25}, "default": "${java.defaultVersion}",
+		"label": "Version", "help": "Major version", "advanced": true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok, _ := Decode([]byte("21"))
+	if err := f.Validate("java.version", ok); err != nil {
+		t.Errorf("21: %v", err)
+	}
+	bad, _ := Decode([]byte("22"))
+	var ve *ValidationError
+	if !errors.As(f.Validate("java.version", bad), &ve) || !ve.Has("", "enum") {
+		t.Errorf("22: want enum violation, got %v", ve)
+	}
+	arr, err := CompileField(map[string]any{"type": "array", "label": "Scopes", "items": map[string]any{"type": "string", "pattern": "^@", "label": "Scope"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, _ := Decode([]byte(`["@a", "b"]`))
+	if !errors.As(arr.Validate("npm.scopes", v), &ve) || !ve.Has("/1", "pattern") {
+		t.Errorf("want pattern violation at /1, got %v", ve)
+	}
+}
+
+func TestPropertyOrder(t *testing.T) {
+	got, err := PropertyOrder("config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) < 3 || got[0] != "$schema" || got[2] != "profiles" {
+		t.Errorf("order = %v", got)
+	}
+}

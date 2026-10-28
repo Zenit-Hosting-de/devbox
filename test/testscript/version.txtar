@@ -1,0 +1,11 @@
+# devbox version identifies the vendor (install.sh relies on it).
+
+exec devbox version
+stdout '^0.0.0-dev$'
+
+exec devbox version --json
+stdout '"vendor": "zenit-hosting"'
+stdout '"protocol": 1'
+
+! exec devbox
+stderr 'usage'

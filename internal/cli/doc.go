@@ -1,4 +1,4 @@
-// Package cli implements the devbox command line interface.
-//
-// The implementation arrives in a later work package; see docs/concept.md.
+// Package cli implements the devbox command line interface. Every command works
+// directly with the core packages; AP-09 adds talking to a running service over the
+// Unix socket.
 package cli
