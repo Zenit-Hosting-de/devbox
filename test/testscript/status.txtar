@@ -1,0 +1,48 @@
+# devbox status: every check of every ready plugin, a summary and --json; a check
+# that fails to run counts as error; blocked and disabled plugins are left out (the
+# bundled ones are disabled so the test needs no network).
+
+chmod 755 home/.local/share/devbox/plugins/demo/check.sh
+
+exec devbox status
+stdout '^demo\.fine\s+ok\s+all good$'
+stdout '^demo\.gone\s+missing\s+nothing here$'
+stdout '^demo\.broken\s+error\s+check failed \(exit 2\)'
+! stdout 'needy'
+stdout '^1 ok, 0 warn, 1 error, 1 missing$'
+
+exec devbox status --json
+stdout '"summary": \{\s*"ok": 1,\s*"warn": 0,\s*"error": 1,\s*"missing": 1\s*\}'
+stdout '"id": "demo.fine"'
+stdout '"checkedAt": "[0-9T:Z-]+"'
+stdout '"host": \{'
+
+-- home/.config/devbox/config.json --
+{ "plugins": { "disabled": ["base", "java"] } }
+-- home/.local/share/devbox/plugins/demo/plugin.json --
+{
+  "id": "demo",
+  "version": "1.0.0",
+  "name": "Demo",
+  "checks": {
+    "fine": { "label": "Fine", "run": ["check.sh", "fine"] },
+    "gone": { "label": "Gone", "run": ["check.sh", "gone"] },
+    "broken": { "label": "Broken", "run": ["check.sh", "broken"] }
+  }
+}
+-- home/.local/share/devbox/plugins/demo/check.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1" in
+fine) printf '%s\n' '{"status":"ok","summary":"all good"}' ;;
+gone) printf '%s\n' '{"status":"missing","summary":"nothing here"}' ;;
+broken) exit 2 ;;
+esac
+-- home/.local/share/devbox/plugins/needy/plugin.json --
+{
+  "id": "needy",
+  "version": "1.0.0",
+  "name": "Needy",
+  "requires": { "commands": ["devbox-test-command-that-does-not-exist"] },
+  "checks": { "x": { "label": "X", "run": ["x.sh"] } }
+}

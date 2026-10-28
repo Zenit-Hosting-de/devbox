@@ -1,0 +1,82 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "base",
+  "version": "1.0.0",
+  "name": "Base",
+  "description": "Base packages and system updates through the package manager of the distribution",
+  "category": "system",
+  "icon": "package",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"]
+  },
+  "permissions": {
+    "network": [],
+    "files": { "read": [], "write": [] },
+    "sudo": true,
+    "credentials": []
+  },
+  "settings": {
+    "packages": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": ["git", "curl", "jq", "unzip", "tar", "ca-certificates"],
+      "label": "Base packages",
+      "help": "Packages every machine gets. Names as in the package manager of the distribution."
+    },
+    "extraPackages": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": [],
+      "label": "Extra packages",
+      "help": "Additional packages, e.g. set by a team profile."
+    },
+    "upgradeMode": {
+      "type": "string",
+      "enum": ["safe", "full"],
+      "default": "safe",
+      "label": "System update",
+      "help": "safe keeps installed packages; full may also remove or replace packages (apt full-upgrade, zypper dist-upgrade)."
+    },
+    "manager": {
+      "type": "string",
+      "enum": ["auto", "apt", "dnf", "pacman", "zypper"],
+      "default": "auto",
+      "label": "Package manager",
+      "help": "auto takes the first of apt, dnf, pacman and zypper found in PATH.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "packages": {
+      "label": "Base packages",
+      "run": ["checks/packages.sh"],
+      "timeout": "10s",
+      "cache": "10m",
+      "refreshOn": ["session.finished:base.*"]
+    }
+  },
+  "actions": {
+    "packages": {
+      "label": "Install base packages",
+      "run": ["actions/packages.sh"],
+      "timeout": "30m",
+      "locks": ["package-manager"]
+    },
+    "upgrade": {
+      "label": "Update the system",
+      "run": ["actions/upgrade.sh"],
+      "timeout": "1h",
+      "locks": ["package-manager"]
+    }
+  },
+  "contributes": {
+    "groups": { "update-all": ["base.upgrade"] },
+    "setup": [{ "action": "base.packages" }],
+    "overview": { "check": "base.packages", "primaryAction": "base.packages" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

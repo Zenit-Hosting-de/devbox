@@ -1,0 +1,127 @@
+# The bundled base plugin against a fake apt: dpkg-query reports a package as
+# installed when bin/../pkgs/<name> exists, apt-get logs its arguments to apt.log and
+# creates those files on install, sudo runs its arguments. Nothing real is installed.
+
+chmod 0755 bin/apt-get
+chmod 0755 bin/dpkg-query
+chmod 0755 bin/sudo
+env PATH=$WORK/bin:$PATH
+mkdir pkgs
+exec devbox plugin info base --json
+stdout '"state": "ready"'
+
+# the check reports the missing packages (base and extra, without duplicates)
+exec devbox plugin test --checks-only --set base.manager=apt --set base.packages=["git","jq"] --set base.extraPackages=["jq","unzip"] $REPO/plugins/base
+stdout '^ok +check +base.packages +missing'
+! stdout '^failed'
+
+# dry run: one planned change per missing package, apt-get is not called
+exec devbox run base.packages --dry-run --json
+stdout '"kind":"package","op":"create","summary":"install with apt","target":"git","type":"change"'
+stdout '"kind":"package","op":"create","summary":"install with apt","target":"jq","type":"change"'
+stdout '"kind":"package","op":"create","summary":"install with apt","target":"unzip","type":"change"'
+stdout '"summary":"3 packages would be installed","type":"result"'
+! exists apt.log
+! exists pkgs/git
+
+# apply: update, then one install of the missing packages, jq only once
+exec devbox run base.packages --json
+stdout '"summary":"3 packages installed","type":"result"'
+cmp apt.log install.log
+exists pkgs/git
+exists pkgs/jq
+exists pkgs/unzip
+
+# second run: nothing to do, apt-get is not called again
+exec devbox run base.packages --json
+stdout '"summary":"All base packages are installed","type":"result"'
+! stdout '"type":"change"'
+cmp apt.log install.log
+
+# the check now reports everything installed
+exec devbox plugin test --checks-only --set base.manager=apt --set base.packages=["git","jq"] --set base.extraPackages=["jq","unzip"] $REPO/plugins/base
+stdout '^ok +check +base.packages +ok'
+
+# upgrade: the dry run logs nothing, safe mode runs upgrade, full mode full-upgrade
+rm apt.log
+exec devbox run base.upgrade --dry-run --json
+stdout '"kind":"package","op":"update","summary":"update all packages with apt \(safe\)","target":"system","type":"change"'
+stdout '"summary":"The system would be updated with apt","type":"result"'
+! exists apt.log
+exec devbox run base.upgrade --json
+stdout '"summary":"System updated with apt","type":"result"'
+cmp apt.log upgrade-safe.log
+rm apt.log
+exec devbox run base.upgrade --set base.upgradeMode=full --json
+stdout '"summary":"System updated with apt","type":"result"'
+cmp apt.log upgrade-full.log
+
+# a configured manager that is not in PATH fails before planning anything
+# (dnf stands for it; the fake sudo refuses it even on a host that has dnf)
+rm apt.log
+rm pkgs/git
+! exec devbox run base.packages --set base.manager=dnf --json
+stderr 'blocked \(exit 3\)'
+! stdout '"type":"change"'
+stdout '"level":"error","text":"No supported package manager found'
+! exists apt.log
+
+# auto without any of apt-get, dnf, pacman and zypper in PATH: PATH holds only the
+# tools the plugin needs, linked from the host
+mkdir minbin
+exec sh -c 'for t in devbox bash env id tr sed awk dirname grep; do ln -s "$(command -v $t)" minbin/$t; done'
+env PATH=$WORK/minbin
+! exec devbox run base.packages --set base.manager=auto --json
+stderr 'blocked \(exit 3\)'
+! stdout '"type":"change"'
+stdout '"level":"error","text":"No supported package manager found'
+! exec devbox run base.packages --set base.manager=auto --dry-run --json
+! stdout '"type":"change"'
+exec devbox plugin test --checks-only --set base.manager=auto $REPO/plugins/base
+stdout '^ok +check +base.packages +error'
+! exists apt.log
+
+-- home/.config/devbox/config.json --
+{
+  "settings": {
+    "base.manager": "apt",
+    "base.packages": ["git", "jq"],
+    "base.extraPackages": ["jq", "unzip"]
+  }
+}
+-- install.log --
+update
+install -y git jq unzip
+-- upgrade-safe.log --
+update
+upgrade -y
+-- upgrade-full.log --
+update
+full-upgrade -y
+-- bin/sudo --
+#!/bin/sh
+# runs only the fake apt-get, so a test can never touch the real system
+case "$1:$2" in
+apt-get:* | env:DEBIAN_FRONTEND=*) exec "$@" ;;
+esac
+echo "sudo: $1 not allowed in this test" >&2
+exit 1
+-- bin/dpkg-query --
+#!/bin/sh
+# dpkg-query -W -f=${Status} NAME
+for name; do :; done
+if [ -e "$(dirname "$0")/../pkgs/$name" ]; then
+  printf 'install ok installed'
+  exit 0
+fi
+echo "dpkg-query: no packages found matching $name" >&2
+exit 1
+-- bin/apt-get --
+#!/bin/sh
+dir=$(dirname "$0")/..
+echo "$*" >>"$dir/apt.log"
+if [ "$1" = install ] && [ "$2" = -y ]; then
+  shift 2
+  for name; do : >"$dir/pkgs/$name"; done
+fi
+exit 0
