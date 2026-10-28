@@ -5,7 +5,7 @@
     "title": "DevBox API",
     "version": "1",
     "summary": "The only interface between the DevBox core and its frontends (web UI, CLI, terminal menu).",
-    "description": "Skeleton from AP-02. AP-09 completes every endpoint of docs/concept.md, section \"API\". All responses are JSON with camelCase fields and RFC 3339 UTC times; errors use RFC 9457 problem details with a stable code.",
+    "description": "The contract covers the web UI milestone (AP-09 subset): info, plugins, checks, settings, credentials (read only), sessions, the WebSocket and the embedded schemas. Authentication, profiles, groups, setup and catalog endpoints follow. All responses are JSON with camelCase fields and RFC 3339 UTC times; errors use RFC 9457 problem details with a stable code.",
     "license": {
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
@@ -45,6 +45,10 @@
     {
       "name": "schema",
       "description": "Embedded JSON Schemas."
+    },
+    {
+      "name": "ws",
+      "description": "WebSocket for live data."
     }
   ],
   "paths": {
@@ -89,7 +93,19 @@
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "manifest",
+            "in": "query",
+            "required": false,
+            "description": "Include manifest and resolvedDefaults of every plugin.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ]
       }
     },
     "/plugins/{id}": {
@@ -118,6 +134,53 @@
                 }
               }
             }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/plugins/{id}/messages/{lang}": {
+      "get": {
+        "tags": ["plugins"],
+        "operationId": "getPluginMessages",
+        "summary": "Translations of a plugin for one language.",
+        "description": "Responds 404 not-found when the plugin or its i18n/<lang>.json does not exist.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Plugin ID.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "path",
+            "required": true,
+            "description": "Language, e.g. de or en.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The flat translation map.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Messages"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -171,6 +234,47 @@
           "202": {
             "description": "The checks are running; results arrive over the WebSocket topic \"checks\"."
           },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Checks that are already running are not started again. Unknown IDs give 422 validation with the pointer /ids/<index>."
+      }
+    },
+    "/checks/{id}": {
+      "get": {
+        "tags": ["checks"],
+        "operationId": "getCheck",
+        "summary": "Cached result of one check.",
+        "description": "Responds 404 not-found when there is no cached result.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Check, <plugin>.<name>.",
+            "schema": {
+              "$ref": "#/components/schemas/Ref"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The cached result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
@@ -178,6 +282,26 @@
       }
     },
     "/settings": {
+      "get": {
+        "tags": ["settings"],
+        "operationId": "listSettings",
+        "summary": "All settings with definition, effective value, origin and lock.",
+        "responses": {
+          "200": {
+            "description": "Settings sorted by key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
       "patch": {
         "tags": ["settings"],
         "operationId": "patchSettings",
@@ -201,10 +325,20 @@
           "204": {
             "description": "The values were stored."
           },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        }
+        },
+        "description": "All keys are validated first; nothing is written if any key fails. Errors: 422 validation with errors[].pointer /<key> (the code comes from the validator), 404 not-found for an unknown key, 409 setting-locked."
       }
     },
     "/settings/{key}/explain": {
@@ -234,39 +368,27 @@
               }
             }
           },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         }
       }
     },
-    "/sessions": {
-      "post": {
-        "tags": ["sessions"],
-        "operationId": "createSession",
-        "summary": "Start an action.",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/DevBoxRequest"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionCreate"
-              }
-            }
-          }
-        },
+    "/credentials": {
+      "get": {
+        "tags": ["credentials"],
+        "operationId": "listCredentials",
+        "summary": "Credential instances without secrets.",
         "responses": {
-          "201": {
-            "description": "The session was created.",
+          "200": {
+            "description": "All instances, sorted by name.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Session"
+                  "$ref": "#/components/schemas/CredentialList"
                 }
               }
             }
@@ -316,6 +438,296 @@
                 }
               }
             }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/sessions": {
+      "get": {
+        "tags": ["sessions"],
+        "operationId": "listSessions",
+        "summary": "Sessions, newest first, live sessions included.",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "description": "Only sessions in this state.",
+            "schema": {
+              "$ref": "#/components/schemas/SessionState"
+            }
+          },
+          {
+            "name": "plugin",
+            "in": "query",
+            "required": false,
+            "description": "Only sessions of this plugin.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Maximum number of sessions.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "The next value of the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of sessions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionList"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "tags": ["sessions"],
+        "operationId": "createSession",
+        "summary": "Start an action.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The session was created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Errors: 404 not-found for an unknown plugin or action; 409 plugin-not-ready; 409 conflict when the same action is already queued or running; 422 validation for parameters (pointer /params/<name>); 422 validation with pointer /yes and code confirm when the action has a confirm prompt, dryRun is false and yes is not true."
+      }
+    },
+    "/sessions/{id}": {
+      "get": {
+        "tags": ["sessions"],
+        "operationId": "getSession",
+        "summary": "One session, live or from the history.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session ID.",
+            "schema": {
+              "$ref": "#/components/schemas/SessionId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/sessions/{id}/events": {
+      "get": {
+        "tags": ["sessions"],
+        "operationId": "listSessionEvents",
+        "summary": "Protocol messages of a session; of a live session up to now.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session ID.",
+            "schema": {
+              "$ref": "#/components/schemas/SessionId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The messages.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionEventList"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/sessions/{id}/log": {
+      "get": {
+        "tags": ["sessions"],
+        "operationId": "getSessionLog",
+        "summary": "Raw terminal output of a session, secrets already masked.",
+        "description": "Range requests are not supported yet.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session ID.",
+            "schema": {
+              "$ref": "#/components/schemas/SessionId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The output.",
+            "headers": {
+              "X-DevBox-Next-Seq": {
+                "required": true,
+                "description": "Every output chunk with a sequence number below this value is contained in the body.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/octet-stream"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/sessions/{id}/cancel": {
+      "post": {
+        "tags": ["sessions"],
+        "operationId": "cancelSession",
+        "summary": "Stop a queued or running session.",
+        "description": "Errors: 404 not-found for an unknown session, 409 conflict when it has finished.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Session ID.",
+            "schema": {
+              "$ref": "#/components/schemas/SessionId"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "The session as of the cancel request; it ends as stopped.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/ws": {
+      "get": {
+        "tags": ["sessions", "ws"],
+        "operationId": "openWebSocket",
+        "summary": "WebSocket for live data.",
+        "description": "Upgrades to a WebSocket. Client messages follow WsClientMessage, core messages WsServerMessage. The Origin header is required and must be allowed; otherwise 403 csrf. Clients subscribe to topics (checks, sessions, settings, session:<id>); output and events of a session carry a sequence number (seq) and can be replayed with fromSeq. Both sides send a ping every 30 seconds.",
+        "responses": {
+          "101": {
+            "description": "Switching Protocols"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -431,6 +843,14 @@
           "arch": {
             "enum": ["amd64", "arm64"],
             "description": "CPU architecture."
+          },
+          "codename": {
+            "type": "string",
+            "description": "Distribution codename, e.g. noble."
+          },
+          "desktop": {
+            "type": "string",
+            "description": "Desktop environment in lower case, e.g. gnome."
           }
         }
       },
@@ -473,7 +893,27 @@
             "items": {
               "type": "string"
             },
-            "description": "Optional features of this build."
+            "description": "Optional features of this build: ui = an embedded UI build is present, ws = the WebSocket is available, socket = the Unix socket is listening."
+          },
+          "ui": {
+            "description": "The ui section of the configuration file; the user file wins over the system file.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "language": {
+                "type": "string",
+                "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
+                "description": "Language of the UI."
+              },
+              "scheme": {
+                "enum": ["system", "light", "dark", "contrast"],
+                "description": "Colour scheme."
+              },
+              "accent": {
+                "type": "string",
+                "description": "Accent colour."
+              }
+            }
           }
         }
       },
@@ -497,6 +937,48 @@
             "type": "string",
             "format": "date-time",
             "description": "Time of the check."
+          },
+          "label": {
+            "type": "string",
+            "description": "Label of the check from the manifest, untranslated."
+          },
+          "details": {
+            "type": "array",
+            "description": "Label-value pairs of the check result.",
+            "items": {
+              "type": "object",
+              "required": ["label", "value"],
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "hints": {
+            "type": "array",
+            "description": "Hints of the check result, optionally with a direct action.",
+            "items": {
+              "type": "object",
+              "required": ["text"],
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "action": {
+                  "$ref": "#/components/schemas/Ref"
+                }
+              }
+            }
+          },
+          "data": {
+            "type": "object",
+            "description": "Structured data of the check result."
           }
         }
       },
@@ -537,6 +1019,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CheckSummary"
+            }
+          },
+          "running": {
+            "type": "array",
+            "description": "Checks that are running right now.",
+            "items": {
+              "$ref": "#/components/schemas/Ref"
             }
           }
         }
@@ -637,19 +1126,21 @@
             "type": "integer",
             "minimum": 1,
             "description": "Terminal height."
+          },
+          "yes": {
+            "type": "boolean",
+            "description": "The user confirmed the confirm prompt of the action; also passed to the plugin as Spec.Yes."
           }
         }
       },
       "Session": {
-        "description": "Summary of a session.",
+        "description": "Summary of a session; also a line of the history (devbox history --json) and the payload of the WebSocket message \"session\".",
         "type": "object",
         "required": ["id", "action", "state", "dryRun"],
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^s_[0-9A-HJKMNP-TV-Z]{10,26}$",
-            "description": "Session ID."
+            "$ref": "#/components/schemas/SessionId"
           },
           "action": {
             "$ref": "#/components/schemas/Ref"
@@ -674,6 +1165,53 @@
             "type": "string",
             "format": "date-time",
             "description": "End time."
+          },
+          "plugin": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "group": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "user": {
+            "type": "string",
+            "description": "User who started the session."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SessionOrigin"
+          },
+          "exitCode": {
+            "type": ["integer", "null"],
+            "description": "Exit code of the process; null when it did not exit by itself."
+          },
+          "changes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of reported changes."
+          },
+          "summary": {
+            "type": "string",
+            "description": "One-line result."
+          },
+          "progress": {
+            "type": "object",
+            "description": "Progress of a running session.",
+            "required": ["percent"],
+            "additionalProperties": false,
+            "properties": {
+              "percent": {
+                "type": ["integer", "null"],
+                "minimum": 0,
+                "maximum": 100
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          "nextSeq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Live sessions only: the sequence number the next output chunk or event will take."
           }
         }
       },
@@ -846,10 +1384,10 @@
         }
       },
       "PluginList": {
-        "description": "All found plugins, sorted by ID.",
+        "description": "All found plugins, sorted by ID. manifest and resolvedDefaults appear only with ?manifest=true.",
         "type": "array",
         "items": {
-          "$ref": "#/components/schemas/PluginStatus"
+          "$ref": "#/components/schemas/PluginDetail"
         }
       },
       "PluginDetail": {
@@ -895,9 +1433,584 @@
           },
           "manifest": {
             "type": "object",
-            "description": "The plugin manifest (schema/plugin.v1.json)."
+            "description": "The plugin manifest (schema/plugin.v1.json). Only with ?manifest=true on the list."
+          },
+          "resolvedDefaults": {
+            "type": "object",
+            "description": "Defaults of the action parameters with placeholders resolved, keyed by action name and parameter name. A parameter whose default cannot be resolved is left out. Only with ?manifest=true on the list.",
+            "additionalProperties": {
+              "type": "object"
+            }
           }
         }
+      },
+      "SessionId": {
+        "description": "ID of a session.",
+        "type": "string",
+        "pattern": "^s_[0-9A-HJKMNP-TV-Z]{10,26}$"
+      },
+      "Messages": {
+        "description": "Flat translation map of a plugin (plugins/<id>/i18n/<lang>.json without $schema and $comment).",
+        "type": "object",
+        "propertyNames": {
+          "pattern": "^[a-z][A-Za-z0-9]*(\\.[a-z0-9][A-Za-z0-9-]*)+$"
+        },
+        "additionalProperties": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "SettingItem": {
+        "description": "A setting with its definition, effective value and lock.",
+        "type": "object",
+        "required": ["key", "plugin", "field", "locked"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/SettingKey"
+          },
+          "plugin": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "field": {
+            "type": "object",
+            "description": "The field definition from the manifest (schema/plugin.v1.json#/$defs/field): label, help, default, enum, format, advanced, optionsFrom, secret."
+          },
+          "value": {
+            "description": "Effective value; absent when the setting has neither a value nor a default."
+          },
+          "origin": {
+            "type": "string",
+            "pattern": "^(plugin|system|user|env|call|profile:[a-z][a-z0-9-]{1,31})$",
+            "description": "Layer of the effective value; absent when there is no value."
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "A profile locks the value."
+          },
+          "lockedBy": {
+            "type": "string",
+            "pattern": "^profile:[a-z][a-z0-9-]{1,31}$",
+            "description": "The locking profile; only when locked."
+          }
+        }
+      },
+      "SettingList": {
+        "description": "All settings of the found plugins, sorted by key.",
+        "type": "object",
+        "required": ["settings"],
+        "additionalProperties": false,
+        "properties": {
+          "settings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettingItem"
+            }
+          }
+        }
+      },
+      "CredentialInstance": {
+        "description": "A credential instance with profile and user parts merged; never contains the secret itself. Also the item of devbox cred list --json.",
+        "type": "object",
+        "required": ["name", "type", "origin", "fields", "locked", "consumers", "applied"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "type": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,31}$",
+            "description": "Credential type."
+          },
+          "origin": {
+            "type": "string",
+            "pattern": "^(user|profile:[a-z][a-z0-9-]{1,31})$",
+            "description": "Who created the instance: user or profile:<id>."
+          },
+          "label": {
+            "type": "string",
+            "description": "Display name."
+          },
+          "fields": {
+            "type": "object",
+            "description": "Field values without the secret.",
+            "additionalProperties": {
+              "description": "A string, number or boolean.",
+              "not": {
+                "type": ["object", "array", "null"]
+              }
+            }
+          },
+          "locked": {
+            "type": "array",
+            "description": "Fields a profile locks.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "consumers": {
+            "type": "object",
+            "description": "Consumer options keyed by plugin ID.",
+            "propertyNames": {
+              "$ref": "#/components/schemas/Name"
+            },
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "secret": {
+            "type": "object",
+            "description": "Reference to the secret in the vault.",
+            "required": ["ref"],
+            "additionalProperties": false,
+            "properties": {
+              "ref": {
+                "type": "string",
+                "pattern": "^(keyring|age):[A-Za-z0-9._/-]+$"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "expiresAt": {
+                "type": ["string", "null"],
+                "format": "date-time"
+              }
+            }
+          },
+          "verified": {
+            "type": "object",
+            "description": "Result of the last verification.",
+            "required": ["at", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "status": {
+                "enum": ["ok", "failed"]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "applied": {
+            "type": "object",
+            "description": "When each consumer last applied the instance, keyed by plugin ID.",
+            "propertyNames": {
+              "$ref": "#/components/schemas/Name"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      },
+      "CredentialList": {
+        "description": "All credential instances; also the output of devbox cred list --json.",
+        "type": "object",
+        "required": ["instances"],
+        "additionalProperties": false,
+        "properties": {
+          "instances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CredentialInstance"
+            }
+          }
+        }
+      },
+      "SessionOrigin": {
+        "description": "Where a session was started.",
+        "enum": ["ui", "cli", "tui", "api", "setup", "group", "event"]
+      },
+      "SessionList": {
+        "description": "Sessions, newest first; also the output of devbox history --json.",
+        "type": "object",
+        "required": ["sessions"],
+        "additionalProperties": false,
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Session"
+            }
+          },
+          "next": {
+            "type": "string",
+            "description": "Opaque cursor for the next page; absent on the last page."
+          }
+        }
+      },
+      "SessionEvent": {
+        "description": "One line of sessions/<id>.events.jsonl. The protocol message itself is described in schema/event.v1.json#/$defs/message.",
+        "type": "object",
+        "required": ["seq", "time", "event"],
+        "additionalProperties": false,
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "event": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "SessionEventList": {
+        "description": "All protocol messages of a session in sequence order.",
+        "type": "object",
+        "required": ["events"],
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionEvent"
+            }
+          }
+        }
+      },
+      "WsSubscribe": {
+        "description": "Client to core: subscribe to topics.",
+        "type": "object",
+        "required": ["type", "topics"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "subscribe"
+          },
+          "topics": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^(checks|sessions|settings|session:s_[0-9A-HJKMNP-TV-Z]{10,26})$"
+            },
+            "description": "checks, sessions, settings or session:<id>."
+          },
+          "fromSeq": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Replay from this sequence number; applies to every session:<id> topic of the message."
+          }
+        }
+      },
+      "WsUnsubscribe": {
+        "description": "Client to core: leave topics.",
+        "type": "object",
+        "required": ["type", "topics"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "unsubscribe"
+          },
+          "topics": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^(checks|sessions|settings|session:s_[0-9A-HJKMNP-TV-Z]{10,26})$"
+            },
+            "description": "checks, sessions, settings or session:<id>."
+          }
+        }
+      },
+      "WsInput": {
+        "description": "Client to core: keyboard input for the terminal of a session.",
+        "type": "object",
+        "required": ["type", "session", "data"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "input"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionId"
+          },
+          "data": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "maxLength": 87384,
+            "description": "Input, base64; at most 64 KiB decoded."
+          }
+        }
+      },
+      "WsResize": {
+        "description": "Client to core: new terminal size of a session.",
+        "type": "object",
+        "required": ["type", "session", "cols", "rows"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "resize"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionId"
+          },
+          "cols": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        }
+      },
+      "WsPing": {
+        "description": "Keep-alive; sent by either side.",
+        "type": "object",
+        "required": ["type"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "ping"
+          }
+        }
+      },
+      "WsPong": {
+        "description": "Answer to a ping.",
+        "type": "object",
+        "required": ["type"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "pong"
+          }
+        }
+      },
+      "WsClientMessage": {
+        "description": "Every message a client may send.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/WsSubscribe"
+          },
+          {
+            "$ref": "#/components/schemas/WsUnsubscribe"
+          },
+          {
+            "$ref": "#/components/schemas/WsInput"
+          },
+          {
+            "$ref": "#/components/schemas/WsResize"
+          },
+          {
+            "$ref": "#/components/schemas/WsPing"
+          },
+          {
+            "$ref": "#/components/schemas/WsPong"
+          }
+        ]
+      },
+      "WsOutput": {
+        "description": "Core to client: a chunk of terminal output, secrets masked.",
+        "type": "object",
+        "required": ["type", "session", "seq", "data"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "output"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionId"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data": {
+            "type": "string",
+            "contentEncoding": "base64"
+          }
+        }
+      },
+      "WsEvent": {
+        "description": "Core to client: a protocol message of a session.",
+        "type": "object",
+        "required": ["type", "session", "seq", "time", "event"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "event"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionId"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "event": {
+            "type": "object"
+          }
+        }
+      },
+      "WsSession": {
+        "description": "Core to client: a session was created or changed.",
+        "type": "object",
+        "required": ["type", "session"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "session"
+          },
+          "session": {
+            "$ref": "#/components/schemas/Session"
+          }
+        }
+      },
+      "WsCheck": {
+        "description": "Core to client: a check result changed.",
+        "type": "object",
+        "required": ["type", "id", "result"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "check"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Ref"
+          },
+          "result": {
+            "$ref": "#/components/schemas/CheckSummary"
+          }
+        }
+      },
+      "WsSettings": {
+        "description": "Core to client: settings changed.",
+        "type": "object",
+        "required": ["type", "keys"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "settings"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SettingKey"
+            }
+          }
+        }
+      },
+      "WsGap": {
+        "description": "Core to client: the requested fromSeq is older than the in-memory buffer. Streaming continues at firstSeq; the client reloads GET /sessions/{id}/log.",
+        "type": "object",
+        "required": ["type", "session", "fromSeq", "firstSeq"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "gap"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionId"
+          },
+          "fromSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "firstSeq": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "WsError": {
+        "description": "Core to client: a client message was refused.",
+        "type": "object",
+        "required": ["type", "code"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "error"
+          },
+          "code": {
+            "enum": [
+              "validation",
+              "not-found",
+              "plugin-not-ready",
+              "setting-locked",
+              "permission-denied",
+              "unauthenticated",
+              "csrf",
+              "conflict",
+              "internal"
+            ],
+            "description": "Stable error code."
+          },
+          "detail": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          }
+        }
+      },
+      "WsServerMessage": {
+        "description": "Every message the core may send.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/WsOutput"
+          },
+          {
+            "$ref": "#/components/schemas/WsEvent"
+          },
+          {
+            "$ref": "#/components/schemas/WsSession"
+          },
+          {
+            "$ref": "#/components/schemas/WsCheck"
+          },
+          {
+            "$ref": "#/components/schemas/WsSettings"
+          },
+          {
+            "$ref": "#/components/schemas/WsGap"
+          },
+          {
+            "$ref": "#/components/schemas/WsError"
+          },
+          {
+            "$ref": "#/components/schemas/WsPing"
+          },
+          {
+            "$ref": "#/components/schemas/WsPong"
+          }
+        ]
       }
     }
   }
