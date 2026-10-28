@@ -364,3 +364,87 @@ func TestMasker(t *testing.T) {
 		t.Errorf("masked = %q, want %q", got, want)
 	}
 }
+
+func TestTerminalResize(t *testing.T) {
+	f := newFixture(t)
+	f.script("winch.sh", `trap 'stty size' WINCH
+echo ready
+for _ in $(seq 1 100); do sleep 0.05; done`)
+	spec := f.spec(KindAction, "winch.sh")
+	spec.Cols, spec.Rows = 80, 24
+
+	var (
+		mu       sync.Mutex
+		out      bytes.Buffer
+		term     Terminal
+		started  bool
+		order    []string
+		terminal int
+	)
+	cb := Callbacks{
+		Output: writerFunc(func(p []byte) { mu.Lock(); out.Write(p); mu.Unlock() }),
+		Terminal: func(tm Terminal) {
+			mu.Lock()
+			defer mu.Unlock()
+			term, terminal = tm, terminal+1
+			order = append(order, "terminal")
+		},
+		Started: func() {
+			mu.Lock()
+			defer mu.Unlock()
+			started = true
+			order = append(order, "started")
+		},
+	}
+	seen := func(text string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return strings.Contains(out.String(), text)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan *Result, 1)
+	go func() {
+		res, err := f.runner.Run(ctx, spec, cb)
+		if err != nil {
+			t.Error(err)
+		}
+		done <- res
+	}()
+	waitFor(t, func() bool { return seen("ready") })
+
+	mu.Lock()
+	tm := term
+	mu.Unlock()
+	if tm == nil || !started || terminal != 1 || strings.Join(order, ",") != "terminal,started" {
+		t.Fatalf("terminal %v, started %v, calls %d, order %v", tm, started, terminal, order)
+	}
+	if err := tm.Resize(0, 10); err == nil {
+		t.Error("a zero size was accepted")
+	}
+	if err := tm.Resize(100, 40); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return seen("40 100") })
+
+	cancel()
+	res := <-done
+	if res.State != StateStopped {
+		t.Errorf("state = %s", res.State)
+	}
+	if err := tm.Resize(90, 30); err == nil {
+		t.Error("resizing a finished terminal must fail")
+	}
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("condition not met in time")
+}

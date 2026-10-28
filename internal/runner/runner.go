@@ -111,8 +111,33 @@ type Callbacks struct {
 	Queued func()
 	// Started is called when the process runs.
 	Started func()
+	// Terminal is called once for an action, right after its PTY was created and
+	// before Started, with a handle to change the size of the terminal. The handle
+	// is only valid while the action runs; later calls return an error.
+	Terminal func(t Terminal)
 	// Debug receives the stderr of checks.
 	Debug io.Writer
+}
+
+// Terminal is the handle of the PTY of a running action. It does not expose the
+// terminal device itself.
+type Terminal interface {
+	// Resize sets the size of the terminal; the process gets SIGWINCH.
+	Resize(cols, rows uint16) error
+}
+
+// ptyTerminal resizes the PTY master.
+type ptyTerminal struct{ tty *os.File }
+
+// Resize implements Terminal.
+func (t ptyTerminal) Resize(cols, rows uint16) error {
+	if cols == 0 || rows == 0 {
+		return errors.New("the terminal size must not be zero")
+	}
+	if err := pty.Setsize(t.tty, &pty.Winsize{Cols: cols, Rows: rows}); err != nil {
+		return fmt.Errorf("resize terminal: %w", err)
+	}
+	return nil
 }
 
 // Result is the outcome of a run.
@@ -379,6 +404,9 @@ func (r *Runner) runAction(ctx context.Context, cmd *exec.Cmd, spec Spec, timeou
 		return nil, fmt.Errorf("start %s: %w", cmd.Path, err)
 	}
 	defer func() { _ = tty.Close() }()
+	if cb.Terminal != nil {
+		cb.Terminal(ptyTerminal{tty: tty})
+	}
 	if cb.Started != nil {
 		cb.Started()
 	}

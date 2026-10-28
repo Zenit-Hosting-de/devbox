@@ -152,8 +152,10 @@ type LiveSession struct {
 	changes  int
 	final    *Session
 	resizer  func(cols, rows uint16)
-	cols     uint16
-	rows     uint16
+	// resizePending is set when a size was requested while there was no terminal yet.
+	resizePending bool
+	cols          uint16
+	rows          uint16
 }
 
 // ID returns the session ID.
@@ -195,24 +197,35 @@ func (l *LiveSession) snapshot() (nextSeq int, logBytes int64) {
 func (l *LiveSession) WriteInput(p []byte) error { return l.input.write(p) }
 
 // SetResizer sets the function that applies a new terminal size to the running
-// process. The runner support arrives with the WebSocket work package.
+// process. A size requested before the process had a terminal is applied now.
 func (l *LiveSession) SetResizer(f func(cols, rows uint16)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.resizer = f
-	if f != nil && l.cols > 0 && l.rows > 0 {
+	if f != nil && l.resizePending {
+		l.resizePending = false
 		f(l.cols, l.rows)
 	}
 }
 
-// Resize remembers the terminal size and applies it when a resizer is set.
+// Resize remembers the terminal size and applies it when the process has a terminal;
+// otherwise the size is applied as soon as it has one.
 func (l *LiveSession) Resize(cols, rows uint16) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.cols, l.rows = cols, rows
-	if l.resizer != nil {
-		l.resizer(cols, rows)
+	if l.resizer == nil {
+		l.resizePending = true
+		return
 	}
+	l.resizer(cols, rows)
+}
+
+// Running reports whether the process of the session runs.
+func (l *LiveSession) Running() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.final == nil && l.state == runner.StateRunning
 }
 
 // Cancel stops the session.

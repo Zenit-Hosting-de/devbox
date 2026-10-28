@@ -29,7 +29,6 @@ const (
 // pending lists operations the tests do not exercise yet, with the work package that
 // does.
 var pending = map[string]string{
-	"GET /ws":                        "AP-10",
 	"PUT /credentials/{name}/secret": "later",
 }
 
