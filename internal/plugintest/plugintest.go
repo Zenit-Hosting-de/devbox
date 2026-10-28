@@ -161,6 +161,13 @@ func newSandbox(opts Options, m *plugin.Manifest, home string, rep *Report) (*sa
 		StateDir:   filepath.Join(dirs.State, "devbox"),
 		CacheDir:   filepath.Join(dirs.Cache, "devbox"),
 	}
+	// The runner creates its directories on the first run; create them up front so a
+	// plugin without checks does not see them as changes of its first dry run.
+	for _, d := range []string{env.StateDir, env.CacheDir, env.RuntimeDir} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			return nil, err
+		}
+	}
 	return &sandbox{
 		opts: opts, manifest: m, settings: res.Plugin(m.ID), result: res,
 		runner: runner.New(env, opts.Validator), home: home, ctx: ctx, report: rep,

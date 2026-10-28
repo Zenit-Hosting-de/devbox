@@ -1,0 +1,72 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "registry",
+  "version": "1.0.0",
+  "name": "Package registry",
+  "description": "Credential type for package registries with verification against the registry",
+  "category": "credentials",
+  "icon": "key",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["curl"]
+  },
+  "permissions": {
+    "network": [],
+    "files": { "read": [], "write": [] },
+    "sudo": false,
+    "credentials": ["registry"]
+  },
+  "settings": {
+    "verifyPaths": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {
+        "nexus": "/service/rest/v1/status/check",
+        "artifactory": "/artifactory/api/system/ping",
+        "gitea": "/api/v1/user",
+        "gitlab": "/api/v4/user",
+        "custom": ""
+      },
+      "label": "Verification path per layout",
+      "help": "Path below the registry address that the verification requests, per layout. Empty: only check that the registry answers.",
+      "advanced": true
+    },
+    "timeout": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300,
+      "default": 20,
+      "label": "Time limit of the verification in seconds",
+      "advanced": true
+    }
+  },
+  "credentialTypes": {
+    "registry": {
+      "label": "Package registry",
+      "fields": {
+        "url": { "type": "string", "format": "uri", "label": "Address" },
+        "layout": {
+          "type": "string",
+          "enum": ["nexus", "artifactory", "gitea", "gitlab", "custom"],
+          "default": "nexus",
+          "label": "Kind of registry"
+        },
+        "username": { "type": "string", "label": "User name" }
+      },
+      "secret": { "label": "Token or password", "expires": "optional" },
+      "verify": "registry.verify"
+    }
+  },
+  "actions": {
+    "verify": {
+      "label": "Verify credential",
+      "run": ["actions/verify.sh"],
+      "timeout": "6m"
+    }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

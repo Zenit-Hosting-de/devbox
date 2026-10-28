@@ -1,0 +1,245 @@
+# AP-16: devbox cred with the age vault (no keyring in tests). A profile prepares an
+# instance with a locked field; consumers get the credential (with the secret) only
+# through the request file; a failing consumer does not stop the others; remove runs
+# every consumer's remove; the secret never shows up in output, history or events.
+
+chmod 755 home/.local/share/devbox/plugins/demo/consume.sh
+chmod 755 home/.local/share/devbox/plugins/bad/consume.sh
+chmod 755 home/.local/share/devbox/plugins/off/consume.sh
+env DATA=$HOME/.local/share/devbox
+env STATE=$HOME/.local/state/devbox
+
+# the prepared instance is listed without a secret
+exec devbox cred list
+stdout '^NAME +TYPE +ORIGIN +SECRET +VERIFIED +CONSUMERS$'
+stdout '^team-token +token +profile:example-team +missing +- +demo$'
+exec devbox cred list --json
+stdout '"name": "team-token"'
+stdout '"origin": "profile:example-team"'
+stdout '"locked": \[\n *"url"\n *\]'
+! exists $DATA/credentials.json
+
+# locked fields stay, unknown fields, types and consumers are refused
+! exec devbox cred add team-token --field url=https://other.example.com
+stderr 'setting-locked: team-token.url: locked by profile:example-team'
+! exec devbox cred add team-token --field nope=1
+stderr 'has no such field'
+! exec devbox cred add other --type nope
+stderr 'no plugin defines the credential type "nope"'
+! exec devbox cred add other --type token --consumer nobody
+stderr 'no such plugin'
+! exec devbox cred add other --type token --consumer demo:color=red
+stderr 'unknown option "color=red"'
+! exec devbox cred set team-token
+stderr 'no terminal for hidden input'
+
+# the user adds a field to the prepared instance, then sets the secret
+exec devbox cred add team-token --field username=alice
+stdout 'team-token \(token\): saved'
+stdin token.txt
+exec devbox cred set team-token --from-stdin --expires 2000-01-01
+stdout 'team-token: secret saved'
+stdout 'the type token defines no verification'
+stdout '✓ demo apply'
+stdout 'secret is ••••'
+! stdout 's3cr3t'
+
+# the consumer got fields with defaults, options with defaults and the secret
+grep '^instance=team-token type=token$' home/.demorc
+grep '^fields=\{"flavor":"plain","url":"https://repo.example.com","username":"alice"\}$' home/.demorc
+grep '^options=\{"mode":"file","repository":"team"\}$' home/.demorc
+grep '^sha=fb07916a0e7daf7f3f4823b7773f85a839a8dd46fbf3858b8f53d3fa463c8ef3$' home/.demorc
+
+# credentials.json: metadata only, mode 0600; the vault files are 0600 too
+grep '"origin": "profile:example-team"' $DATA/credentials.json
+grep '"username": "alice"' $DATA/credentials.json
+! grep '"url"' $DATA/credentials.json
+grep '"ref": "age:team-token"' $DATA/credentials.json
+grep '"expiresAt": "2000-01-01T00:00:00Z"' $DATA/credentials.json
+grep '"demo": "20[0-9-]+T[0-9:]+Z"' $DATA/credentials.json
+! grep 's3cr3t' $DATA/credentials.json
+exec stat -c %a $DATA/credentials.json $DATA/vault.age $DATA/vault.key home/.demorc
+stdout '^600\n600\n600\n600\n$'
+
+# a user instance with two consumers: bad fails, demo runs anyway, exit code 1
+exec devbox cred add mine --type token --label Mine --field url=https://mine.example.com --consumer bad --consumer off --consumer 'demo:repository=r1,scopes=["@a","@b"]'
+stdin token2.txt
+! exec devbox cred set mine --from-stdin
+stderr '✗ bad apply: failed \(exit 1\)'
+stderr 'apply mine failed for bad: failed \(exit 1\)'
+stdout '✓ demo apply'
+stdout '– off apply: skipped, the plugin is disabled'
+grep '^options=\{"mode":"file","repository":"r1","scopes":\["@a","@b"\]\}$' home/.demorc
+grep '^sha=113bc81e93e365a9d2a9cfee6e7c5eadbb8486d80f2b5d3881c0795f86284372$' home/.demorc
+! grep '"bad": "20' $DATA/credentials.json
+exec devbox cred list
+stdout '^mine +token +user +set +- +bad,demo,off$'
+stdout '^team-token +token +profile:example-team +set, expires 2000-01-01 +- +demo$'
+
+# array options take a plain value, several separated by ';', or JSON
+exec devbox cred add plain --type token --consumer 'demo:scopes=@a;@b'
+exec devbox cred add plain1 --type token --consumer 'demo:scopes=@a'
+exec grep -c '"@a"' $DATA/credentials.json
+stdout '^[2-9]'
+! exec devbox cred add plain2 --type token --consumer 'demo:scopes=[@a'
+stderr 'not a JSON array'
+
+# every consumer run is a session of the history, started from the CLI
+exec devbox history --json
+stdout '"action": "demo.apply"'
+stdout '"action": "bad.apply"'
+stdout '"title": "Apply credential mine"'
+stdout '"origin": "cli"'
+stdout '"state": "failed"'
+
+# the secrets never reach history, session logs or events; the output is masked
+! exec grep -r 's3cr3t' $STATE
+exec grep -rl '••••' $STATE/sessions
+
+# a dry run changes nothing (and still reports the failing consumer)
+cp home/.demorc demorc.before
+cp $DATA/credentials.json credentials.before
+! exec devbox cred apply mine --dry-run
+stdout '✓ demo apply'
+cmp home/.demorc demorc.before
+cmp $DATA/credentials.json credentials.before
+
+# the expiry check reports the expired secret
+exec devbox status
+stdout '^credentials\.expiry +error +team-token expired on 2000-01-01$'
+
+# removing the prepared instance: consumers remove, secret gone, instance stays
+exec devbox cred remove team-token
+stdout '✓ demo remove'
+stdout 'team-token: secret removed; the instance stays, the profile example-team prepares it'
+! grep 'instance=team-token' home/.demorc
+grep '"username": "alice"' $DATA/credentials.json
+! grep 'age:team-token' $DATA/credentials.json
+exec devbox cred list
+stdout '^team-token +token +profile:example-team +missing +- +demo$'
+! exec devbox cred apply team-token
+stderr 'team-token: no secret; set one with devbox cred set team-token'
+
+# a failing remove keeps secret and instance unless --force
+exec mkdir home/bad-remove-fails
+! exec devbox cred remove mine
+stderr 'secret and instance kept'
+exec devbox cred list
+stdout '^mine +token +user +set'
+! exec devbox cred remove mine --force
+stderr 'remove mine failed for bad'
+stdout 'mine: removed'
+! grep 'mine' $DATA/credentials.json
+! grep 'instance=mine' home/.demorc
+exec devbox cred list
+! stdout '^mine'
+! exec devbox cred verify mine
+stderr 'not-found: mine'
+
+! exec grep -r 's3cr3t' $STATE $DATA/credentials.json
+
+-- token.txt --
+s3cr3t-token
+-- token2.txt --
+second-s3cr3t
+-- home/.config/devbox/config.json --
+{
+  "profiles": [{ "source": "file://${env:HOME}/profile.json" }],
+  "plugins": { "disabled": ["base", "java", "off"] },
+  "vault": { "backend": "age" }
+}
+-- home/profile.json --
+{
+  "id": "example-team",
+  "name": "Example team",
+  "version": "1.0.0",
+  "credentials": {
+    "team-token": {
+      "type": "token",
+      "label": "Team token",
+      "fields": { "url": "https://repo.example.com" },
+      "locked": ["url"],
+      "consumers": { "demo": { "repository": "team" } }
+    }
+  }
+}
+-- home/.local/share/devbox/plugins/demo/plugin.json --
+{
+  "id": "demo",
+  "version": "1.0.0",
+  "name": "Demo consumer",
+  "permissions": { "credentials": ["token"] },
+  "credentialTypes": {
+    "token": {
+      "label": "Token",
+      "fields": {
+        "url": { "type": "string", "format": "uri", "label": "Address" },
+        "username": { "type": "string", "label": "User name" },
+        "flavor": { "type": "string", "default": "plain", "label": "Flavor" }
+      },
+      "secret": { "label": "Token", "expires": "optional" }
+    }
+  },
+  "consumes": {
+    "token": {
+      "apply": ["consume.sh", "apply"],
+      "remove": ["consume.sh", "remove"],
+      "options": {
+        "repository": { "type": "string", "label": "Repository" },
+        "scopes": { "type": "array", "items": { "type": "string" }, "label": "Scopes" },
+        "mode": { "type": "string", "default": "file", "label": "Mode" }
+      }
+    }
+  }
+}
+-- home/.local/share/devbox/plugins/demo/consume.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+sdk() { "$DEVBOX_BIN" sdk "$@"; }
+name=$(sdk instance)
+case "$1" in
+apply)
+  echo "secret is $(sdk secret)"
+  {
+    printf 'instance=%s type=%s\n' "$name" "$(sdk json-get "$DEVBOX_REQUEST" /credential/type)"
+    printf 'fields=%s\n' "$(sdk json-get "$DEVBOX_REQUEST" /credential/fields)"
+    printf 'options=%s\n' "$(sdk json-get "$DEVBOX_REQUEST" /credential/options)"
+    printf 'sha=%s\n' "$(sdk secret | sha256sum | cut -d' ' -f1)"
+  } | sdk block ~/.demorc "demo-$name" --mode 600
+  sdk emit result "applied $name"
+  ;;
+remove)
+  sdk block-remove ~/.demorc "demo-$name"
+  sdk emit result "removed $name"
+  ;;
+esac
+-- home/.local/share/devbox/plugins/bad/plugin.json --
+{
+  "id": "bad",
+  "version": "1.0.0",
+  "name": "Failing consumer",
+  "permissions": { "credentials": ["token"] },
+  "consumes": {
+    "token": { "apply": ["consume.sh", "apply"], "remove": ["consume.sh", "remove"] }
+  }
+}
+-- home/.local/share/devbox/plugins/bad/consume.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1" = apply ] || [ -d "$HOME/bad-remove-fails" ]; then
+  echo "boom" >&2
+  exit 1
+fi
+-- home/.local/share/devbox/plugins/off/plugin.json --
+{
+  "id": "off",
+  "version": "1.0.0",
+  "name": "Disabled consumer",
+  "permissions": { "credentials": ["token"] },
+  "consumes": {
+    "token": { "apply": ["consume.sh"], "remove": ["consume.sh"] }
+  }
+}
+-- home/.local/share/devbox/plugins/off/consume.sh --
+#!/usr/bin/env bash
+exit 1

@@ -90,6 +90,33 @@ func (e Env) Secret() (string, error) {
 	return s, nil
 }
 
+// Credential returns a value of the credential in the request (consumers and the
+// verify action of a credential type): part is "instance" or "type" (name unused),
+// "fields" for a field or "options" for a consumer option. The secret is read with
+// Secret only.
+func (e Env) Credential(part, name string) (any, error) {
+	req, err := e.Request()
+	if err != nil {
+		return nil, err
+	}
+	cred, ok := req["credential"].(map[string]any)
+	if !ok {
+		return nil, errors.New("no credential in the request")
+	}
+	switch part {
+	case "instance", "type":
+		return cred[part], nil
+	case "fields", "options":
+		values, _ := cred[part].(map[string]any)
+		v, ok := values[name]
+		if !ok {
+			return nil, fmt.Errorf("credential %v: no %s %q", cred["instance"], strings.TrimSuffix(part, "s"), name)
+		}
+		return v, nil
+	}
+	return nil, fmt.Errorf("unknown credential part %q", part)
+}
+
 // Format prints a value for shell use: strings raw, everything else as JSON.
 func Format(v any) string {
 	if s, ok := v.(string); ok {

@@ -40,6 +40,24 @@ func (a *app) sdkCommand() *cobra.Command {
 			return err
 		}
 	}
+	credential := func(part string) func(*cobra.Command, []string) error {
+		return func(_ *cobra.Command, args []string) error {
+			e, err := env()
+			if err != nil {
+				return err
+			}
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			v, err := e.Credential(part, name)
+			if err != nil {
+				return &exitError{code: ExitInvalid, err: err}
+			}
+			_, err = fmt.Fprintln(a.io.Stdout, sdk.Format(v))
+			return err
+		}
+	}
 	var mode string
 	var sha string
 	block := &cobra.Command{
@@ -92,6 +110,9 @@ func (a *app) sdkCommand() *cobra.Command {
 				return err
 			},
 		},
+		&cobra.Command{Use: "instance", Args: cobra.NoArgs, RunE: credential("instance")},
+		&cobra.Command{Use: "field NAME", Args: cobra.ExactArgs(1), RunE: credential("fields")},
+		&cobra.Command{Use: "option NAME", Args: cobra.ExactArgs(1), RunE: credential("options")},
 		&cobra.Command{
 			Use: "emit TYPE ARGS…", Args: cobra.MinimumNArgs(1), DisableFlagParsing: true,
 			RunE: func(_ *cobra.Command, args []string) error {
@@ -168,6 +189,34 @@ func (a *app) sdkCommand() *cobra.Command {
 				}
 				for _, v := range values {
 					if _, err := fmt.Fprintln(a.io.Stdout, sdk.Format(v)); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		},
+		&cobra.Command{
+			Use: "json-keys FILE|- POINTER", Args: cobra.ExactArgs(2),
+			RunE: func(_ *cobra.Command, args []string) error {
+				var data []byte
+				var err error
+				if args[0] == "-" {
+					data, err = io.ReadAll(a.io.Stdin)
+				} else {
+					data, err = os.ReadFile(args[0]) //nolint:gosec // plugin-chosen file
+				}
+				if err != nil {
+					return err
+				}
+				keys, found, err := sdk.JSONKeys(data, args[1])
+				if err != nil {
+					return &exitError{code: ExitInvalid, err: err}
+				}
+				if !found {
+					return &exitError{code: ExitFailed, err: fmt.Errorf("json-keys: nothing at %s", args[1])}
+				}
+				for _, k := range keys {
+					if _, err := fmt.Fprintln(a.io.Stdout, k); err != nil {
 						return err
 					}
 				}
