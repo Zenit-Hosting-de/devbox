@@ -63,7 +63,10 @@ fetch_releases() { sdk fetch "$(sdk setting releaseUrl)" >"$1"; }
 
 # release_has_asset FILE INDEX NAME: whether release INDEX lists an asset NAME.
 release_has_asset() {
-  sdk json-get "$1" "/$2/assets/*/name" 2>/dev/null | grep -qxF -- "$3"
+  local names
+  # capture first: grep -q would close the pipe early and make a pipefail pipeline fail with SIGPIPE
+  names=$(sdk json-get "$1" "/$2/assets/*/name" 2>/dev/null || true)
+  grep -xF -- "$3" <<<"$names" >/dev/null
 }
 
 # release_asset_url FILE INDEX NAME: the download address of an asset of a release.
