@@ -1,0 +1,134 @@
+# AP-17: the node plugin passes devbox plugin test against a fake distribution server
+# (the source is redirected by a setting): checks, dry runs without changes, and every
+# action applied twice with no change on the second run.
+
+nodedist start
+nodedist release 22.11.0 Jod
+nodedist release 22.10.0 Jod
+nodedist release 23.1.0
+nodedist release 20.18.0 Iron
+
+exec devbox plugin test --apply --set node.distUrl=$NODEDIST $REPO/plugins/node
+stdout '^ok +validate +node'
+stdout '^ok +check +node.installed +missing'
+stdout '^ok +check +node.latest +ok'
+stdout '^ok +dry-run +node.install +3 planned changes'
+stdout '^ok +apply +node.install +[1-9][0-9]* changes'
+stdout '^ok +repeat +node.install +no changes'
+stdout '^ok +repeat +node.update +no changes'
+stdout '^ok +repeat +node.use +no changes'
+stdout '^ok +repeat +node.globals +no changes'
+stdout '^skipped +apply +node.remove +danger'
+stdout '^ok +dry-run +node.remove'
+! stdout '^failed'
+
+# the same with global packages configured: they are part of the planned changes and
+# installed once
+exec devbox plugin test --apply --set node.distUrl=$NODEDIST --set 'node.globalPackages=["typescript@5","@example/tool"]' $REPO/plugins/node
+stdout '^ok +dry-run +node.install +5 planned changes'
+stdout '^ok +repeat +node.install +no changes'
+stdout '^ok +repeat +node.globals +no changes'
+! stdout '^failed'
+
+# the bundled node plugin (unpacked from the binary) used for real
+exec devbox plugin info node --json
+stdout '"state": "ready"'
+stdout '"path": ".*/devbox/builtin/.*/node"'
+
+# the channel (lts) decides without a version: the newest LTS release
+exec devbox run node.install --set node.distUrl=$NODEDIST --json
+stdout '"kind":"file","op":"create","summary":"Node.js 22.11.0","target":".*/node/22.11.0","type":"change"'
+stdout '"kind":"link","op":"update","summary":"points to 22.11.0"'
+stdout '"summary":"Node.js 22.11.0","type":"result"'
+exists home/.local/share/node/22.11.0/bin/node
+exec home/.local/share/node/current/bin/node
+stdout 'v22.11.0'
+grep 'export PATH=".*/home/.local/share/node/current/bin:\$PATH"' home/.config/devbox/env.d/node.sh
+grep '# >>> devbox:node >>>' home/.config/devbox/env.d/node.sh
+
+# a second install changes nothing
+exec devbox run node.install --set node.distUrl=$NODEDIST --json
+! stdout '"type":"change"'
+
+# a major version, the current channel and an exact version
+exec devbox run node.install -p version=20 -p makeDefault=false --set node.distUrl=$NODEDIST
+exists home/.local/share/node/20.18.0/bin/node
+exec home/.local/share/node/current/bin/node
+stdout 'v22.11.0'
+exec devbox run node.install -p version=current -p makeDefault=false --set node.distUrl=$NODEDIST
+exists home/.local/share/node/23.1.0/bin/node
+exec devbox run node.install -p version=22.10.0 -p makeDefault=false --set node.distUrl=$NODEDIST
+exists home/.local/share/node/22.10.0/bin/node
+! exec devbox run node.install -p version=99 --set node.distUrl=$NODEDIST
+! exec devbox run node.install -p version=abc --set node.distUrl=$NODEDIST
+
+# the installed check lists them, the default is marked
+exec devbox status --json --set node.distUrl=$NODEDIST
+stdout '"id": "node.installed"'
+stdout '"summary": "Node.js 23.1.0, 22.11.0 \(default\), 22.10.0, 20.18.0"'
+
+# switch: by major version and by exact version
+exec devbox run node.use -p version=20 --set node.distUrl=$NODEDIST
+exec home/.local/share/node/current/bin/node
+stdout 'v20.18.0'
+exec devbox run node.use -p version=22.11.0 --set node.distUrl=$NODEDIST
+exec home/.local/share/node/current/bin/node
+stdout 'v22.11.0'
+! exec devbox run node.use -p version=18 --set node.distUrl=$NODEDIST
+
+# remove the versions that are not needed any more
+exec devbox run node.remove -p version=22.10.0 --yes --set node.distUrl=$NODEDIST
+! exists home/.local/share/node/22.10.0
+exec devbox run node.remove -p version=23 --yes --set node.distUrl=$NODEDIST
+! exists home/.local/share/node/23.1.0
+
+# a newer patch release: the latest check reports it, update installs it, takes the
+# global packages along and removes the old patch version, the default follows
+exec devbox run node.globals --set node.distUrl=$NODEDIST --set 'node.globalPackages=["typescript@5"]'
+exists home/.local/share/node/22.11.0/lib/node_modules/typescript/package.json
+grep 'install -g typescript@5' home/.local/share/node/22.11.0/npm.log
+nodedist release 22.12.0 Jod
+nodedist release 20.19.0 Iron
+exec devbox status --json --set node.distUrl=$NODEDIST
+stdout '"summary": "Updates: .*20.19.0'
+stdout '"summary": "Updates: .*22.12.0'
+exec devbox run node.update --set node.distUrl=$NODEDIST --json
+stdout '"summary":"Node.js 22.12.0","target":".*/node/22.12.0"'
+stdout '"op":"delete","summary":"old patch version","target":".*/node/22.11.0"'
+stdout '"kind":"package","op":"create","summary":"global package for Node.js 22.12.0","target":"typescript"'
+exists home/.local/share/node/22.12.0/bin/node
+exists home/.local/share/node/22.12.0/lib/node_modules/typescript/package.json
+exists home/.local/share/node/20.19.0/bin/node
+! exists home/.local/share/node/22.11.0
+! exists home/.local/share/node/20.18.0
+exec home/.local/share/node/current/bin/node
+stdout 'v22.12.0'
+
+# a second update changes nothing
+exec devbox run node.update --set node.distUrl=$NODEDIST --json
+! stdout '"type":"change"'
+
+# keepPatches keeps the older patch version
+nodedist release 22.13.0 Jod
+exec devbox run node.update --set node.distUrl=$NODEDIST --set node.keepPatches=2
+exists home/.local/share/node/22.13.0/bin/node
+exists home/.local/share/node/22.12.0/bin/node
+
+# the checksum is verified: a broken server is an error and installs nothing
+nodedist release 24.0.0
+nodedist corrupt 24.0.0
+! exec devbox run node.install -p version=24 -p makeDefault=false --set node.distUrl=$NODEDIST
+! exists home/.local/share/node/24.0.0
+
+# remove the default: link and environment block are gone
+exec devbox run node.remove -p version=22.13.0 --yes --set node.distUrl=$NODEDIST
+! exists home/.local/share/node/22.13.0
+! exists home/.local/share/node/current
+! grep 'node/current' home/.config/devbox/env.d/node.sh
+
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "paths": ["${xdg:data}/devbox/plugins"] }
+}
+-- home/.local/share/devbox/plugins/base/plugin.json --
+{ "id": "base", "version": "1.0.0", "name": "Base stand-in" }

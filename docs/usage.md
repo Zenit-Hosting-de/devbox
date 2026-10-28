@@ -86,8 +86,9 @@ are removed after `history.keepDays` (default 90) or beyond `history.keepSession
 ## First session
 
 The bundled plugins today are `system` (machine data, environment loader, self-update),
-`base` (base packages through apt, dnf, pacman or zypper) and `java` (JDKs from an
-Adoptium-compatible API).
+`base` (base packages through apt, dnf, pacman or zypper), `java` (JDKs from an
+Adoptium-compatible API) and `node` (Node.js from nodejs.org/dist or a mirror, see
+[Node.js](#nodejs)).
 
 ```bash
 devbox plugin list                      # ID, version, state (ready, blocked, …) and reasons
@@ -145,6 +146,30 @@ devbox logs s_01M60GM3KP7DPNSXCVR1B1BX54 # full output of one session
 `history`, `logs`, `config get`, `config explain`, `version`) and prints exactly one JSON
 document. `devbox run --json` prints the session events as JSON Lines instead of the
 readable output.
+
+## Node.js
+
+The `node` plugin unpacks the official archives into `~/.local/share/node/<version>`,
+verifies them against `SHASUMS256.txt`, links `current` to the default version and puts
+`current/bin` in `PATH` through `~/.config/devbox/env.d/node.sh`.
+
+```bash
+devbox run node.install                       # newest release of node.channel (lts by default)
+devbox run node.install -p version=20         # newest 20.x; also 22.11.0, lts, current
+devbox run node.use -p version=22             # switch the default (a major or a full version)
+devbox run node.update                        # newest patch of every installed major version
+devbox run node.globals                       # install node.globalPackages into the default
+devbox run node.remove -p version=20.18.0     # asks for confirmation
+```
+
+- `node.distUrl` points to a mirror (it needs `index.json`, `SHASUMS256.txt` and the
+  archives in the layout of nodejs.org/dist); `node.defaultVersion` is a major version
+  that `node.install` uses when no version is given.
+- `node.globalPackages` (for example `["typescript@5"]`) is installed with `npm install -g`
+  into every version that is installed or updated. On `node.update`, packages installed
+  globally in the old patch version are taken along to the new one.
+- `node.keepPatches` keeps that many patch versions per major version; the default is
+  never removed. `node.manager` knows `direct` only; support for nvm is planned.
 
 ## Settings
 
