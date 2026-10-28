@@ -1,0 +1,127 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "java",
+  "version": "1.0.0",
+  "name": "Java",
+  "description": "Install, switch and update JDKs",
+  "category": "runtime",
+  "icon": "coffee",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["tar"],
+    "plugins": { "base": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": ["${java.vendorApi}", "https://github.com", "https://objects.githubusercontent.com"],
+    "files": {
+      "read": ["${env:HOME}"],
+      "write": ["${java.installDir}", "${java.envFile}"]
+    },
+    "sudo": false,
+    "credentials": []
+  },
+  "settings": {
+    "vendorApi": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://api.adoptium.net/v3",
+      "label": "Release API",
+      "help": "Adoptium-compatible API. Change it to use a mirror in the own network."
+    },
+    "defaultVersion": {
+      "type": "integer",
+      "enum": [8, 11, 17, 21, 25],
+      "default": 21,
+      "label": "Default JDK"
+    },
+    "installDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:data}/jdk",
+      "label": "Install location",
+      "advanced": true
+    },
+    "keepPatches": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "default": 1,
+      "label": "Patch versions to keep per JDK"
+    },
+    "envFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d/java.sh",
+      "label": "Shell environment file",
+      "help": "Sets JAVA_HOME and PATH for new shells.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "installed": {
+      "label": "Installed JDKs",
+      "run": ["checks/installed.sh"],
+      "timeout": "5s",
+      "cache": "10m",
+      "refreshOn": ["session.finished:java.*"]
+    },
+    "latest": {
+      "label": "New versions",
+      "run": ["checks/latest.sh"],
+      "timeout": "20s",
+      "cache": "6h",
+      "network": true
+    }
+  },
+  "actions": {
+    "install": {
+      "label": "Install JDK",
+      "run": ["actions/install.sh"],
+      "params": {
+        "version": {
+          "type": "integer",
+          "enum": [8, 11, 17, 21, 25],
+          "default": "${java.defaultVersion}",
+          "label": "Version"
+        },
+        "makeDefault": { "type": "boolean", "default": true, "label": "Make it the default" }
+      },
+      "timeout": "15m"
+    },
+    "update": { "label": "Update and clean up", "run": ["actions/update.sh"], "timeout": "30m" },
+    "use": {
+      "label": "Switch default JDK",
+      "run": ["actions/use.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "label": "Version",
+          "optionsFrom": "java.installed#/data/items/*/version"
+        }
+      }
+    },
+    "remove": {
+      "label": "Remove JDK",
+      "run": ["actions/remove.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "label": "Version",
+          "optionsFrom": "java.installed#/data/items/*/version"
+        }
+      },
+      "confirm": "The JDK is deleted. Projects that use it via JAVA_HOME need another one afterwards.",
+      "danger": true
+    }
+  },
+  "contributes": {
+    "groups": { "update-all": ["java.update"] },
+    "setup": [{ "action": "java.install", "after": ["base.packages"] }],
+    "overview": { "check": "java.installed", "primaryAction": "java.update" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

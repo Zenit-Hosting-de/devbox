@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
+	bundled "github.com/Zenit-Hosting-de/devbox/plugins"
 )
 
 // defaultPluginPath is used when no configuration file sets plugins.paths.
@@ -47,6 +48,11 @@ func (a *app) load(withCall bool) (*state, error) {
 	if err != nil {
 		return nil, err
 	}
+	builtin, err := plugin.ExtractBuiltin(bundled.FS, filepath.Join(e.ctx.XDG.Data, "devbox", "builtin"), a.build.Version)
+	if err != nil {
+		return nil, err
+	}
+	paths = append(paths, builtin) // bundled plugins come last, so others can replace them
 	cands, err := plugin.Search(e.validator, paths)
 	if err != nil {
 		return nil, err

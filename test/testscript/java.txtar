@@ -1,0 +1,53 @@
+# AP-13: the reference plugin java passes devbox plugin test against a fake release
+# API (the source is redirected by a setting): checks, dry runs without changes, and
+# every action applied twice with no change on the second run.
+
+adoptium start
+adoptium release 21 21.0.5
+
+exec devbox plugin test --apply --set java.vendorApi=$ADOPTIUM $REPO/plugins/java
+stdout '^ok +validate +java'
+stdout '^ok +check +java.installed +missing'
+stdout '^ok +dry-run +java.install +3 planned changes'
+stdout '^ok +apply +java.install +[1-9][0-9]* changes'
+stdout '^ok +repeat +java.install +no changes'
+stdout '^ok +repeat +java.update +no changes'
+stdout '^ok +repeat +java.use +no changes'
+stdout '^skipped +apply +java.remove +danger'
+stdout '^ok +dry-run +java.remove'
+! stdout '^failed'
+
+# the bundled java plugin (unpacked from the binary) used for real:
+# install, newer build, update with clean-up, remove
+exec devbox plugin info java --json
+stdout '"state": "ready"'
+stdout '"path": ".*/devbox/builtin/.*/java"'
+exec devbox run java.install --set java.vendorApi=$ADOPTIUM --json
+stdout '"kind":"file","op":"create","summary":"JDK 21.0.5","target":".*/jdk/21.0.5","type":"change"'
+stdout '"kind":"link","op":"update","summary":"points to 21.0.5"'
+stdout '"summary":"Temurin 21.0.5","type":"result"'
+exists home/.local/share/jdk/21.0.5/bin/java
+exec home/.local/share/jdk/current/bin/java
+stdout 'openjdk 21.0.5'
+grep 'export JAVA_HOME=".*/home/.local/share/jdk/current"' home/.config/devbox/env.d/java.sh
+
+adoptium release 21 21.0.6
+exec devbox run java.update --set java.vendorApi=$ADOPTIUM --json
+stdout '"summary":"JDK 21.0.6","target":".*/jdk/21.0.6"'
+stdout '"op":"delete","summary":"old patch version","target":".*/jdk/21.0.5"'
+exists home/.local/share/jdk/21.0.6/bin/java
+! exists home/.local/share/jdk/21.0.5
+exec home/.local/share/jdk/current/bin/java
+stdout 'openjdk 21.0.6'
+
+exec devbox run java.remove -p version=21.0.6 --yes --set java.vendorApi=$ADOPTIUM
+! exists home/.local/share/jdk/21.0.6
+! exists home/.local/share/jdk/current
+! grep 'JAVA_HOME' home/.config/devbox/env.d/java.sh
+
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "paths": ["${xdg:data}/devbox/plugins"] }
+}
+-- home/.local/share/devbox/plugins/base/plugin.json --
+{ "id": "base", "version": "1.0.0", "name": "Base stand-in" }

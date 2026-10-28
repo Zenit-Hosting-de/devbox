@@ -1,0 +1,41 @@
+# devbox plugin new creates a plugin from the template that passes validate and test.
+
+exec devbox plugin new hello-world
+exists hello-world/plugin.json
+exec devbox plugin validate hello-world
+exec devbox plugin test --apply hello-world
+stdout '^ok +repeat +hello-world.apply +no changes'
+
+! exec devbox plugin new hello-world
+stderr 'target exists'
+! exec devbox plugin new Bad_Name
+stderr 'plugin IDs match'
+! exec devbox plugin new other --lang cobol
+stderr 'no template'
+
+# validate reports problems with stable codes
+chmod 644 broken/checks/state.sh
+! exec devbox plugin validate broken
+stdout '^command-not-executable: checks/state.sh$'
+stdout '^command-missing: actions/missing.sh$'
+stdout '^default-invalid: broken.level:'
+stdout '^options-from-invalid: broken.nope#/x:'
+
+-- broken/plugin.json --
+{
+  "id": "broken",
+  "version": "1.0.0",
+  "name": "Broken",
+  "settings": { "level": { "type": "integer", "minimum": 1, "default": 0, "label": "Level" } },
+  "checks": { "state": { "label": "State", "run": ["checks/state.sh"] } },
+  "actions": {
+    "go": {
+      "label": "Go",
+      "run": ["actions/missing.sh"],
+      "params": { "v": { "type": "string", "label": "V", "optionsFrom": "broken.nope#/x" } }
+    }
+  }
+}
+-- broken/checks/state.sh --
+#!/usr/bin/env bash
+echo '{"status":"ok","summary":"fine"}'

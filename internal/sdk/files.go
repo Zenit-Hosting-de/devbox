@@ -221,3 +221,72 @@ func (p *progress) Write(b []byte) (int, error) {
 	}
 	return len(b), nil
 }
+
+// Fetch reads url through the proxy of the environment and writes the body to w. It
+// changes nothing and therefore also runs in a dry run (e.g. release metadata).
+func (e Env) Fetch(ctx context.Context, client *http.Client, url string, w io.Writer) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("fetch %s: %s", url, resp.Status)
+	}
+	_, err = io.Copy(w, resp.Body)
+	return err
+}
+
+// JSONGet returns the values at a JSON Pointer in a document. A "*" token selects
+// every element of an array or every value of an object (in key order), like
+// "optionsFrom" in manifests.
+func JSONGet(data []byte, pointer string) ([]any, error) {
+	doc, err := jsonfile.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	values := []any{doc}
+	for _, tok := range splitPointer(pointer) {
+		var next []any
+		for _, v := range values {
+			switch t := v.(type) {
+			case *jsonfile.Object:
+				if tok == "*" {
+					for _, k := range t.Keys() {
+						x, _ := t.Get(k)
+						next = append(next, x)
+					}
+				} else if x, ok := t.Get(tok); ok {
+					next = append(next, x)
+				}
+			case []any:
+				if tok == "*" {
+					next = append(next, t...)
+				} else if i, err := strconv.Atoi(tok); err == nil && i >= 0 && i < len(t) {
+					next = append(next, t[i])
+				}
+			}
+		}
+		values = next
+	}
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = jsonfile.Plain(v)
+	}
+	return out, nil
+}
+
+func splitPointer(p string) []string {
+	if p == "" {
+		return nil
+	}
+	parts := strings.Split(strings.TrimPrefix(p, "/"), "/")
+	for i, s := range parts {
+		parts[i] = strings.ReplaceAll(strings.ReplaceAll(s, "~1", "/"), "~0", "~")
+	}
+	return parts
+}

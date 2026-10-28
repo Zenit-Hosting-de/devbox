@@ -211,3 +211,28 @@ func TestEmitArgs(t *testing.T) {
 		}
 	}
 }
+
+func TestJSONGet(t *testing.T) {
+	data := []byte(`[{"binary": {"package": {"link": "https://downloads.example.com/a.tgz"}}, "version": {"major": 21, "security": 5}}, {"version": {"major": 17}}]`)
+	tests := map[string][]any{
+		"/0/binary/package/link": {"https://downloads.example.com/a.tgz"},
+		"/*/version/major":       {json.Number("21"), json.Number("17")},
+		"/1/binary":              {},
+		"/0/version":             {map[string]any{"major": json.Number("21"), "security": json.Number("5")}},
+	}
+	for ptr, want := range tests {
+		got, err := JSONGet(data, ptr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != len(want) {
+			t.Errorf("%s: got %v, want %v", ptr, got, want)
+			continue
+		}
+		for i := range want {
+			if Format(got[i]) != Format(want[i]) {
+				t.Errorf("%s[%d]: got %v, want %v", ptr, i, got[i], want[i])
+			}
+		}
+	}
+}
