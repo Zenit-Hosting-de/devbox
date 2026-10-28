@@ -11,7 +11,9 @@ import { InfoStore } from "../stores/info.store";
   selector: "dbx-wrap-text",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ZTooltip],
-  template: `<span [zTooltip]="tooltip()">{{ shown() }}</span>`,
+  template: `<span [zTooltip]="tooltip()" [attr.tabindex]="tooltip() ? 0 : null">{{
+    shown()
+  }}</span>`,
   styles: `
     :host {
       display: inline-block;

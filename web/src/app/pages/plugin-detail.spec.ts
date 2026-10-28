@@ -1,6 +1,7 @@
 import { Component } from "@angular/core";
 import { TestBed, type ComponentFixture } from "@angular/core/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { InfoStore } from "../stores/info.store";
 import { MockBackend, MockProblem } from "../mock/mock-backend";
 import { Dock } from "../shell/dock";
 import { DockStore } from "../stores/dock.store";
@@ -63,6 +64,23 @@ describe("PluginDetailPage (against the mock backend)", () => {
     // The settings of the plugin, via the shared group component.
     expect(queryAll(fixture, "dbx-settings-group dbx-schema-form")).toHaveLength(1);
     expect(text).toContain("Release API");
+  });
+
+  it("shows check details with ~ for the home directory and the full path as tooltip", async () => {
+    await TestBed.inject(InfoStore).load();
+    const fixture = await open();
+    const value = [...fixture.nativeElement.querySelectorAll("dd dbx-wrap-text span")].find((el) =>
+      (el as HTMLElement).textContent?.includes("~/.local/share/jdk"),
+    ) as HTMLElement | undefined;
+    expect(value).toBeDefined();
+    expect(fixture.nativeElement.textContent).not.toContain("/home/dev/.local/share/jdk");
+    expect(value?.getAttribute("tabindex")).toBe("0");
+    value?.focus();
+    await settle(fixture, () => {
+      expect(document.querySelector(".cdk-overlay-container")?.textContent ?? "").toContain(
+        "/home/dev/.local/share/jdk",
+      );
+    });
   });
 
   it("refreshes only the checks of this plugin", async () => {

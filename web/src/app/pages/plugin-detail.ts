@@ -10,9 +10,7 @@ import {
   ZPanel,
   ZPanelActions,
   ZSkeleton,
-  ZSpecList,
   ZToast,
-  type ZSpecItem,
 } from "zenit-ui";
 import { ActionLauncher } from "../actions/action-launcher";
 import { ApiProblem } from "../api/problem";
@@ -23,7 +21,6 @@ import { I18n } from "../i18n/i18n";
 import { PluginText } from "../i18n/plugin-text";
 import { SettingsGroup } from "../settings/settings-group";
 import { ChecksStore } from "../stores/checks.store";
-import { InfoStore } from "../stores/info.store";
 import { PluginsStore } from "../stores/plugins.store";
 import { SettingsStore } from "../stores/settings.store";
 
@@ -31,7 +28,7 @@ interface CheckView {
   ref: string;
   label: string;
   result: CheckSummary | undefined;
-  details: ZSpecItem[];
+  details: { term: string; value: string }[];
   running: boolean;
 }
 
@@ -57,7 +54,6 @@ interface ActionView {
     ZPanel,
     ZPanelActions,
     ZSkeleton,
-    ZSpecList,
     WrapText,
   ],
   template: `
@@ -126,7 +122,12 @@ interface ActionView {
                   </div>
                   @if (check.result; as result) {
                     @if (check.details.length > 0) {
-                      <z-spec-list [items]="check.details" />
+                      <dl class="z-spec">
+                        @for (d of check.details; track $index) {
+                          <dt>{{ d.term }}</dt>
+                          <dd><dbx-wrap-text [text]="d.value" /></dd>
+                        }
+                      </dl>
                     }
                     @for (hint of result.hints ?? []; track $index) {
                       <div class="hint">
@@ -239,7 +240,6 @@ export class PluginDetailPage {
   protected readonly plugins = inject(PluginsStore);
   protected readonly checks = inject(ChecksStore);
   protected readonly settings = inject(SettingsStore);
-  private readonly info = inject(InfoStore);
   private readonly text = inject(PluginText);
   private readonly launcher = inject(ActionLauncher);
   private readonly toast = inject(ZToast);
@@ -280,7 +280,7 @@ export class PluginDetailPage {
         result,
         details: (result?.details ?? []).map((d) => ({
           term: d.label,
-          value: this.info.shorten(d.value),
+          value: d.value,
         })),
         running: this.checks.running().has(ref),
       };

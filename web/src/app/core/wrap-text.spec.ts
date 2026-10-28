@@ -41,16 +41,25 @@ describe("WrapText", () => {
     expect(css).toContain("overflow-wrap: anywhere");
   });
 
-  it("opens the full text as a tooltip when it was shortened", async () => {
+  it("opens the full text as a tooltip when the focusable text gets keyboard focus", async () => {
     await TestBed.inject(InfoStore).load();
     const fixture = TestBed.createComponent(Host);
     await settle(fixture);
     const span = fixture.nativeElement.querySelector("span") as HTMLElement;
-    span.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
-    span.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    span.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expect(span.getAttribute("tabindex")).toBe("0");
+    span.focus();
+    await settle(fixture, () => {
+      expect(document.activeElement).toBe(span);
+      expect(document.querySelector(".cdk-overlay-container")?.textContent ?? "").toContain(
+        "/home/dev/.npmrc",
+      );
+    });
+  });
+
+  it("is not a tab stop when nothing was shortened", async () => {
+    const fixture = TestBed.createComponent(Host);
     await settle(fixture);
-    const tip = document.querySelector(".cdk-overlay-container")?.textContent ?? "";
-    expect(tip).toContain("/home/dev/.npmrc");
+    const span = fixture.nativeElement.querySelector("span") as HTMLElement;
+    expect(span.hasAttribute("tabindex")).toBe(false);
   });
 });
