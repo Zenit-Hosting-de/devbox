@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Zenit-Hosting-de/devbox/internal/history"
 	"github.com/Zenit-Hosting-de/devbox/internal/schema"
 )
 
@@ -51,10 +52,25 @@ func TestJSONOutputMatchesAPI(t *testing.T) {
 	writeFile(t, filepath.Join(plugins, "broken", "plugin.json"), `{"id": "broken"}`)
 	writeFile(t, filepath.Join(plugins, "tool", "plugin.json"), `{"id": "tool", "version": "1.0.0", "name": "Tool", "requires": {"commands": ["tar"]}}`)
 
+	state := filepath.Join(home, ".local", "state", "devbox")
+	store := history.New(state, v)
+	code := 0
+	if err := store.Append(history.Entry{
+		ID: "s_01J0000000000000000000", Action: "base.update", Plugin: "base", Title: "Update", User: "kian", Origin: history.OriginUI,
+		StartedAt: "2026-01-02T03:04:05Z", EndedAt: "2026-01-02T03:04:09Z", State: "success", ExitCode: &code, Changes: 2, Summary: "done",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(home, ".local", "share", "devbox", "credentials.json"),
+		`{"instances": {"registry-main": {"type": "registry", "origin": "user", "fields": {"url": "https://registry.example.com"}, "consumers": {"npm": {}}}}}`)
+
 	tests := []struct {
 		args   []string
 		target string
 	}{
+		{[]string{"status", "--json"}, "openapi.StatusReport"},
+		{[]string{"history", "--json"}, "openapi.SessionList"},
+		{[]string{"cred", "list", "--json"}, "openapi.CredentialList"},
 		{[]string{"plugin", "list", "--json"}, "openapi.PluginList"},
 		{[]string{"plugin", "info", "base", "--json"}, "openapi.PluginDetail"},
 		{[]string{"plugin", "info", "broken", "--json"}, "openapi.PluginDetail"},

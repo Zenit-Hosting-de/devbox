@@ -1,0 +1,39 @@
+# devbox serve: it lists its flags and refuses addresses and login modes that are not
+# available yet (exit code 2, nothing is started).
+
+exec devbox serve --help
+stdout '--listen'
+stdout '--socket'
+stdout '--allow-origin'
+stdout '--open'
+
+# a non-loopback address needs server.auth pam and TLS
+! exec devbox serve --listen 0.0.0.0:7878
+stderr 'not a loopback address'
+stderr 'server.auth pam and TLS'
+
+! exec devbox serve --listen [::]:0
+stderr 'not a loopback address'
+
+# the address of the configuration is checked the same way
+exec devbox config validate
+cp config-lan.json home/.config/devbox/config.json
+! exec devbox serve
+stderr '192.0.2.10:7878 is not a loopback address'
+
+# pam is not available yet, not even on loopback
+cp config-pam.json home/.config/devbox/config.json
+! exec devbox serve --listen 127.0.0.1:0
+stderr 'server.auth pam'
+stderr 'not available yet'
+
+# unknown flags and arguments are usage errors
+! exec devbox serve extra
+! exec devbox serve --nothing
+
+-- config-lan.json --
+{ "server": { "listen": "192.0.2.10:7878" } }
+-- config-pam.json --
+{ "server": { "auth": "pam" } }
+-- home/.config/devbox/config.json --
+{}

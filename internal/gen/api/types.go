@@ -67,6 +67,21 @@ func (e CreateSessionParamsXDevBoxRequest) Valid() bool {
 	}
 }
 
+// Defines values for CancelSessionParamsXDevBoxRequest.
+const (
+	CancelSessionParamsXDevBoxRequestN1 CancelSessionParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the CancelSessionParamsXDevBoxRequest enum.
+func (e CancelSessionParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case CancelSessionParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PatchSettingsParamsXDevBoxRequest.
 const (
 	PatchSettingsParamsXDevBoxRequestN1 PatchSettingsParamsXDevBoxRequest = "1"
@@ -90,8 +105,27 @@ type CheckSummary struct {
 	// CheckedAt Time of the check.
 	CheckedAt time.Time `json:"checkedAt"`
 
+	// Data Structured data of the check result.
+	Data *map[string]interface{} `json:"data,omitempty"`
+
+	// Details Label-value pairs of the check result.
+	Details *[]struct {
+		Label string `json:"label"`
+		Value string `json:"value"`
+	} `json:"details,omitempty"`
+
+	// Hints Hints of the check result, optionally with a direct action.
+	Hints *[]struct {
+		// Action Fully qualified check or action, <plugin>.<name>.
+		Action *Ref   `json:"action,omitempty"`
+		Text   string `json:"text"`
+	} `json:"hints,omitempty"`
+
 	// Id Fully qualified check or action, <plugin>.<name>.
 	Id Ref `json:"id"`
+
+	// Label Label of the check from the manifest, untranslated.
+	Label *string `json:"label,omitempty"`
 
 	// Status Result state of a check.
 	Status CheckStatus `json:"status"`
@@ -105,10 +139,62 @@ type ChecksRefresh struct {
 	Ids *[]Ref `json:"ids,omitempty"`
 }
 
+// CredentialInstance A credential instance with profile and user parts merged; never contains the secret itself. Also the item of devbox cred list --json.
+type CredentialInstance struct {
+	// Applied When each consumer last applied the instance, keyed by plugin ID.
+	Applied map[string]time.Time `json:"applied"`
+
+	// Consumers Consumer options keyed by plugin ID.
+	Consumers map[string]map[string]interface{} `json:"consumers"`
+
+	// Fields Field values without the secret.
+	Fields map[string]interface{} `json:"fields"`
+
+	// Label Display name.
+	Label *string `json:"label,omitempty"`
+
+	// Locked Fields a profile locks.
+	Locked []string `json:"locked"`
+
+	// Name Identifier of a plugin, credential instance, repository or schema.
+	Name Name `json:"name"`
+
+	// Origin Who created the instance: user or profile:<id>.
+	Origin string `json:"origin"`
+
+	// Secret Reference to the secret in the vault.
+	Secret *struct {
+		ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+		Ref       string     `json:"ref"`
+		UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+	} `json:"secret,omitempty"`
+
+	// Type Credential type.
+	Type string `json:"type"`
+
+	// Verified Result of the last verification.
+	Verified *struct {
+		At      time.Time   `json:"at"`
+		Message *string     `json:"message,omitempty"`
+		Status  interface{} `json:"status"`
+	} `json:"verified,omitempty"`
+}
+
+// CredentialList All credential instances; also the output of devbox cred list --json.
+type CredentialList struct {
+	Instances []CredentialInstance `json:"instances"`
+}
+
 // Host Facts about the machine.
 type Host struct {
 	// Arch CPU architecture.
 	Arch interface{} `json:"arch,omitempty"`
+
+	// Codename Distribution codename, e.g. noble.
+	Codename *string `json:"codename,omitempty"`
+
+	// Desktop Desktop environment in lower case, e.g. gnome.
+	Desktop *string `json:"desktop,omitempty"`
 
 	// Distro Distribution ID, e.g. ubuntu.
 	Distro string `json:"distro"`
@@ -134,7 +220,7 @@ type Info struct {
 	// Date Build date.
 	Date *string `json:"date,omitempty"`
 
-	// Features Optional features of this build.
+	// Features Optional features of this build: ui = an embedded UI build is present, ws = the WebSocket is available, socket = the Unix socket is listening.
 	Features *[]string `json:"features,omitempty"`
 
 	// Host Facts about the machine.
@@ -143,12 +229,27 @@ type Info struct {
 	// Protocol Plugin protocol version.
 	Protocol int `json:"protocol"`
 
+	// Ui The ui section of the configuration file; the user file wins over the system file.
+	Ui *struct {
+		// Accent Accent colour.
+		Accent *string `json:"accent,omitempty"`
+
+		// Language Language of the UI.
+		Language *string `json:"language,omitempty"`
+
+		// Scheme Colour scheme.
+		Scheme interface{} `json:"scheme,omitempty"`
+	} `json:"ui,omitempty"`
+
 	// Vendor Always zenit-hosting; distinguishes DevBox from other tools named devbox.
 	Vendor interface{} `json:"vendor"`
 
 	// Version Version of the core.
 	Version string `json:"version"`
 }
+
+// Messages Flat translation map of a plugin (plugins/<id>/i18n/<lang>.json without $schema and $comment).
+type Messages map[string]string
 
 // Name Identifier of a plugin, credential instance, repository or schema.
 type Name = string
@@ -161,7 +262,7 @@ type PluginDetail struct {
 	// Id Identifier of a plugin, credential instance, repository or schema.
 	Id Name `json:"id"`
 
-	// Manifest The plugin manifest (schema/plugin.v1.json).
+	// Manifest The plugin manifest (schema/plugin.v1.json). Only with ?manifest=true on the list.
 	Manifest *map[string]interface{} `json:"manifest,omitempty"`
 
 	// Name Display name from the manifest.
@@ -170,6 +271,9 @@ type PluginDetail struct {
 	// Path Plugin directory.
 	Path    string         `json:"path"`
 	Reasons []PluginReason `json:"reasons"`
+
+	// ResolvedDefaults Defaults of the action parameters with placeholders resolved, keyed by action name and parameter name. A parameter whose default cannot be resolved is left out. Only with ?manifest=true on the list.
+	ResolvedDefaults *map[string]map[string]interface{} `json:"resolvedDefaults,omitempty"`
 
 	// Shadowed Directories of later plugins with the same ID that this one replaces.
 	Shadowed *[]string `json:"shadowed,omitempty"`
@@ -181,8 +285,8 @@ type PluginDetail struct {
 	Version *string `json:"version,omitempty"`
 }
 
-// PluginList All found plugins, sorted by ID.
-type PluginList = []PluginStatus
+// PluginList All found plugins, sorted by ID. manifest and resolvedDefaults appear only with ?manifest=true.
+type PluginList = []PluginDetail
 
 // PluginReason Why a plugin is not ready, or a note about it. code is stable and translated by the frontends.
 type PluginReason struct {
@@ -195,31 +299,6 @@ type PluginReason struct {
 
 // PluginState State of a plugin; only ready plugins offer actions.
 type PluginState = interface{}
-
-// PluginStatus A found plugin with its state.
-type PluginStatus struct {
-	// Category Category from the manifest.
-	Category *string `json:"category,omitempty"`
-
-	// Id Identifier of a plugin, credential instance, repository or schema.
-	Id Name `json:"id"`
-
-	// Name Display name from the manifest.
-	Name *string `json:"name,omitempty"`
-
-	// Path Plugin directory.
-	Path    string         `json:"path"`
-	Reasons []PluginReason `json:"reasons"`
-
-	// Shadowed Directories of later plugins with the same ID that this one replaces.
-	Shadowed *[]string `json:"shadowed,omitempty"`
-
-	// State State of a plugin; only ready plugins offer actions.
-	State PluginState `json:"state"`
-
-	// Version Plugin version.
-	Version *string `json:"version,omitempty"`
-}
 
 // Problem Error in RFC 9457 format with a stable code.
 type Problem struct {
@@ -270,10 +349,13 @@ type SecretPut struct {
 	Secret string `json:"secret"`
 }
 
-// Session Summary of a session.
+// Session Summary of a session; also a line of the history (devbox history --json) and the payload of the WebSocket message "session".
 type Session struct {
 	// Action Fully qualified check or action, <plugin>.<name>.
 	Action Ref `json:"action"`
+
+	// Changes Number of reported changes.
+	Changes *int `json:"changes,omitempty"`
 
 	// DryRun The session is a dry run.
 	DryRun bool `json:"dryRun"`
@@ -281,8 +363,29 @@ type Session struct {
 	// EndedAt End time.
 	EndedAt *time.Time `json:"endedAt,omitempty"`
 
-	// Id Session ID.
-	Id string `json:"id"`
+	// ExitCode Exit code of the process; null when it did not exit by itself.
+	ExitCode *int `json:"exitCode,omitempty"`
+
+	// Group Identifier of a plugin, credential instance, repository or schema.
+	Group *Name `json:"group,omitempty"`
+
+	// Id ID of a session.
+	Id SessionId `json:"id"`
+
+	// NextSeq Live sessions only: the sequence number the next output chunk or event will take.
+	NextSeq *int `json:"nextSeq,omitempty"`
+
+	// Origin Where a session was started.
+	Origin *SessionOrigin `json:"origin,omitempty"`
+
+	// Plugin Identifier of a plugin, credential instance, repository or schema.
+	Plugin *Name `json:"plugin,omitempty"`
+
+	// Progress Progress of a running session.
+	Progress *struct {
+		Percent *int    `json:"percent"`
+		Text    *string `json:"text,omitempty"`
+	} `json:"progress,omitempty"`
 
 	// StartedAt Start time.
 	StartedAt *time.Time `json:"startedAt,omitempty"`
@@ -290,8 +393,14 @@ type Session struct {
 	// State State of a session.
 	State SessionState `json:"state"`
 
+	// Summary One-line result.
+	Summary *string `json:"summary,omitempty"`
+
 	// Title Label of the action.
 	Title *string `json:"title,omitempty"`
+
+	// User User who started the session.
+	User *string `json:"user,omitempty"`
 }
 
 // SessionCreate Request to start an action.
@@ -310,7 +419,37 @@ type SessionCreate struct {
 
 	// Rows Terminal height.
 	Rows *int `json:"rows,omitempty"`
+
+	// Yes The user confirmed the confirm prompt of the action; also passed to the plugin as Spec.Yes.
+	Yes *bool `json:"yes,omitempty"`
 }
+
+// SessionEvent One line of sessions/<id>.events.jsonl. The protocol message itself is described in schema/event.v1.json#/$defs/message.
+type SessionEvent struct {
+	Event struct {
+		Type string `json:"type"`
+	} `json:"event"`
+	Seq  int       `json:"seq"`
+	Time time.Time `json:"time"`
+}
+
+// SessionEventList All protocol messages of a session in sequence order.
+type SessionEventList struct {
+	Events []SessionEvent `json:"events"`
+}
+
+// SessionId ID of a session.
+type SessionId = string
+
+// SessionList Sessions, newest first; also the output of devbox history --json.
+type SessionList struct {
+	// Next Opaque cursor for the next page; absent on the last page.
+	Next     *string   `json:"next,omitempty"`
+	Sessions []Session `json:"sessions"`
+}
+
+// SessionOrigin Where a session was started.
+type SessionOrigin = interface{}
 
 // SessionState State of a session.
 type SessionState = interface{}
@@ -331,6 +470,30 @@ type SettingExplain struct {
 	Value interface{} `json:"value"`
 }
 
+// SettingItem A setting with its definition, effective value and lock.
+type SettingItem struct {
+	// Field The field definition from the manifest (schema/plugin.v1.json#/$defs/field): label, help, default, enum, format, advanced, optionsFrom, secret.
+	Field map[string]interface{} `json:"field"`
+
+	// Key Fully qualified setting key, <plugin>.<name>.
+	Key SettingKey `json:"key"`
+
+	// Locked A profile locks the value.
+	Locked bool `json:"locked"`
+
+	// LockedBy The locking profile; only when locked.
+	LockedBy *string `json:"lockedBy,omitempty"`
+
+	// Origin Layer of the effective value; absent when there is no value.
+	Origin *string `json:"origin,omitempty"`
+
+	// Plugin Identifier of a plugin, credential instance, repository or schema.
+	Plugin Name `json:"plugin"`
+
+	// Value Effective value; absent when the setting has neither a value nor a default.
+	Value interface{} `json:"value,omitempty"`
+}
+
 // SettingKey Fully qualified setting key, <plugin>.<name>.
 type SettingKey = string
 
@@ -346,6 +509,11 @@ type SettingLayer struct {
 	Value interface{} `json:"value"`
 }
 
+// SettingList All settings of the found plugins, sorted by key.
+type SettingList struct {
+	Settings []SettingItem `json:"settings"`
+}
+
 // SettingsPatch User values to set; null removes the user value.
 type SettingsPatch = map[string]interface{}
 
@@ -355,6 +523,9 @@ type StatusReport struct {
 
 	// Host Facts about the machine.
 	Host Host `json:"host"`
+
+	// Running Checks that are running right now.
+	Running *[]Ref `json:"running,omitempty"`
 
 	// Summary Number of checks per status.
 	Summary struct {
@@ -386,6 +557,27 @@ type PutCredentialSecretParams struct {
 // PutCredentialSecretParamsXDevBoxRequest defines parameters for PutCredentialSecret.
 type PutCredentialSecretParamsXDevBoxRequest string
 
+// ListPluginsParams defines parameters for ListPlugins.
+type ListPluginsParams struct {
+	// Manifest Include manifest and resolvedDefaults of every plugin.
+	Manifest *bool `form:"manifest,omitempty" json:"manifest,omitempty"`
+}
+
+// ListSessionsParams defines parameters for ListSessions.
+type ListSessionsParams struct {
+	// State Only sessions in this state.
+	State *SessionState `form:"state,omitempty" json:"state,omitempty"`
+
+	// Plugin Only sessions of this plugin.
+	Plugin *Name `form:"plugin,omitempty" json:"plugin,omitempty"`
+
+	// Limit Maximum number of sessions.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor The next value of the previous page.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // CreateSessionParams defines parameters for CreateSession.
 type CreateSessionParams struct {
 	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
@@ -394,6 +586,15 @@ type CreateSessionParams struct {
 
 // CreateSessionParamsXDevBoxRequest defines parameters for CreateSession.
 type CreateSessionParamsXDevBoxRequest string
+
+// CancelSessionParams defines parameters for CancelSession.
+type CancelSessionParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest CancelSessionParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// CancelSessionParamsXDevBoxRequest defines parameters for CancelSession.
+type CancelSessionParamsXDevBoxRequest string
 
 // PatchSettingsParams defines parameters for PatchSettings.
 type PatchSettingsParams struct {

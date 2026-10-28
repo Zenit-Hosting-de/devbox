@@ -55,6 +55,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugins/{id}/messages/{lang}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Translations of a plugin for one language.
+         * @description Responds 404 not-found when the plugin or its i18n/<lang>.json does not exist.
+         */
+        get: operations["getPluginMessages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/checks": {
         parameters: {
             query?: never;
@@ -81,8 +101,31 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run checks again; an empty body refreshes all checks. */
+        /**
+         * Run checks again; an empty body refreshes all checks.
+         * @description Checks that are already running are not started again. Unknown IDs give 422 validation with the pointer /ids/<index>.
+         */
         post: operations["refreshChecks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/checks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cached result of one check.
+         * @description Responds 404 not-found when there is no cached result.
+         */
+        get: operations["getCheck"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -96,13 +139,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** All settings with definition, effective value, origin and lock. */
+        get: operations["listSettings"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Set user values; null removes the user value. */
+        /**
+         * Set user values; null removes the user value.
+         * @description All keys are validated first; nothing is written if any key fails. Errors: 422 validation with errors[].pointer /<key> (the code comes from the validator), 404 not-found for an unknown key, 409 setting-locked.
+         */
         patch: operations["patchSettings"];
         trace?: never;
     };
@@ -123,17 +170,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/sessions": {
+    "/credentials": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Credential instances without secrets. */
+        get: operations["listCredentials"];
         put?: never;
-        /** Start an action. */
-        post: operations["createSession"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -150,6 +197,121 @@ export interface paths {
         get?: never;
         /** Set the secret of a credential instance; starts verify and apply as a session. */
         put: operations["putCredentialSecret"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sessions, newest first, live sessions included. */
+        get: operations["listSessions"];
+        put?: never;
+        /**
+         * Start an action.
+         * @description Errors: 404 not-found for an unknown plugin or action; 409 plugin-not-ready; 409 conflict when the same action is already queued or running; 422 validation for parameters (pointer /params/<name>); 422 validation with pointer /yes and code confirm when the action has a confirm prompt, dryRun is false and yes is not true.
+         */
+        post: operations["createSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One session, live or from the history. */
+        get: operations["getSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Protocol messages of a session; of a live session up to now. */
+        get: operations["listSessionEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{id}/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Raw terminal output of a session, secrets already masked.
+         * @description Range requests are not supported yet.
+         */
+        get: operations["getSessionLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop a queued or running session.
+         * @description Errors: 404 not-found for an unknown session, 409 conflict when it has finished.
+         */
+        post: operations["cancelSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ws": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * WebSocket for live data.
+         * @description Upgrades to a WebSocket. Client messages follow WsClientMessage, core messages WsServerMessage. The Origin header is required and must be allowed; otherwise 403 csrf. Clients subscribe to topics (checks, sessions, settings, session:<id>); output and events of a session carry a sequence number (seq) and can be replayed with fromSeq. Both sides send a ping every 30 seconds.
+         */
+        get: operations["openWebSocket"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -209,6 +371,10 @@ export interface components {
              * @enum {unknown}
              */
             arch?: "amd64" | "arm64";
+            /** @description Distribution codename, e.g. noble. */
+            codename?: string;
+            /** @description Desktop environment in lower case, e.g. gnome. */
+            desktop?: string;
         };
         /** @description Version, host, authentication mode, protocol version and features of the core. */
         Info: {
@@ -231,8 +397,20 @@ export interface components {
              */
             auth: "local" | "pam" | "off";
             host: components["schemas"]["Host"];
-            /** @description Optional features of this build. */
+            /** @description Optional features of this build: ui = an embedded UI build is present, ws = the WebSocket is available, socket = the Unix socket is listening. */
             features?: string[];
+            /** @description The ui section of the configuration file; the user file wins over the system file. */
+            ui?: {
+                /** @description Language of the UI. */
+                language?: string;
+                /**
+                 * @description Colour scheme.
+                 * @enum {unknown}
+                 */
+                scheme?: "system" | "light" | "dark" | "contrast";
+                /** @description Accent colour. */
+                accent?: string;
+            };
         };
         /** @description Cached result of one check. */
         CheckSummary: {
@@ -245,6 +423,20 @@ export interface components {
              * @description Time of the check.
              */
             checkedAt: string;
+            /** @description Label of the check from the manifest, untranslated. */
+            label?: string;
+            /** @description Label-value pairs of the check result. */
+            details?: {
+                label: string;
+                value: string;
+            }[];
+            /** @description Hints of the check result, optionally with a direct action. */
+            hints?: {
+                text: string;
+                action?: components["schemas"]["Ref"];
+            }[];
+            /** @description Structured data of the check result. */
+            data?: Record<string, never>;
         };
         /** @description Overview of all checks; also the output of devbox status --json. */
         StatusReport: {
@@ -257,6 +449,8 @@ export interface components {
                 missing: number;
             };
             checks: components["schemas"]["CheckSummary"][];
+            /** @description Checks that are running right now. */
+            running?: components["schemas"]["Ref"][];
         };
         /** @description Checks to run again; without ids all checks run. */
         ChecksRefresh: {
@@ -295,11 +489,12 @@ export interface components {
             cols?: number;
             /** @description Terminal height. */
             rows?: number;
+            /** @description The user confirmed the confirm prompt of the action; also passed to the plugin as Spec.Yes. */
+            yes?: boolean;
         };
-        /** @description Summary of a session. */
+        /** @description Summary of a session; also a line of the history (devbox history --json) and the payload of the WebSocket message "session". */
         Session: {
-            /** @description Session ID. */
-            id: string;
+            id: components["schemas"]["SessionId"];
             action: components["schemas"]["Ref"];
             /** @description Label of the action. */
             title?: string;
@@ -316,6 +511,24 @@ export interface components {
              * @description End time.
              */
             endedAt?: string;
+            plugin?: components["schemas"]["Name"];
+            group?: components["schemas"]["Name"];
+            /** @description User who started the session. */
+            user?: string;
+            origin?: components["schemas"]["SessionOrigin"];
+            /** @description Exit code of the process; null when it did not exit by itself. */
+            exitCode?: number | null;
+            /** @description Number of reported changes. */
+            changes?: number;
+            /** @description One-line result. */
+            summary?: string;
+            /** @description Progress of a running session. */
+            progress?: {
+                percent: number | null;
+                text?: string;
+            };
+            /** @description Live sessions only: the sequence number the next output chunk or event will take. */
+            nextSeq?: number;
         };
         /** @description New secret of a credential instance. */
         SecretPut: {
@@ -391,8 +604,8 @@ export interface components {
             /** @description Directories of later plugins with the same ID that this one replaces. */
             shadowed?: string[];
         };
-        /** @description All found plugins, sorted by ID. */
-        PluginList: components["schemas"]["PluginStatus"][];
+        /** @description All found plugins, sorted by ID. manifest and resolvedDefaults appear only with ?manifest=true. */
+        PluginList: components["schemas"]["PluginDetail"][];
         /** @description A plugin with its manifest (absent when the manifest is invalid). */
         PluginDetail: {
             id: components["schemas"]["Name"];
@@ -408,9 +621,209 @@ export interface components {
             path: string;
             /** @description Directories of later plugins with the same ID that this one replaces. */
             shadowed?: string[];
-            /** @description The plugin manifest (schema/plugin.v1.json). */
+            /** @description The plugin manifest (schema/plugin.v1.json). Only with ?manifest=true on the list. */
             manifest?: Record<string, never>;
+            /** @description Defaults of the action parameters with placeholders resolved, keyed by action name and parameter name. A parameter whose default cannot be resolved is left out. Only with ?manifest=true on the list. */
+            resolvedDefaults?: {
+                [key: string]: Record<string, never>;
+            };
         };
+        /** @description ID of a session. */
+        SessionId: string;
+        /** @description Flat translation map of a plugin (plugins/<id>/i18n/<lang>.json without $schema and $comment). */
+        Messages: {
+            [key: string]: string;
+        };
+        /** @description A setting with its definition, effective value and lock. */
+        SettingItem: {
+            key: components["schemas"]["SettingKey"];
+            plugin: components["schemas"]["Name"];
+            /** @description The field definition from the manifest (schema/plugin.v1.json#/$defs/field): label, help, default, enum, format, advanced, optionsFrom, secret. */
+            field: Record<string, never>;
+            /** @description Effective value; absent when the setting has neither a value nor a default. */
+            value?: unknown;
+            /** @description Layer of the effective value; absent when there is no value. */
+            origin?: string;
+            /** @description A profile locks the value. */
+            locked: boolean;
+            /** @description The locking profile; only when locked. */
+            lockedBy?: string;
+        };
+        /** @description All settings of the found plugins, sorted by key. */
+        SettingList: {
+            settings: components["schemas"]["SettingItem"][];
+        };
+        /** @description A credential instance with profile and user parts merged; never contains the secret itself. Also the item of devbox cred list --json. */
+        CredentialInstance: {
+            name: components["schemas"]["Name"];
+            /** @description Credential type. */
+            type: string;
+            /** @description Who created the instance: user or profile:<id>. */
+            origin: string;
+            /** @description Display name. */
+            label?: string;
+            /** @description Field values without the secret. */
+            fields: {
+                [key: string]: unknown;
+            };
+            /** @description Fields a profile locks. */
+            locked: string[];
+            /** @description Consumer options keyed by plugin ID. */
+            consumers: {
+                [key: string]: Record<string, never>;
+            };
+            /** @description Reference to the secret in the vault. */
+            secret?: {
+                ref: string;
+                /** Format: date-time */
+                updatedAt?: string;
+                /** Format: date-time */
+                expiresAt?: string | null;
+            };
+            /** @description Result of the last verification. */
+            verified?: {
+                /** Format: date-time */
+                at: string;
+                /** @enum {unknown} */
+                status: "ok" | "failed";
+                message?: string;
+            };
+            /** @description When each consumer last applied the instance, keyed by plugin ID. */
+            applied: {
+                [key: string]: string;
+            };
+        };
+        /** @description All credential instances; also the output of devbox cred list --json. */
+        CredentialList: {
+            instances: components["schemas"]["CredentialInstance"][];
+        };
+        /**
+         * @description Where a session was started.
+         * @enum {unknown}
+         */
+        SessionOrigin: "ui" | "cli" | "tui" | "api" | "setup" | "group" | "event";
+        /** @description Sessions, newest first; also the output of devbox history --json. */
+        SessionList: {
+            sessions: components["schemas"]["Session"][];
+            /** @description Opaque cursor for the next page; absent on the last page. */
+            next?: string;
+        };
+        /** @description One line of sessions/<id>.events.jsonl. The protocol message itself is described in schema/event.v1.json#/$defs/message. */
+        SessionEvent: {
+            seq: number;
+            /** Format: date-time */
+            time: string;
+            event: {
+                type: string;
+            };
+        };
+        /** @description All protocol messages of a session in sequence order. */
+        SessionEventList: {
+            events: components["schemas"]["SessionEvent"][];
+        };
+        /** @description Client to core: subscribe to topics. */
+        WsSubscribe: {
+            /** @constant */
+            type: "subscribe";
+            /** @description checks, sessions, settings or session:<id>. */
+            topics: string[];
+            /** @description Replay from this sequence number; applies to every session:<id> topic of the message. */
+            fromSeq?: number;
+        };
+        /** @description Client to core: leave topics. */
+        WsUnsubscribe: {
+            /** @constant */
+            type: "unsubscribe";
+            /** @description checks, sessions, settings or session:<id>. */
+            topics: string[];
+        };
+        /** @description Client to core: keyboard input for the terminal of a session. */
+        WsInput: {
+            /** @constant */
+            type: "input";
+            session: components["schemas"]["SessionId"];
+            /** @description Input, base64; at most 64 KiB decoded. */
+            data: string;
+        };
+        /** @description Client to core: new terminal size of a session. */
+        WsResize: {
+            /** @constant */
+            type: "resize";
+            session: components["schemas"]["SessionId"];
+            cols: number;
+            rows: number;
+        };
+        /** @description Keep-alive; sent by either side. */
+        WsPing: {
+            /** @constant */
+            type: "ping";
+        };
+        /** @description Answer to a ping. */
+        WsPong: {
+            /** @constant */
+            type: "pong";
+        };
+        /** @description Every message a client may send. */
+        WsClientMessage: components["schemas"]["WsSubscribe"] | components["schemas"]["WsUnsubscribe"] | components["schemas"]["WsInput"] | components["schemas"]["WsResize"] | components["schemas"]["WsPing"] | components["schemas"]["WsPong"];
+        /** @description Core to client: a chunk of terminal output, secrets masked. */
+        WsOutput: {
+            /** @constant */
+            type: "output";
+            session: components["schemas"]["SessionId"];
+            seq: number;
+            data: string;
+        };
+        /** @description Core to client: a protocol message of a session. */
+        WsEvent: {
+            /** @constant */
+            type: "event";
+            session: components["schemas"]["SessionId"];
+            seq: number;
+            /** Format: date-time */
+            time: string;
+            event: Record<string, never>;
+        };
+        /** @description Core to client: a session was created or changed. */
+        WsSession: {
+            /** @constant */
+            type: "session";
+            session: components["schemas"]["Session"];
+        };
+        /** @description Core to client: a check result changed. */
+        WsCheck: {
+            /** @constant */
+            type: "check";
+            id: components["schemas"]["Ref"];
+            result: components["schemas"]["CheckSummary"];
+        };
+        /** @description Core to client: settings changed. */
+        WsSettings: {
+            /** @constant */
+            type: "settings";
+            keys: components["schemas"]["SettingKey"][];
+        };
+        /** @description Core to client: the requested fromSeq is older than the in-memory buffer. Streaming continues at firstSeq; the client reloads GET /sessions/{id}/log. */
+        WsGap: {
+            /** @constant */
+            type: "gap";
+            session: components["schemas"]["SessionId"];
+            fromSeq: number;
+            firstSeq: number;
+        };
+        /** @description Core to client: a client message was refused. */
+        WsError: {
+            /** @constant */
+            type: "error";
+            /**
+             * @description Stable error code.
+             * @enum {unknown}
+             */
+            code: "validation" | "not-found" | "plugin-not-ready" | "setting-locked" | "permission-denied" | "unauthenticated" | "csrf" | "conflict" | "internal";
+            detail?: string;
+            topic?: string;
+        };
+        /** @description Every message the core may send. */
+        WsServerMessage: components["schemas"]["WsOutput"] | components["schemas"]["WsEvent"] | components["schemas"]["WsSession"] | components["schemas"]["WsCheck"] | components["schemas"]["WsSettings"] | components["schemas"]["WsGap"] | components["schemas"]["WsError"] | components["schemas"]["WsPing"] | components["schemas"]["WsPong"];
     };
     responses: {
         /** @description Error in RFC 9457 format. */
@@ -456,7 +869,10 @@ export interface operations {
     };
     listPlugins: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Include manifest and resolvedDefaults of every plugin. */
+                manifest?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -496,6 +912,33 @@ export interface operations {
                     "application/json": components["schemas"]["PluginDetail"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getPluginMessages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Plugin ID. */
+                id: components["schemas"]["Name"];
+                /** @description Language, e.g. de or en. */
+                lang: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The flat translation map. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Messages"];
+                };
+            };
+            404: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -543,6 +986,53 @@ export interface operations {
                 };
                 content?: never;
             };
+            422: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Check, <plugin>.<name>. */
+                id: components["schemas"]["Ref"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cached result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckSummary"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings sorted by key. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingList"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -569,6 +1059,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
@@ -593,32 +1086,26 @@ export interface operations {
                     "application/json": components["schemas"]["SettingExplain"];
                 };
             };
+            404: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
-    createSession: {
+    listCredentials: {
         parameters: {
             query?: never;
-            header: {
-                /** @description Required on every modifying request (CSRF protection), together with a matching Origin. */
-                "X-DevBox-Request": components["parameters"]["DevBoxRequest"];
-            };
+            header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SessionCreate"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description The session was created. */
-            201: {
+            /** @description All instances, sorted by name. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Session"];
+                    "application/json": components["schemas"]["CredentialList"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -651,6 +1138,193 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Session"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSessions: {
+        parameters: {
+            query?: {
+                /** @description Only sessions in this state. */
+                state?: components["schemas"]["SessionState"];
+                /** @description Only sessions of this plugin. */
+                plugin?: components["schemas"]["Name"];
+                /** @description Maximum number of sessions. */
+                limit?: number;
+                /** @description The next value of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of sessions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionList"];
+                };
+            };
+            422: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    createSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every modifying request (CSRF protection), together with a matching Origin. */
+                "X-DevBox-Request": components["parameters"]["DevBoxRequest"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionCreate"];
+            };
+        };
+        responses: {
+            /** @description The session was created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Session ID. */
+                id: components["schemas"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSessionEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Session ID. */
+                id: components["schemas"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The messages. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionEventList"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSessionLog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Session ID. */
+                id: components["schemas"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The output. */
+            200: {
+                headers: {
+                    /** @description Every output chunk with a sequence number below this value is contained in the body. */
+                    "X-DevBox-Next-Seq": number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    cancelSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every modifying request (CSRF protection), together with a matching Origin. */
+                "X-DevBox-Request": components["parameters"]["DevBoxRequest"];
+            };
+            path: {
+                /** @description Session ID. */
+                id: components["schemas"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The session as of the cancel request; it ends as stopped. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    openWebSocket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Switching Protocols */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };
