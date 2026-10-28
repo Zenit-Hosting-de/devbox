@@ -26,7 +26,7 @@ func (a *app) plugins() ([]*plugin.Plugin, error) {
 	if err != nil {
 		return nil, err
 	}
-	return a.evaluate(st), nil
+	return st.Evaluate(), nil
 }
 
 func (a *app) pluginList(_ *cobra.Command, _ []string) error {

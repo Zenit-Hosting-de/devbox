@@ -138,18 +138,25 @@ func (ss *Session) ID() string { return ss.id }
 
 // Write appends terminal output (already masked) and takes one sequence number.
 func (ss *Session) Write(p []byte) (int, error) {
+	ss.WriteSeq(p)
+	return len(p), nil
+}
+
+// WriteSeq is Write that returns the sequence number the chunk took (the value before
+// the increment), or -1 for an empty chunk, which takes none. The log is a copy for
+// the history; a full disk must not stop the action, Close reports the error.
+func (ss *Session) WriteSeq(p []byte) int {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 	if len(p) == 0 {
-		return 0, nil
+		return -1
 	}
+	seq := ss.seq
 	ss.seq++
 	if _, err := ss.log.Write(p); err != nil && ss.err == nil {
 		ss.err = err
 	}
-	// The log is a copy for the history; a full disk must not stop the action.
-	// Close reports the error.
-	return len(p), nil
+	return seq
 }
 
 // Event appends a protocol message (already masked) and returns its line.

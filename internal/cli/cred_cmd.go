@@ -19,6 +19,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
+	"github.com/Zenit-Hosting-de/devbox/internal/core"
 	"github.com/Zenit-Hosting-de/devbox/internal/credentials"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
 	"github.com/Zenit-Hosting-de/devbox/internal/runner"
@@ -52,7 +53,7 @@ func (t credTypeDef) secret() map[string]any {
 
 // credCtx is the loaded configuration together with the credentials directory.
 type credCtx struct {
-	st        *state
+	st        *core.State
 	plugins   []*plugin.Plugin
 	path      string
 	prepared  []credentials.Prepared
@@ -66,10 +67,10 @@ func (a *app) credContext() (*credCtx, error) {
 		return nil, err
 	}
 	c := &credCtx{
-		st: st, plugins: a.evaluate(st), types: map[string]credTypeDef{},
-		path: filepath.Join(st.env.ctx.XDG.Data, "devbox", credentials.FileName),
+		st: st, plugins: st.Evaluate(), types: map[string]credTypeDef{},
+		path: st.CredentialsPath(),
 	}
-	for _, m := range st.plugins { // search order: the first definition of a type wins
+	for _, m := range st.Manifests { // search order: the first definition of a type wins
 		types, _ := m.Doc["credentialTypes"].(map[string]any)
 		for name, d := range types {
 			if _, dup := c.types[name]; !dup {
@@ -78,14 +79,12 @@ func (a *app) credContext() (*credCtx, error) {
 			}
 		}
 	}
-	for _, pf := range st.profiles {
-		c.prepared = append(c.prepared, credentials.FromProfile(pf.Plain())...)
-	}
+	c.prepared = st.PreparedCredentials()
 	return c, c.reload()
 }
 
 func (c *credCtx) reload() error {
-	f, err := credentials.Load(c.st.env.validator, c.path)
+	f, err := credentials.Load(c.st.Validator, c.path)
 	if err != nil {
 		return err
 	}
@@ -94,7 +93,7 @@ func (c *credCtx) reload() error {
 }
 
 func (c *credCtx) update(change func(*credentials.File) error) error {
-	if err := credentials.Update(c.st.env.validator, c.path, change); err != nil {
+	if err := credentials.Update(c.st.Validator, c.path, change); err != nil {
 		return err
 	}
 	return c.reload()
@@ -117,7 +116,7 @@ func (c *credCtx) typeOf(inst *credentials.Instance) (credTypeDef, error) {
 }
 
 // withDefaults returns values with the defaults of the fields filled in.
-func withDefaults(st *state, values map[string]any, fields map[string]any) (map[string]any, error) {
+func withDefaults(st *core.State, values map[string]any, fields map[string]any) (map[string]any, error) {
 	out := make(map[string]any, len(values))
 	for k, v := range values {
 		out[k] = v
@@ -128,7 +127,7 @@ func withDefaults(st *state, values map[string]any, fields map[string]any) (map[
 		if _, set := out[name]; set || !ok {
 			continue
 		}
-		v, err := config.ExpandValue(def, settingLookup(st))
+		v, err := config.ExpandValue(def, st.Lookup())
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
@@ -388,7 +387,7 @@ func (a *app) credAdd(name, typ, label string, fieldArgs, consumerArgs []string)
 // consumerOptions parses plugin[:name=value,…] and checks plugin and options.
 func (c *credCtx) consumerOptions(typ, arg string) (string, map[string]any, error) {
 	id, rest, _ := strings.Cut(arg, ":")
-	p := findPlugin(c.plugins, id)
+	p := core.FindPlugin(c.plugins, id)
 	if p == nil || p.Manifest == nil {
 		return "", nil, &config.Error{Code: config.CodeNotFound, Key: id, Detail: "--consumer: no such plugin"}
 	}
@@ -455,7 +454,7 @@ func consumerDef(p *plugin.Plugin, typ string) (map[string]any, bool) {
 // permissions.credentials.
 func mayAccess(p *plugin.Plugin, typ string) bool {
 	perms, _ := p.Manifest.Doc["permissions"].(map[string]any)
-	for _, t := range anyStrings(perms["credentials"]) {
+	for _, t := range core.AnyStrings(perms["credentials"]) {
 		if t == typ {
 			return true
 		}
@@ -464,10 +463,10 @@ func mayAccess(p *plugin.Plugin, typ string) bool {
 }
 
 // openVault opens the vault backend (empty: vault.backend of the configuration).
-func (a *app) openVault(st *state, backend string) (vault.Backend, error) {
+func (a *app) openVault(st *core.State, backend string) (vault.Backend, error) {
 	passphrase := false
 	configured := ""
-	for _, f := range []*config.File{st.system, st.user} {
+	for _, f := range []*config.File{st.System, st.User} {
 		v, _ := f.Plain()["vault"].(map[string]any)
 		if b, ok := v["backend"].(string); ok {
 			configured = b
@@ -480,8 +479,8 @@ func (a *app) openVault(st *state, backend string) (vault.Backend, error) {
 		backend = configured
 	}
 	opts := vault.Options{
-		Backend: backend, DataDir: filepath.Join(st.env.ctx.XDG.Data, "devbox"),
-		Keyring: vault.SystemKeyring{}, Validator: st.env.validator,
+		Backend: backend, DataDir: filepath.Join(st.Ctx.XDG.Data, "devbox"),
+		Keyring: vault.SystemKeyring{}, Validator: st.Validator,
 	}
 	if passphrase {
 		switch strings.ToLower(backend) {
@@ -658,7 +657,7 @@ func (a *app) credSet(ctx context.Context, name string, fromStdin bool, expires 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	inst, _ = c.instance(name)
-	r, err := a.newRunner(c.st)
+	r, err := c.st.NewRunner()
 	if err != nil {
 		return err
 	}
@@ -706,7 +705,7 @@ func (a *app) credVerify(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	r, err := a.newRunner(c.st)
+	r, err := c.st.NewRunner()
 	if err != nil {
 		return err
 	}
@@ -771,7 +770,7 @@ func (a *app) verify(ctx context.Context, c *credCtx, r *runner.Runner, inst *cr
 // message, and an expiry date the action reported in result.data.expiresAt.
 func (a *app) runVerify(ctx context.Context, c *credCtx, r *runner.Runner, inst *credentials.Instance, secret, ref string) (ok bool, message, expiresAt string) {
 	pluginID, name, _ := strings.Cut(ref, ".")
-	p := findPlugin(c.plugins, pluginID)
+	p := core.FindPlugin(c.plugins, pluginID)
 	if p == nil || p.State != plugin.StateReady {
 		state := "missing"
 		if p != nil {
@@ -795,17 +794,17 @@ func (a *app) runVerify(ctx context.Context, c *credCtx, r *runner.Runner, inst 
 	if err := checkFields(inst, fields, td.fields()); err != nil {
 		return false, err.Error(), ""
 	}
-	params, err := actionParams(c.st, action, ref, nil)
+	params, err := c.st.ResolveParams(action, ref, nil)
 	if err != nil {
 		return false, err.Error(), ""
 	}
 	spec := runner.Spec{
 		Kind: runner.KindAction, SessionID: runner.NewSessionID(time.Now()),
-		PluginID: pluginID, PluginDir: p.Dir, Name: name, Command: anyStrings(action["run"]),
-		Params: params, Settings: c.st.result.Plugin(pluginID),
+		PluginID: pluginID, PluginDir: p.Dir, Name: name, Command: core.AnyStrings(action["run"]),
+		Params: params, Settings: c.st.Result.Plugin(pluginID),
 		Credential: credentialRequest(inst, fields, nil, secret), Secrets: []string{secret},
-		Lang: uiLanguage(c.st), Host: hostMap(c.st, a.io.Getenv), Locks: anyStrings(action["locks"]),
-		ExtraEnv: proxyEnv(c.st),
+		Lang: c.st.UILanguage(), Host: c.st.Host(), Locks: core.AnyStrings(action["locks"]),
+		ExtraEnv: c.st.ProxyEnv(),
 	}
 	if t, ok := action["timeout"].(string); ok {
 		spec.Timeout, _ = time.ParseDuration(t)
@@ -845,7 +844,7 @@ func (a *app) credApply(ctx context.Context, name string, dryRun bool) error {
 	if err != nil {
 		return err
 	}
-	r, err := a.newRunner(c.st)
+	r, err := c.st.NewRunner()
 	if err != nil {
 		return err
 	}
@@ -869,7 +868,7 @@ func (a *app) credRemove(ctx context.Context, name string, dryRun, force bool) e
 			_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", err)
 		}
 	}
-	r, err := a.newRunner(c.st)
+	r, err := c.st.NewRunner()
 	if err != nil {
 		return err
 	}
@@ -922,7 +921,7 @@ func (a *app) consumers(ctx context.Context, c *credCtx, r *runner.Runner, name,
 			failed = append(failed, id+": stopped")
 			continue
 		}
-		if p := findPlugin(c.plugins, id); p != nil && p.State == plugin.StateDisabled {
+		if p := core.FindPlugin(c.plugins, id); p != nil && p.State == plugin.StateDisabled {
 			a.say("– %s %s: skipped, the plugin is disabled\n", id, kind)
 			continue
 		}
@@ -960,7 +959,7 @@ func (a *app) consumers(ctx context.Context, c *credCtx, r *runner.Runner, name,
 }
 
 func (a *app) runConsumer(ctx context.Context, c *credCtx, r *runner.Runner, inst *credentials.Instance, id, secret, kind string, dryRun bool) (bool, string) {
-	p := findPlugin(c.plugins, id)
+	p := core.FindPlugin(c.plugins, id)
 	if p == nil {
 		return false, "no such plugin"
 	}
@@ -1002,10 +1001,10 @@ func (a *app) runConsumer(ctx context.Context, c *credCtx, r *runner.Runner, ins
 	}
 	spec := runner.Spec{
 		Kind: kind, SessionID: runner.NewSessionID(time.Now()),
-		PluginID: id, PluginDir: p.Dir, Name: inst.Type, Command: anyStrings(def[kind]),
-		Settings: c.st.result.Plugin(id), Credential: credentialRequest(inst, fields, options, secret),
-		Secrets: []string{secret}, DryRun: dryRun, Lang: uiLanguage(c.st), Host: hostMap(c.st, a.io.Getenv),
-		ExtraEnv: proxyEnv(c.st),
+		PluginID: id, PluginDir: p.Dir, Name: inst.Type, Command: core.AnyStrings(def[kind]),
+		Settings: c.st.Result.Plugin(id), Credential: credentialRequest(inst, fields, options, secret),
+		Secrets: []string{secret}, DryRun: dryRun, Lang: c.st.UILanguage(), Host: c.st.Host(),
+		ExtraEnv: c.st.ProxyEnv(),
 	}
 	verb := map[string]string{runner.KindApply: "Apply", runner.KindRemove: "Remove"}[kind]
 	res, err := a.runSession(ctx, c.st, r, spec, id+"."+kind, fmt.Sprintf("%s credential %s", verb, inst.Name))

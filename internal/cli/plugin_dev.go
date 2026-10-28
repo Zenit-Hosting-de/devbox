@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
+	"github.com/Zenit-Hosting-de/devbox/internal/core"
 	"github.com/Zenit-Hosting-de/devbox/internal/platform"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugintest"
@@ -134,7 +135,7 @@ func (a *app) pluginTest(ctx context.Context, dir string, apply, checksOnly bool
 	if err != nil {
 		return err
 	}
-	bin, err := selfPath(a.io.Getenv("PATH"))
+	bin, err := core.SelfPath(a.io.Getenv("PATH"))
 	if err != nil {
 		return err
 	}

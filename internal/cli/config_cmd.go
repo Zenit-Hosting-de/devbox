@@ -32,7 +32,7 @@ func (a *app) configGet(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	s, ok := st.result.Get(args[0])
+	s, ok := st.Result.Get(args[0])
 	if !ok {
 		return &config.Error{Code: config.CodeNotFound, Key: args[0], Detail: "no plugin defines this setting"}
 	}
@@ -48,7 +48,7 @@ func (a *app) configSet(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return config.Set(st.env.validator, st.env.userPath, st.defs, st.result, args[0], args[1])
+	return config.Set(st.Validator, st.UserPath, st.Defs, st.Result, args[0], args[1])
 }
 
 func (a *app) configUnset(_ *cobra.Command, args []string) error {
@@ -56,7 +56,7 @@ func (a *app) configUnset(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return config.Unset(e.validator, e.userPath, args[0])
+	return config.Unset(e.Validator, e.UserPath, args[0])
 }
 
 func (a *app) configExplain(_ *cobra.Command, args []string) error {
@@ -64,7 +64,7 @@ func (a *app) configExplain(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	ex, err := st.result.Explain(args[0])
+	ex, err := st.Result.Explain(args[0])
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (a *app) configValidate(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	for _, w := range st.result.Warnings {
+	for _, w := range st.Result.Warnings {
 		_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", w)
 	}
 	return nil
@@ -119,21 +119,21 @@ func (a *app) configEdit(cmd *cobra.Command, _ []string) error {
 	if editor == "" {
 		return &exitError{code: ExitInvalid, err: errors.New("VISUAL or EDITOR must name an editor")}
 	}
-	if _, err := os.Stat(e.userPath); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(e.UserPath); errors.Is(err, os.ErrNotExist) {
 		doc := jsonfile.NewObject()
-		if id, ok := e.validator.ID("config"); ok {
+		if id, ok := e.Validator.ID("config"); ok {
 			doc.Set("$schema", id)
 		}
 		data, err := jsonfile.Marshal(doc)
 		if err != nil {
 			return err
 		}
-		if err := jsonfile.WriteAtomic(e.userPath, data, 0o644); err != nil {
+		if err := jsonfile.WriteAtomic(e.UserPath, data, 0o644); err != nil {
 			return err
 		}
 	}
 	fields := strings.Fields(editor)
-	run := exec.CommandContext(cmd.Context(), fields[0], append(fields[1:], e.userPath)...) //nolint:gosec // the user's own editor
+	run := exec.CommandContext(cmd.Context(), fields[0], append(fields[1:], e.UserPath)...) //nolint:gosec // the user's own editor
 	run.Stdin, run.Stdout, run.Stderr = a.io.Stdin, a.io.Stdout, a.io.Stderr
 	if err := run.Run(); err != nil {
 		return fmt.Errorf("editor: %w", err)

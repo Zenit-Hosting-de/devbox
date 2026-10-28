@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
-	"github.com/Zenit-Hosting-de/devbox/internal/platform"
-	"github.com/Zenit-Hosting-de/devbox/internal/schema"
+	"github.com/Zenit-Hosting-de/devbox/internal/core"
 )
 
 // Exit codes of the CLI; they follow the plugin protocol (docs/concept.md, "CLI").
@@ -24,19 +22,13 @@ const (
 
 // SystemConfigEnv overrides the path of the system configuration, e.g. for tests and
 // images that keep it elsewhere.
-const SystemConfigEnv = "DEVBOX_SYSTEM_CONFIG"
+const SystemConfigEnv = core.SystemConfigEnv
 
 // DefaultSystemConfig is the system configuration (layer 2).
-const DefaultSystemConfig = "/etc/devbox/config.json"
+const DefaultSystemConfig = core.DefaultSystemConfig
 
 // Build describes the binary.
-type Build struct {
-	Vendor   string `json:"vendor"`
-	Version  string `json:"version"`
-	Commit   string `json:"commit"`
-	Date     string `json:"date"`
-	Protocol int    `json:"protocol"`
-}
+type Build = core.Build
 
 // IO bundles the process environment, so commands can run in tests.
 type IO struct {
@@ -137,38 +129,15 @@ func (a *app) printJSON(v any) error {
 	return enc.Encode(v)
 }
 
-// env holds what every command needs to load the configuration.
-type env struct {
-	validator  *schema.Validator
-	ctx        config.Context
-	userPath   string
-	systemPath string
+func (a *app) coreEnv() core.Env {
+	return core.Env{Getenv: a.io.Getenv, Environ: a.io.Environ, ConfigPath: a.configPath, Sets: a.sets}
 }
 
-func (a *app) env() (*env, error) {
-	v, err := schema.New()
-	if err != nil {
-		return nil, err
-	}
-	dirs, err := platform.XDG(a.io.Getenv)
-	if err != nil {
-		return nil, err
-	}
-	host, err := platform.DetectHost(platform.OSReleasePaths)
-	if err != nil {
-		return nil, err
-	}
-	e := &env{
-		validator:  v,
-		ctx:        config.Context{Getenv: a.io.Getenv, XDG: dirs, Host: host},
-		userPath:   a.configPath,
-		systemPath: a.io.Getenv(SystemConfigEnv),
-	}
-	if e.userPath == "" {
-		e.userPath = filepath.Join(dirs.Config, "devbox", "config.json")
-	}
-	if e.systemPath == "" {
-		e.systemPath = DefaultSystemConfig
-	}
-	return e, nil
+// env returns the directories and paths without loading the plugins.
+func (a *app) env() (*core.Base, error) { return core.NewBase(a.coreEnv()) }
+
+// load reads the configuration and the plugins; withCall adds the environment and
+// --set layers.
+func (a *app) load(withCall bool) (*core.State, error) {
+	return core.Load(a.coreEnv(), a.build, withCall)
 }

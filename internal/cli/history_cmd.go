@@ -35,7 +35,7 @@ func (a *app) historyStore() (*history.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return history.New(filepath.Join(e.ctx.XDG.State, "devbox"), e.validator), nil
+	return history.New(filepath.Join(e.Ctx.XDG.State, "devbox"), e.Validator), nil
 }
 
 // historyOutput is `devbox history --json`.
