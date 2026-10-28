@@ -88,7 +88,11 @@ func (f *fakeMaven) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if bad[version] {
 				text = strings.Repeat("0", len(text))
 			}
-			_, _ = io.WriteString(w, text+"\n")
+			// Like archive.apache.org, only 3.9.8 ends the file with a newline.
+			if version == "3.9.8" {
+				text += "\n"
+			}
+			_, _ = io.WriteString(w, text)
 		default:
 			http.NotFound(w, r)
 		}

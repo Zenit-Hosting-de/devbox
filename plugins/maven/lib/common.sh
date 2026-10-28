@@ -8,6 +8,15 @@ INSTALL_DIR=$(sdk setting installDir)
 ENV_FILE=$(sdk setting envFile)
 CURRENT="$INSTALL_DIR/current"
 
+# Every unexpected failure leaves a log line instead of a silent exit.
+# Failures that were reported already exit with code 3 and stay quiet here.
+set -E
+on_error() {
+  local rc=$1 line=$2
+  [ "$rc" -eq 3 ] || sdk emit log error "unexpected failure (exit $rc) at line $line"
+}
+trap 'on_error $? $LINENO' ERR
+
 is_dry_run() { [ "${DEVBOX_DRY_RUN:-0}" = 1 ]; }
 
 # json_str TEXT: TEXT as a JSON string.
@@ -90,7 +99,9 @@ install_version() {
       sdk emit log error "checksum file not reachable: $base.sha512"
       return 3
     }
-    read -r expected _ <"$sumfile"
+    # apache.org serves the .sha512 file without a trailing newline, which
+    # makes read return non-zero although it filled the variable.
+    read -r expected _ <"$sumfile" || [ -n "${expected:-}" ]
     got=$(sha512sum "$archive")
     got=${got%% *}
     rm -f "$sumfile"
