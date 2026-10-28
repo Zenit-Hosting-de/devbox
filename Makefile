@@ -95,9 +95,16 @@ build: ## Build the workspaces and the devbox binary into bin/
 	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/devbox
 
 .PHONY: dev
-dev: ## Run the core in the foreground
-	@# AP-14 adds `-tags dev` (UI served by the Angular dev server) and `ng serve` in parallel.
-	$(GO) run ./cmd/devbox
+dev: ## Run the core and the Angular dev server (UI on http://localhost:4200)
+	@# The dev server proxies /api to the core and its Origin is allowed explicitly.
+	trap 'kill 0' EXIT; \
+	$(GO) run ./cmd/devbox serve --allow-origin http://localhost:4200 & \
+	npm --workspace web run start & \
+	wait
+
+.PHONY: dev-mock
+dev-mock: ## Run the UI against typed mock data, without the core (http://localhost:4200)
+	npm --workspace web run start:mock
 
 .PHONY: test
 test: ## Run Go tests (race detector), CLI flows (testscript), workspace tests and plugin bats tests
