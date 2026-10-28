@@ -1,0 +1,157 @@
+# AP-18: the bundled consumer npm. Without a credential the action configure sets the
+# default registry and the check config shows it. As consumer it writes registry
+# credentials into .npmrc (file mode: token inside, mode 0600; env mode: reference to a
+# variable, token in the environment file) from the layout and the options, is
+# idempotent, reports in a dry run and removes exactly its own blocks again.
+
+registry start
+registry accept alice t0k3n-ok
+
+env DATA=$HOME/.local/share/devbox
+env NPMRC=$HOME/.npmrc
+env ENVFILE=$HOME/.config/devbox/env.d/npm.sh
+
+exec devbox plugin test --apply $REPO/plugins/npm
+stdout '^ok +validate +npm'
+stdout '^ok +dry-run +npm.configure'
+stdout '^ok +repeat +npm.configure +no changes'
+! stdout '^failed'
+
+# no credential: the check shows the fallback, configure sets the registry in a block
+exec devbox status
+stdout '^npm\.config +missing +https://registry\.npmjs\.org/ \(default, not set in '
+exec devbox run npm.configure --dry-run
+! exists home/.npmrc
+exec devbox run npm.configure --set npm.defaultRegistry=https://registry.example.com/
+grep '^# >>> devbox:npm >>>$' home/.npmrc
+grep '^registry=https://registry.example.com/$' home/.npmrc
+grep '^# <<< devbox:npm <<<$' home/.npmrc
+exec devbox run npm.configure --set npm.defaultRegistry=https://registry.example.com/ --json
+! stdout '"type":"change"'
+exec devbox status
+stdout '^npm\.config +ok +https://registry\.example\.com/$'
+# the block is replaced, not duplicated
+exec devbox run npm.configure -p registry=https://other.example.com
+! grep 'registry.example.com' home/.npmrc
+grep -count=1 '^registry=https://other.example.com/$' home/.npmrc
+rm home/.npmrc
+
+# file mode: nexus layout, repository name and scope, user name -> _auth (basic)
+cp pre.npmrc home/.npmrc
+chmod 644 home/.npmrc
+exec devbox cred add reg --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'npm:repository=npm-group,scopes=["@example","@other"]'
+stdin token.txt
+exec devbox cred set reg --from-stdin
+stdout '✓ npm apply'
+grep '^# >>> devbox:npm:reg >>>$' home/.npmrc
+grep '^@example:registry=http://127.0.0.1:[0-9]+/repository/npm-group/$' home/.npmrc
+grep '^@other:registry=http://127.0.0.1:[0-9]+/repository/npm-group/$' home/.npmrc
+grep '^//127.0.0.1:[0-9]+/repository/npm-group/:_auth=YWxpY2U6dDBrM24tb2s=$' home/.npmrc
+! grep 'always-auth' home/.npmrc
+grep '^; own setting$' home/.npmrc
+exec stat -c %a home/.npmrc
+stdout '^600$'
+exec devbox status
+stdout '^npm\.config +ok +https://own\.example\.com/ \(@example, @other\)$'
+
+# idempotent: a second apply changes nothing, a dry run reports nothing to do
+cp home/.npmrc npmrc.applied
+exec devbox cred apply reg
+cmp home/.npmrc npmrc.applied
+exec devbox cred apply reg --dry-run
+cmp home/.npmrc npmrc.applied
+
+# gitea layout: package API of the owner; a dry run after the fact changes nothing
+exec devbox cred add tea --type registry --field url=$REGISTRY --field layout=gitea --consumer 'npm:repository=acme,scopes=["@acme"]'
+stdin token.txt
+exec devbox cred set tea --from-stdin
+cp home/.npmrc npmrc.tea
+exec devbox cred apply tea
+cmp home/.npmrc npmrc.tea
+grep '^@acme:registry=http://127.0.0.1:[0-9]+/api/packages/acme/npm/$' home/.npmrc
+grep '^//127.0.0.1:[0-9]+/api/packages/acme/npm/:_authToken=t0k3n-ok$' home/.npmrc
+exec devbox cred remove tea --force
+
+# the token is not in output, history or events
+! exec grep -r 't0k3n' $HOME/.local/state/devbox/sessions $DATA/credentials.json
+
+# remove: back to the file as it was before
+exec devbox cred remove reg --force
+! grep 'devbox:npm:reg' home/.npmrc
+cmp home/.npmrc pre.npmrc
+rm home/.npmrc
+
+# token layouts and a full url; always-auth from the setting; a new file has mode 0600
+exec devbox config set npm.alwaysAuth true
+exec devbox cred add lab --type registry --field url=$REGISTRY --field layout=gitlab --consumer 'npm:repository=42,scopes=["@lab"]'
+stdin token.txt
+exec devbox cred set lab --from-stdin
+exec stat -c %a home/.npmrc
+stdout '^600$'
+grep '^@lab:registry=http://127.0.0.1:[0-9]+/api/v4/projects/42/packages/npm/$' home/.npmrc
+grep '^//127.0.0.1:[0-9]+/api/v4/projects/42/packages/npm/:_authToken=t0k3n-ok$' home/.npmrc
+grep '^//127.0.0.1:[0-9]+/api/v4/projects/42/packages/npm/:always-auth=true$' home/.npmrc
+exec devbox cred remove lab --force
+! exists home/.npmrc
+
+exec devbox cred add own --type registry --field url=$REGISTRY --field layout=custom --consumer 'npm:url=https://npm.example.com/registry'
+stdin token.txt
+exec devbox cred set own --from-stdin
+grep '^registry=https://npm.example.com/registry/$' home/.npmrc
+grep '^//npm.example.com/registry/:_authToken=t0k3n-ok$' home/.npmrc
+# custom without a full address is refused
+exec devbox cred add bad --type registry --field url=$REGISTRY --field layout=custom --consumer npm
+stdin token.txt
+! exec devbox cred set bad --from-stdin
+! exec devbox cred apply bad
+stdout 'layout custom needs the option url'
+exec devbox cred remove bad --force
+exec devbox cred remove own --force
+! exists home/.npmrc
+exec devbox config unset npm.alwaysAuth
+
+# env mode: .npmrc refers to the variable, the token is only in the environment file
+exec devbox config set npm.mode env
+cp pre.npmrc home/.npmrc
+exec devbox cred add team-registry --type registry --field url=$REGISTRY --field layout=artifactory --consumer 'npm:repository=npm-virtual,scopes=["@example"]'
+stdin token.txt
+exec devbox cred set team-registry --from-stdin
+grep '^//127.0.0.1:[0-9]+/artifactory/api/npm/npm-virtual/:_authToken=\$\{NPM_TOKEN_TEAM_REGISTRY\}$' home/.npmrc
+! grep 't0k3n' home/.npmrc
+grep '^export NPM_TOKEN_TEAM_REGISTRY=''t0k3n-ok''$' home/.config/devbox/env.d/npm.sh
+exec stat -c %a home/.config/devbox/env.d/npm.sh
+stdout '^600$'
+cp home/.npmrc npmrc.env
+exec devbox cred apply team-registry
+cmp home/.npmrc npmrc.env
+
+# switching to file mode moves the token and drops the environment file
+exec devbox config set npm.mode file
+exec devbox cred apply team-registry
+grep '^//127.0.0.1:[0-9]+/artifactory/api/npm/npm-virtual/:_authToken=t0k3n-ok$' home/.npmrc
+! exists home/.config/devbox/env.d/npm.sh
+exec devbox config set npm.mode env
+exec devbox cred apply team-registry
+exists home/.config/devbox/env.d/npm.sh
+
+# remove takes the blocks and the empty environment file with it
+exec devbox cred remove team-registry --force
+cmp home/.npmrc pre.npmrc
+! exists home/.config/devbox/env.d/npm.sh
+
+# the history knows the consumer runs
+exec devbox history --json
+stdout '"action": "npm.apply"'
+stdout '"action": "npm.remove"'
+! exec grep -r 't0k3n' $HOME/.local/state/devbox/sessions
+
+-- token.txt --
+t0k3n-ok
+-- pre.npmrc --
+; own setting
+registry=https://own.example.com/
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "disabled": ["base", "java"] },
+  "vault": { "backend": "age" }
+}
