@@ -175,6 +175,13 @@ exists home2/.bashrc
 ! exists home2/.zshrc
 ! exists home2/.config/environment.d/60-devbox.conf
 
+# no startup files yet: the missing files are not reported on stderr
+env HOME=$WORK/home3
+mkdir home3
+exec devbox run system.envLoader --json
+! stderr .
+exists home3/.bashrc
+
 -- home/.bashrc --
 alias ll='ls -l'
 -- home/.config/devbox/env.d/java.sh --

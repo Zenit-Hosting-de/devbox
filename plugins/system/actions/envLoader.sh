@@ -59,7 +59,7 @@ systemd_lines() {
 }
 
 # file_sum FILE: checksum of a file, empty when it does not exist.
-file_sum() { cksum <"$1" 2>/dev/null || true; }
+file_sum() { { cksum <"$1"; } 2>/dev/null || true; }
 
 mapfile -t shells < <(setting_list shells)
 
