@@ -280,6 +280,30 @@ func JSONGet(data []byte, pointer string) ([]any, error) {
 	return out, nil
 }
 
+// JSONKeys returns the keys of the object at a JSON Pointer, in document order. ok is
+// false when nothing is at the pointer.
+func JSONKeys(data []byte, pointer string) (keys []string, ok bool, err error) {
+	doc, err := jsonfile.Parse(data)
+	if err != nil {
+		return nil, false, err
+	}
+	v := doc
+	for _, tok := range splitPointer(pointer) {
+		obj, isObj := v.(*jsonfile.Object)
+		if !isObj {
+			return nil, false, nil
+		}
+		if v, ok = obj.Get(tok); !ok {
+			return nil, false, nil
+		}
+	}
+	obj, isObj := v.(*jsonfile.Object)
+	if !isObj {
+		return nil, true, fmt.Errorf("json-keys: %s is not an object", pointer)
+	}
+	return append([]string{}, obj.Keys()...), true, nil
+}
+
 func splitPointer(p string) []string {
 	if p == "" {
 		return nil

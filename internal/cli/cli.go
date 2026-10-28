@@ -112,7 +112,7 @@ func (a *app) rootCommand() *cobra.Command {
 	pf.BoolVar(&a.jsonOut, "json", false, "print JSON")
 	pf.StringVar(&a.configPath, "config", "", "user configuration file")
 	pf.StringArrayVar(&a.sets, "set", nil, "set a value for this call (key=value)")
-	root.AddCommand(a.versionCommand(), a.configCommand(), a.pluginCommand(), a.runCommand(), a.historyCommand(), a.logsCommand(), a.statusCommand(), a.sdkCommand())
+	root.AddCommand(a.versionCommand(), a.configCommand(), a.pluginCommand(), a.runCommand(), a.historyCommand(), a.logsCommand(), a.statusCommand(), a.credCommand(), a.sdkCommand())
 	return root
 }
 

@@ -120,42 +120,12 @@ func (a *app) run(ctx context.Context, ref string, f runFlags) error {
 		spec.Input = a.io.Stdin
 	}
 
-	store := history.New(r.Env.StateDir, st.env.validator)
-	sess, err := store.Create(spec.SessionID)
-	if err != nil {
-		return err
-	}
+	title, _ := action["label"].(string)
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	cb := runner.Callbacks{Output: io.MultiWriter(a.io.Stdout, sess)}
-	emit := func(msg map[string]any) {
-		ev := sess.Event(msg, time.Now())
-		if a.jsonOut {
-			_ = json.NewEncoder(a.io.Stdout).Encode(ev)
-		} else {
-			a.renderMessage(msg, spec.DryRun)
-		}
-		if msg["type"] == "setting" {
-			key := pluginID + "." + fmt.Sprint(msg["key"])
-			if err := config.Set(st.env.validator, st.env.userPath, st.defs, st.result, key, msg["value"]); err != nil {
-				_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", err)
-			}
-		}
-	}
-	cb.Message = emit
-	if a.jsonOut {
-		cb.Output = sess // JSON Lines only on stdout
-	}
-	res, err := r.Run(ctx, spec, cb)
-	if cerr := sess.Close(); cerr != nil {
-		_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", cerr)
-	}
+	res, err := a.runSession(ctx, st, r, spec, ref, title)
 	if err != nil {
 		return err
-	}
-	a.record(st, store, spec, action, res)
-	for _, w := range res.Warnings {
-		_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", w)
 	}
 	switch {
 	case res.State == runner.StateSuccess:
@@ -196,16 +166,56 @@ func (a *app) renderMessage(msg map[string]any, dryRun bool) {
 	}
 }
 
+// runSession runs one plugin process as a session of the history: output and events
+// go to the terminal (or JSON Lines with --json) and the session files, the history
+// line is written at the end. ref is the fully qualified action of the history line.
+func (a *app) runSession(ctx context.Context, st *state, r *runner.Runner, spec runner.Spec, ref, title string) (*runner.Result, error) {
+	store := history.New(r.Env.StateDir, st.env.validator)
+	sess, err := store.Create(spec.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	cb := runner.Callbacks{Output: io.MultiWriter(a.io.Stdout, sess)}
+	cb.Message = func(msg map[string]any) {
+		ev := sess.Event(msg, time.Now())
+		if a.jsonOut {
+			_ = json.NewEncoder(a.io.Stdout).Encode(ev)
+		} else {
+			a.renderMessage(msg, spec.DryRun)
+		}
+		if msg["type"] == "setting" {
+			key := spec.PluginID + "." + fmt.Sprint(msg["key"])
+			if err := config.Set(st.env.validator, st.env.userPath, st.defs, st.result, key, msg["value"]); err != nil {
+				_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", err)
+			}
+		}
+	}
+	if a.jsonOut {
+		cb.Output = sess // JSON Lines only on stdout
+	}
+	res, err := r.Run(ctx, spec, cb)
+	if cerr := sess.Close(); cerr != nil {
+		_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", cerr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	a.record(st, store, spec, ref, title, res)
+	for _, w := range res.Warnings {
+		_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", w)
+	}
+	return res, nil
+}
+
 // record writes the history line of a finished session and applies the retention
 // settings. Failures are warnings: the action itself has already run.
-func (a *app) record(st *state, store *history.Store, spec runner.Spec, action map[string]any, res *runner.Result) {
-	title, _ := action["label"].(string)
+func (a *app) record(st *state, store *history.Store, spec runner.Spec, ref, title string, res *runner.Result) {
 	if title == "" {
-		title = spec.PluginID + "." + spec.Name
+		title = ref
 	}
 	e := history.Entry{
 		ID:        spec.SessionID,
-		Action:    spec.PluginID + "." + spec.Name,
+		Action:    ref,
 		Plugin:    spec.PluginID,
 		Title:     title,
 		User:      st.env.ctx.Host.User,
@@ -283,15 +293,7 @@ func actionParams(st *state, action map[string]any, ref string, given []string) 
 		}
 		out[name] = v
 	}
-	lookup := func(r string) (any, error) {
-		if config.ValidKey(r) {
-			if s, ok := st.result.Get(r); ok {
-				return s.Value, nil
-			}
-			return nil, fmt.Errorf("unknown setting %s", r)
-		}
-		return config.ContextLookup(st.env.ctx, r)
-	}
+	lookup := settingLookup(st)
 	names := make([]string, 0, len(fields))
 	for name := range fields {
 		names = append(names, name)
@@ -319,6 +321,19 @@ func actionParams(st *state, action map[string]any, ref string, given []string) 
 		}
 	}
 	return out, nil
+}
+
+// settingLookup resolves placeholders in defaults: settings and context values.
+func settingLookup(st *state) func(string) (any, error) {
+	return func(r string) (any, error) {
+		if config.ValidKey(r) {
+			if s, ok := st.result.Get(r); ok {
+				return s.Value, nil
+			}
+			return nil, fmt.Errorf("unknown setting %s", r)
+		}
+		return config.ContextLookup(st.env.ctx, r)
+	}
 }
 
 // confirm asks on the terminal; without a terminal the answer is no.

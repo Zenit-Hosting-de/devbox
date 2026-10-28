@@ -18,7 +18,7 @@ stdout '"checkedAt": "[0-9T:Z-]+"'
 stdout '"host": \{'
 
 -- home/.config/devbox/config.json --
-{ "plugins": { "disabled": ["base", "java"] } }
+{ "plugins": { "disabled": ["base", "credentials", "java"] } }
 -- home/.local/share/devbox/plugins/demo/plugin.json --
 {
   "id": "demo",

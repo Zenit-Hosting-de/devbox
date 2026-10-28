@@ -1,0 +1,14 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "Paket-Registry",
+  "plugin.description": "Zugangstyp für Paket-Registries mit Prüfung gegen die Registry",
+  "settings.verifyPaths.label": "Prüfpfad je Art der Registry",
+  "settings.verifyPaths.help": "Pfad unter der Adresse der Registry, den die Prüfung abfragt, je Art. Leer: nur prüfen, ob die Registry antwortet.",
+  "settings.timeout.label": "Zeitgrenze der Prüfung in Sekunden",
+  "credentialTypes.registry.label": "Paket-Registry",
+  "credentialTypes.registry.fields.url.label": "Adresse",
+  "credentialTypes.registry.fields.layout.label": "Art der Registry",
+  "credentialTypes.registry.fields.username.label": "Benutzername",
+  "credentialTypes.registry.secret.label": "Token oder Passwort",
+  "actions.verify.label": "Zugangsdaten prüfen"
+}

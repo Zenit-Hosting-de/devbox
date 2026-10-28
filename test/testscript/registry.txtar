@@ -1,0 +1,71 @@
+# AP-16: the bundled registry plugin defines the credential type registry and
+# verifies an instance against the registry (here a fake one) with the
+# authentication of its layout. A failed verification records the result and keeps
+# the consumers from being applied.
+
+registry start
+registry accept alice t0k3n-ok
+
+exec devbox plugin test --apply $REPO/plugins/registry
+stdout '^ok +validate +registry'
+stdout '^ok +dry-run +registry.verify'
+stdout '^ok +repeat +registry.verify +no changes'
+! stdout '^failed'
+
+# nexus with user name: basic authentication; a wrong token is rejected
+exec devbox cred add nexus --type registry --field url=$REGISTRY --field username=alice
+stdin wrong.txt
+! exec devbox cred set nexus --from-stdin
+stderr '✗ nexus not verified: Rejected by the registry \(HTTP 401\) \(exit 1\)'
+stderr 'verification failed; the consumers were not applied'
+grep '"status": "failed"' home/.local/share/devbox/credentials.json
+exec devbox cred list
+stdout '^nexus +registry +user +set +failed +-$'
+
+stdin right.txt
+exec devbox cred set nexus --from-stdin
+stdout '✓ nexus verified: Accepted by the registry \(HTTP 200\)'
+grep '"status": "ok"' home/.local/share/devbox/credentials.json
+grep '"message": "Accepted by the registry \(HTTP 200\)"' home/.local/share/devbox/credentials.json
+exec devbox cred verify nexus
+stdout '✓ nexus verified'
+
+# gitlab sends the token as PRIVATE-TOKEN, gitea without user name as token
+exec devbox cred add lab --type registry --field url=$REGISTRY/ --field layout=gitlab
+stdin right.txt
+exec devbox cred set lab --from-stdin
+exec devbox cred add tea --type registry --field url=$REGISTRY --field layout=gitea
+stdin right.txt
+exec devbox cred set tea --from-stdin
+stdout '✓ tea verified'
+
+# custom without a path only checks that the registry answers
+exec devbox cred add own --type registry --field url=$REGISTRY --field layout=custom
+stdin wrong.txt
+exec devbox cred set own --from-stdin
+stdout '✓ own verified: Registry reachable \(HTTP 401\); the credential itself is not checked'
+
+# an unreachable registry blocks the verification (exit 3 of the action)
+exec devbox cred add gone --type registry --field url=http://127.0.0.1:1
+stdin right.txt
+! exec devbox cred set gone --from-stdin
+stderr '✗ gone not verified: Registry not reachable: http://127.0.0.1:1/service/rest/v1/status/check \(exit 3\)'
+
+registry log
+stdout '^GET /service/rest/v1/status/check auth=basic:alice$'
+stdout '^GET /api/v4/user auth=private-token$'
+stdout '^GET /api/v1/user auth=token$'
+stdout '^GET / auth=bearer$'
+
+# the token never reaches output, history or events
+! exec grep -r 't0k3n' home/.local/state home/.local/share/devbox/credentials.json
+
+-- wrong.txt --
+wrong-t0k3n
+-- right.txt --
+t0k3n-ok
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "disabled": ["base", "java"] },
+  "vault": { "backend": "age" }
+}
