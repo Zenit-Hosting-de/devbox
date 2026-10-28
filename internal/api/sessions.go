@@ -172,13 +172,15 @@ func (s *Server) runLive(ctx context.Context, cancel context.CancelFunc, st *cor
 	res, err := core.RunSession(ctx, st, rn, spec, ref, title, origin, sink)
 	if err != nil {
 		s.log.Error("session failed to run", "id", id, "action", ref, "error", err)
+	}
+	if res != nil {
+		final = sessionOf(core.Entry(st, spec, ref, title, origin, res))
+	} else { // the history line could not even be built
 		now := history.Timestamp(time.Now())
 		final = Session{
 			ID: id, Action: ref, Plugin: spec.PluginID, Title: title, User: live.user, Origin: origin,
-			State: runner.StateFailed, DryRun: spec.DryRun, StartedAt: now, EndedAt: now, Summary: "the session could not run",
+			State: runner.StateFailed, DryRun: spec.DryRun, StartedAt: now, EndedAt: now, Summary: core.FailedSummary,
 		}
-	} else {
-		final = sessionOf(core.Entry(st, spec, ref, title, origin, res))
 	}
 	live.finish(final)
 	s.live.remove(id) // the history has the entry now

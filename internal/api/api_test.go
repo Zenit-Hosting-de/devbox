@@ -8,6 +8,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/Zenit-Hosting-de/devbox/internal/core"
 )
 
 func field(m map[string]any, path ...string) any {
@@ -337,12 +339,47 @@ func TestChecks(t *testing.T) {
 
 func TestCheckRefreshCoalesces(t *testing.T) {
 	c := newCheckCache()
-	if !c.claim("demo.state") || c.claim("demo.state") {
+	gen, ok := c.claim("demo.state")
+	if !ok {
+		t.Fatal("the first claim must succeed")
+	}
+	if _, again := c.claim("demo.state"); again {
 		t.Error("a check that already runs must not be claimed twice")
 	}
-	c.release([]string{"demo.state"})
-	if !c.claim("demo.state") {
+	c.release(map[string]uint64{"demo.state": gen})
+	if _, ok := c.claim("demo.state"); !ok {
 		t.Error("a released check can run again")
+	}
+}
+
+// A batch that ends must not release the claim of a newer refresh of a check whose
+// result it had already stored.
+func TestCheckReleaseKeepsNewerClaim(t *testing.T) {
+	c := newCheckCache()
+	first, _ := c.claim("demo.state")
+	c.store(core.CheckOutcome{ID: "demo.state", Status: "ok"}, first)
+	if c.isRunning("demo.state") {
+		t.Fatal("the result ends the claim")
+	}
+	second, ok := c.claim("demo.state") // a second refresh, while the first batch is still running
+	if !ok {
+		t.Fatal("the check can be claimed after its result arrived")
+	}
+	c.release(map[string]uint64{"demo.state": first}) // the first batch ends
+	if !c.isRunning("demo.state") {
+		t.Fatal("the end of the first batch released the claim of the second refresh")
+	}
+	if _, third := c.claim("demo.state"); third {
+		t.Error("a third refresh must coalesce with the second")
+	}
+	// a late result of the old batch does not end the newer claim either
+	c.store(core.CheckOutcome{ID: "demo.state", Status: "ok"}, first)
+	if !c.isRunning("demo.state") {
+		t.Error("a stale result released the newer claim")
+	}
+	c.store(core.CheckOutcome{ID: "demo.state", Status: "ok"}, second)
+	if c.isRunning("demo.state") {
+		t.Error("the result of the current claim must end it")
 	}
 }
 

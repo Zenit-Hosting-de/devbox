@@ -21,15 +21,8 @@ func (a *app) statusCommand() *cobra.Command {
 // statusOutput is `devbox status --json` (docs/concept.md, CLI example).
 type statusOutput struct {
 	Host    map[string]any `json:"host"`
-	Summary statusSummary  `json:"summary"`
+	Summary core.Summary   `json:"summary"`
 	Checks  []checkLine    `json:"checks"`
-}
-
-type statusSummary struct {
-	OK      int `json:"ok"`
-	Warn    int `json:"warn"`
-	Error   int `json:"error"`
-	Missing int `json:"missing"`
 }
 
 type checkLine struct {
@@ -56,19 +49,7 @@ func (a *app) status(ctx context.Context) error {
 		lines[i] = checkLine{ID: o.ID, Status: o.Status, Summary: o.Summary, CheckedAt: o.CheckedAt}
 	}
 
-	var sum statusSummary
-	for _, l := range lines {
-		switch l.Status {
-		case "ok":
-			sum.OK++
-		case "warn":
-			sum.Warn++
-		case "missing":
-			sum.Missing++
-		default:
-			sum.Error++
-		}
-	}
+	sum := core.Summarize(outcomes)
 	if a.jsonOut {
 		return a.printJSON(statusOutput{Host: host, Summary: sum, Checks: append([]checkLine{}, lines...)})
 	}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
 	"github.com/Zenit-Hosting-de/devbox/internal/history"
@@ -285,5 +286,50 @@ func TestCredentialsEmpty(t *testing.T) {
 	got, err := Credentials(st)
 	if err != nil || len(got) != 0 {
 		t.Errorf("credentials = %v, %v", got, err)
+	}
+}
+
+func TestSummarize(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		want Summary
+	}{
+		{"empty", nil, Summary{}},
+		{"each status", []string{"ok", "ok", "warn", "missing", "error"}, Summary{OK: 2, Warn: 1, Missing: 1, Error: 1}},
+		{"unknown counts as error", []string{"bogus", ""}, Summary{Error: 2}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var in []CheckOutcome
+			for _, s := range tt.in {
+				in = append(in, CheckOutcome{Status: s})
+			}
+			if got := Summarize(in); got != tt.want {
+				t.Errorf("Summarize = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStampTimes(t *testing.T) {
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	earlier := now.Add(-time.Hour)
+	tests := []struct {
+		name                   string
+		started, ended         time.Time
+		wantStarted, wantEnded time.Time
+	}{
+		{"never started", time.Time{}, time.Time{}, now, now},
+		{"ran", earlier, earlier.Add(time.Minute), earlier, earlier.Add(time.Minute)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			res := &runner.Result{Started: tt.started, Ended: tt.ended}
+			stampTimes(res, now)
+			if !res.Started.Equal(tt.wantStarted) || !res.Ended.Equal(tt.wantEnded) {
+				t.Errorf("times = %v, %v", res.Started, res.Ended)
+			}
+		})
 	}
 }

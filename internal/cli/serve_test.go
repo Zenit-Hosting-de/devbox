@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -216,4 +218,72 @@ func TestServeWarnsAboutAuthOff(t *testing.T) {
 	if !strings.Contains(logs.String(), `"level":"WARN"`) || !strings.Contains(logs.String(), "server.auth is off") {
 		t.Errorf("no warning about auth off:\n%s", logs)
 	}
+}
+
+func TestListenSocketDirectories(t *testing.T) {
+	mode := func(t *testing.T, path string) os.FileMode {
+		t.Helper()
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info.Mode().Perm()
+	}
+	listen := func(t *testing.T, path string) {
+		t.Helper()
+		ln, err := listenSocket(context.Background(), path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = ln.Close() })
+		if got := mode(t, path); got != 0o600 {
+			t.Errorf("socket mode = %v, want 0600", got)
+		}
+	}
+
+	t.Run("existing directory keeps its mode", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.Chmod(dir, 0o755); err != nil { //nolint:gosec // the test needs a shared directory
+			t.Fatal(err)
+		}
+		listen(t, filepath.Join(dir, "api.sock"))
+		if got := mode(t, dir); got != 0o755 {
+			t.Errorf("directory mode = %v, want 0755 (untouched)", got)
+		}
+	})
+
+	t.Run("directory owned by someone else is not touched", func(t *testing.T) {
+		// like --socket /tmp/api.sock: the sticky world-writable directory cannot be chmod-ed
+		dir := t.TempDir()
+		if err := os.Chmod(dir, 0o1777); err != nil { //nolint:gosec // the test needs a sticky shared directory
+			t.Fatal(err)
+		}
+		listen(t, filepath.Join(dir, "api.sock"))
+		if got := mode(t, dir); got != 0o777 {
+			t.Errorf("directory mode = %v, want 0777 (untouched)", got)
+		}
+	})
+
+	t.Run("missing directory is created private", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "devbox")
+		listen(t, filepath.Join(dir, "api.sock"))
+		if got := mode(t, dir); got != 0o700 {
+			t.Errorf("directory mode = %v, want 0700", got)
+		}
+	})
+
+	t.Run("socket in use and stale socket", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "api.sock")
+		ln, err := listenSocket(context.Background(), path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := listenSocket(context.Background(), path); err == nil {
+			t.Error("a socket in use must be refused")
+		}
+		// a stale socket is a file nobody listens on: closing without unlinking leaves one
+		ln.(*net.UnixListener).SetUnlinkOnClose(false)
+		_ = ln.Close()
+		listen(t, path)
+	})
 }

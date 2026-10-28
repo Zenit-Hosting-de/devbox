@@ -3,11 +3,15 @@ package api
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Zenit-Hosting-de/devbox/internal/core"
 )
 
 func TestSessionEndToEnd(t *testing.T) {
@@ -349,4 +353,93 @@ func TestShutdownStopsSessions(t *testing.T) {
 	if r.code != http.StatusServiceUnavailable {
 		t.Errorf("status %d", r.code)
 	}
+}
+
+func TestCancelQueuedSession(t *testing.T) {
+	e := newTestEnv(t)
+	id := e.start(`{"action":"demo.slow"}`)
+	e.waitLog(id, "started")
+	queued := e.start(`{"action":"demo.fail"}`)
+	if st := e.get("/sessions/" + queued).json(t)["state"]; st != "queued" {
+		t.Fatalf("state = %v, want queued", st)
+	}
+
+	e.wantStatus(e.request(http.MethodPost, "/sessions/"+queued+"/cancel", nil), http.StatusAccepted)
+	done := e.waitFinished(queued)
+	if done["state"] != "stopped" {
+		t.Errorf("cancelled queued session = %v", done)
+	}
+	// the session stays findable: in the history, with real times, and in the list
+	entry, ok, err := e.store().Get(queued)
+	if err != nil || !ok {
+		t.Fatalf("history entry of the queued session: %v %v", ok, err)
+	}
+	if entry.State != "stopped" || strings.HasPrefix(entry.EndedAt, "0001") || strings.HasPrefix(entry.StartedAt, "0001") {
+		t.Errorf("entry = %+v", entry)
+	}
+	if !e.listed("/sessions?state=stopped", queued) {
+		t.Error("the cancelled session is missing from the session list")
+	}
+	e.request(http.MethodPost, "/sessions/"+id+"/cancel", nil)
+	e.waitFinished(id)
+}
+
+func TestShutdownWithQueuedSession(t *testing.T) {
+	e := newTestEnv(t)
+	id := e.start(`{"action":"demo.slow"}`)
+	e.waitLog(id, "started")
+	queued := e.start(`{"action":"demo.fail"}`)
+	if st := e.get("/sessions/" + queued).json(t)["state"]; st != "queued" {
+		t.Fatalf("state = %v, want queued", st)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := e.srv.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, sid := range []string{id, queued} {
+		entry, ok, err := e.store().Get(sid)
+		if err != nil || !ok {
+			t.Fatalf("history entry of %s: %v %v", sid, ok, err)
+		}
+		if entry.State != "stopped" || strings.HasPrefix(entry.EndedAt, "0001") {
+			t.Errorf("entry of %s = %+v", sid, entry)
+		}
+	}
+}
+
+func TestSessionThatCannotRun(t *testing.T) {
+	e := newTestEnv(t)
+	// the process cannot be started: the answer is 201 and the session ends as failed
+	if err := os.Chmod(filepath.Join(e.plugins, "demo", "act.sh"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	id := e.start(`{"action":"demo.fail"}`)
+	s := e.waitFinished(id)
+	if s["state"] != "failed" {
+		t.Errorf("session = %v", s)
+	}
+	entry, ok, err := e.store().Get(id)
+	if err != nil || !ok {
+		t.Fatalf("history entry: %v %v", ok, err)
+	}
+	if entry.State != "failed" || entry.Summary != core.FailedSummary || strings.HasPrefix(entry.EndedAt, "0001") {
+		t.Errorf("entry = %+v", entry)
+	}
+	e.wantStatus(e.get("/sessions/"+id), http.StatusOK)
+	if !e.listed("/sessions", id) {
+		t.Error("the failed session is missing from the session list")
+	}
+}
+
+// listed reports whether the session list at path contains the session id.
+func (e *testEnv) listed(path, id string) bool {
+	e.t.Helper()
+	for _, s := range e.get(path).json(e.t)["sessions"].([]any) {
+		if s.(map[string]any)["id"] == id {
+			return true
+		}
+	}
+	return false
 }

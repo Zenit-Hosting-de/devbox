@@ -300,7 +300,7 @@ devbox serve --listen 127.0.0.1:0 --open
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--listen ADDR`      | Address to listen on. Default: `server.listen` (user file, then system file, then the schema default `127.0.0.1:7878`).                                                                           |
 | `--open`             | Open the URL with `$BROWSER`, else `xdg-open`. A failure is only a warning.                                                                                                                       |
-| `--socket PATH`      | Unix socket. Default `$XDG_RUNTIME_DIR/devbox/api.sock` (directory 0700, socket 0600, a stale socket is replaced). Without `XDG_RUNTIME_DIR` and `--socket` the socket is skipped with a warning. |
+| `--socket PATH`      | Unix socket. Default `$XDG_RUNTIME_DIR/devbox/api.sock` (directory 0700, socket 0600, a stale socket is replaced). A socket directory that does not exist is created with 0700; an existing one, for example `$HOME` or `/tmp`, keeps its mode. Without `XDG_RUNTIME_DIR` and `--socket` the socket is skipped with a warning. |
 | `--allow-origin URL` | Allow one more origin for this run, on top of `server.allowedOrigins`. Repeatable.                                                                                                                |
 
 **Listen address and login.** `server.auth` is `local` (default) or `off`; both are

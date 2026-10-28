@@ -41,11 +41,13 @@ type cachedCheck struct {
 type checkCache struct {
 	mu      sync.Mutex
 	results map[string]cachedCheck
-	running map[string]bool
+	// running holds, per running check, the generation of the claim that started it.
+	running map[string]uint64
+	gen     uint64
 }
 
 func newCheckCache() *checkCache {
-	return &checkCache{results: map[string]cachedCheck{}, running: map[string]bool{}}
+	return &checkCache{results: map[string]cachedCheck{}, running: map[string]uint64{}}
 }
 
 func (c *checkCache) get(id string) (cachedCheck, bool) {
@@ -55,29 +57,38 @@ func (c *checkCache) get(id string) (cachedCheck, bool) {
 	return r, ok
 }
 
-// claim marks a check as running; it reports false when it already runs, so
-// concurrent refreshes of the same check coalesce.
-func (c *checkCache) claim(id string) bool {
+// claim marks a check as running and returns the generation of the claim; it
+// reports false when the check already runs, so concurrent refreshes coalesce.
+func (c *checkCache) claim(id string) (uint64, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.running[id] {
-		return false
+	if _, ok := c.running[id]; ok {
+		return 0, false
 	}
-	c.running[id] = true
-	return true
+	c.gen++
+	c.running[id] = c.gen
+	return c.gen, true
 }
 
-func (c *checkCache) store(o core.CheckOutcome) {
+// store keeps the result of a check and ends the claim gen that produced it. A newer
+// claim of the same check, made after this result arrived, stays.
+func (c *checkCache) store(o core.CheckOutcome, gen uint64) {
 	c.mu.Lock()
 	c.results[o.ID] = cachedCheck{out: o, at: time.Now()}
-	delete(c.running, o.ID)
+	if c.running[o.ID] == gen {
+		delete(c.running, o.ID)
+	}
 	c.mu.Unlock()
 }
 
-func (c *checkCache) release(ids []string) {
+// release ends the claims of a batch that are still current: a check that got no
+// outcome. Claims that were replaced by a newer refresh are left alone.
+func (c *checkCache) release(claims map[string]uint64) {
 	c.mu.Lock()
-	for _, id := range ids {
-		delete(c.running, id)
+	for id, gen := range claims {
+		if c.running[id] == gen {
+			delete(c.running, id)
+		}
 	}
 	c.mu.Unlock()
 }
@@ -85,7 +96,8 @@ func (c *checkCache) release(ids []string) {
 func (c *checkCache) isRunning(id string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.running[id]
+	_, ok := c.running[id]
+	return ok
 }
 
 // StartChecks starts a background refresh of all checks.
@@ -103,12 +115,13 @@ func (s *Server) refreshWhere(match func(core.CheckRef) bool) {
 		s.log.Warn("checks: cannot prepare the runner", "error", err)
 		return
 	}
-	var claimed []string
-	set := map[string]bool{}
+	claimed := map[string]uint64{}
 	for _, c := range core.Checks(st.Evaluate()) {
-		if match(c) && s.checks.claim(c.ID()) {
-			claimed = append(claimed, c.ID())
-			set[c.ID()] = true
+		if !match(c) {
+			continue
+		}
+		if gen, ok := s.checks.claim(c.ID()); ok {
+			claimed[c.ID()] = gen
 		}
 	}
 	if len(claimed) == 0 {
@@ -116,8 +129,8 @@ func (s *Server) refreshWhere(match func(core.CheckRef) bool) {
 	}
 	if !s.spawn(func() {
 		defer s.checks.release(claimed)
-		core.RunChecksNotify(s.ctx, st, rn, func(ref string) bool { return set[ref] }, func(o core.CheckOutcome) {
-			s.checks.store(o)
+		core.RunChecksNotify(s.ctx, st, rn, func(ref string) bool { _, ok := claimed[ref]; return ok }, func(o core.CheckOutcome) {
+			s.checks.store(o, claimed[o.ID])
 			s.bc.CheckChanged(summaryOf(o))
 		})
 	}) {
@@ -147,16 +160,9 @@ func (s *Server) refreshAfterSession(pluginID, ref string) {
 // StatusReport is GET /checks (api/openapi.json, StatusReport).
 type StatusReport struct {
 	Host    map[string]any `json:"host"`
-	Summary statusSummary  `json:"summary"`
+	Summary core.Summary   `json:"summary"`
 	Checks  []CheckSummary `json:"checks"`
 	Running []string       `json:"running,omitempty"`
-}
-
-type statusSummary struct {
-	OK      int `json:"ok"`
-	Warn    int `json:"warn"`
-	Error   int `json:"error"`
-	Missing int `json:"missing"`
 }
 
 func (s *Server) listChecks(w http.ResponseWriter, r *http.Request) error {
@@ -168,6 +174,7 @@ func (s *Server) listChecks(w http.ResponseWriter, r *http.Request) error {
 	now := time.Now()
 	report := StatusReport{Host: st.Host(), Checks: []CheckSummary{}}
 	stale := map[string]bool{}
+	var known []core.CheckOutcome
 	for _, c := range refs {
 		id := c.ID()
 		if s.checks.isRunning(id) {
@@ -179,20 +186,12 @@ func (s *Server) listChecks(w http.ResponseWriter, r *http.Request) error {
 			continue
 		}
 		report.Checks = append(report.Checks, summaryOf(cached.out))
-		switch cached.out.Status {
-		case "ok":
-			report.Summary.OK++
-		case "warn":
-			report.Summary.Warn++
-		case "missing":
-			report.Summary.Missing++
-		default:
-			report.Summary.Error++
-		}
+		known = append(known, cached.out)
 		if ttl := cached.out.Cache; ttl > 0 && now.Sub(cached.at) > ttl {
 			stale[id] = true
 		}
 	}
+	report.Summary = core.Summarize(known)
 	if len(stale) > 0 {
 		s.refreshWhere(func(c core.CheckRef) bool { return stale[c.ID()] })
 		// Checks that were just claimed now count as running.

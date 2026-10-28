@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -137,15 +138,21 @@ func (a *app) serve(ctx context.Context, f serveFlags) error {
 	return nil
 }
 
-// listenSocket creates the socket directory (0700) and the socket (0600) and removes
-// a stale socket of a process that is gone.
+// listenSocket creates the socket (0600) and removes a stale socket of a process that
+// is gone. A missing socket directory is created with mode 0700; an existing directory
+// (for example $HOME or /tmp given with --socket) belongs to the user and keeps its
+// mode, the socket file itself is what restricts access.
 func listenSocket(ctx context.Context, path string) (net.Listener, error) {
 	dir := filepath.Dir(path)
+	_, statErr := os.Stat(dir)
+	created := errors.Is(statErr, fs.ErrNotExist)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("socket: %w", err)
 	}
-	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a private directory needs the execute bit
-		return nil, fmt.Errorf("socket: %w", err)
+	if created {
+		if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a private directory needs the execute bit
+			return nil, fmt.Errorf("socket: %w", err)
+		}
 	}
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSocket == 0 {

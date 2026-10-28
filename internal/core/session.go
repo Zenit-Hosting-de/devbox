@@ -68,7 +68,8 @@ func (w *outputWriter) Write(p []byte) (int, error) {
 // RunSession runs one plugin process as a session of the history: output and events
 // go to the sink and the session files, the history line is written at the end and the
 // retention settings are applied. ref is the fully qualified action of the history
-// line, origin one of the history origins.
+// line, origin one of the history origins. When the process could not be started the
+// failed result is returned together with the error; its history line is written too.
 func RunSession(ctx context.Context, st *State, r *runner.Runner, spec runner.Spec, ref, title, origin string, sink Sink) (*runner.Result, error) {
 	store := history.New(r.Env.StateDir, st.Validator)
 	sess, err := store.Create(spec.SessionID)
@@ -112,13 +113,37 @@ func RunSession(ctx context.Context, st *State, r *runner.Runner, spec runner.Sp
 		sink.warn(cerr.Error())
 	}
 	if err != nil {
-		return nil, err
+		// The process did not run (request file, start failure): the session still
+		// gets a history line, so it can be found and its files are pruned later.
+		now := time.Now()
+		res = &runner.Result{
+			State: runner.StateFailed, ExitCode: -1, Started: now, Ended: now,
+			Result: map[string]any{"summary": FailedSummary},
+		}
+		record(st, store, spec, ref, title, origin, res, sink)
+		return res, err
 	}
+	stampTimes(res, time.Now())
 	record(st, store, spec, ref, title, origin, res, sink)
 	for _, w := range res.Warnings {
 		sink.warn(w)
 	}
 	return res, nil
+}
+
+// FailedSummary is the summary of a session whose process could not be started.
+const FailedSummary = "the session could not run"
+
+// stampTimes fills the times of a run that never started, for example a session that
+// was stopped while it waited for a lock. A history line without times would count
+// as infinitely old and be pruned at once.
+func stampTimes(res *runner.Result, now time.Time) {
+	if res.Started.IsZero() {
+		res.Started = now
+	}
+	if res.Ended.IsZero() {
+		res.Ended = now
+	}
 }
 
 func stringOf(v any) string {

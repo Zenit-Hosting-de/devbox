@@ -43,6 +43,33 @@ type CheckOutcome struct {
 	RefreshOn []string
 }
 
+// Summary counts check results by status (api/openapi.json, StatusReport.summary).
+type Summary struct {
+	OK      int `json:"ok"`
+	Warn    int `json:"warn"`
+	Error   int `json:"error"`
+	Missing int `json:"missing"`
+}
+
+// Summarize counts the outcomes by status; every status other than ok, warn and
+// missing counts as error.
+func Summarize(outcomes []CheckOutcome) Summary {
+	var sum Summary
+	for _, o := range outcomes {
+		switch o.Status {
+		case "ok":
+			sum.OK++
+		case "warn":
+			sum.Warn++
+		case "missing":
+			sum.Missing++
+		default:
+			sum.Error++
+		}
+	}
+	return sum
+}
+
 // CheckRef is one check of a ready plugin.
 type CheckRef struct {
 	Plugin *plugin.Plugin
