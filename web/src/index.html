@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en" class="z-root">
+  <head>
+    <meta charset="utf-8" />
+    <!-- No <base>: the core's Content-Security-Policy has base-uri 'none'. The production build
+         writes absolute URLs (deployUrl), the router gets its base through APP_BASE_HREF. -->
+    <!-- Applies the stored colour scheme before the first paint. A file, not inline: the core
+         sends a Content-Security-Policy with script-src 'self'. -->
+    <script src="/theme-init.js"></script>
+    <title>DevBox</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body class="z-root">
+    <dbx-root></dbx-root>
+  </body>
+</html>
