@@ -23,16 +23,26 @@ builds:
       - -s -w -X main.version={{ .Version }} -X main.commit={{ .ShortCommit }} -X main.date={{ .CommitDate }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
+# Archive name: devbox_<version>_linux_<arch>.tar.gz (version without the leading "v",
+# arch amd64 or arm64), with the binary `devbox` at the top level. The system plugin
+# downloads exactly these names; see docs/usage.md, "Updating DevBox".
 archives:
   - id: devbox
     formats:
       - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: false
 
 checksum:
   name_template: checksums.txt
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
+
+# release-please creates the release and writes its notes; GoReleaser only attaches the
+# archives and checksums.txt and keeps the notes as they are.
+release:
+  mode: keep-existing
 
 # release-please maintains CHANGELOG.md and the release notes.
 changelog:

@@ -32,6 +32,7 @@ func TestScripts(t *testing.T) {
 		Dir: "../../test/testscript",
 		Cmds: map[string]func(*testscript.TestScript, bool, []string){
 			"adoptium": cmdAdoptium,
+			"releases": cmdReleases,
 			"nodedist": cmdNodeDist,
 		},
 		Setup: func(e *testscript.Env) error {

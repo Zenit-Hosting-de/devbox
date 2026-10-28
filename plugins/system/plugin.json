@@ -1,0 +1,123 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "system",
+  "version": "1.0.0",
+  "name": "System",
+  "description": "Machine data, the environment loader for shells and systemd, and self-update of DevBox",
+  "category": "core",
+  "icon": "cpu",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["tar"]
+  },
+  "permissions": {
+    "network": [
+      "${system.releaseUrl}",
+      "https://github.com",
+      "https://objects.githubusercontent.com"
+    ],
+    "files": {
+      "read": ["${env:HOME}"],
+      "write": [
+        "${system.envDir}",
+        "${system.systemdFile}",
+        "${env:HOME}/.bashrc",
+        "${env:HOME}/.zshrc",
+        "${env:HOME}/.local/bin",
+        "/usr/local/bin"
+      ]
+    },
+    "sudo": false,
+    "credentials": []
+  },
+  "settings": {
+    "releaseUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://api.github.com/repos/Zenit-Hosting-de/devbox/releases",
+      "label": "Release list",
+      "help": "GitHub-compatible list of DevBox releases (JSON array with tag_name, prerelease, draft and assets). Change it to use a mirror in the own network."
+    },
+    "updateChannel": {
+      "type": "string",
+      "enum": ["stable", "prerelease"],
+      "default": "stable",
+      "label": "Update channel",
+      "help": "stable installs final releases only; prerelease also takes release candidates."
+    },
+    "shells": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["bash", "zsh"] },
+      "uniqueItems": true,
+      "default": ["bash", "zsh"],
+      "label": "Shells",
+      "help": "Shells whose startup file (~/.bashrc, ~/.zshrc) loads the environment files."
+    },
+    "envDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d",
+      "label": "Environment files",
+      "help": "Folder with the *.sh files that plugins write; shells source every file in it.",
+      "advanced": true
+    },
+    "systemd": {
+      "type": "boolean",
+      "default": true,
+      "label": "Also provide the variables to systemd sessions",
+      "help": "Writes the simple export lines of the environment files to an environment.d file, which graphical sessions and user services read at login."
+    },
+    "systemdFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/environment.d/60-devbox.conf",
+      "label": "systemd environment file",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "host": {
+      "label": "This machine",
+      "run": ["checks/host.sh"],
+      "timeout": "5s",
+      "cache": "1h"
+    },
+    "version": {
+      "label": "DevBox version",
+      "run": ["checks/version.sh"],
+      "timeout": "20s",
+      "cache": "6h",
+      "network": true,
+      "refreshOn": ["session.finished:system.update"]
+    }
+  },
+  "actions": {
+    "envLoader": {
+      "label": "Set up the environment loader",
+      "run": ["actions/envLoader.sh"],
+      "timeout": "1m"
+    },
+    "update": {
+      "label": "Update DevBox",
+      "run": ["actions/update.sh"],
+      "params": {
+        "force": {
+          "type": "boolean",
+          "default": false,
+          "label": "Also replace a development build"
+        }
+      },
+      "timeout": "10m"
+    }
+  },
+  "contributes": {
+    "groups": { "update-all": ["system.update"] },
+    "setup": [{ "action": "system.envLoader" }],
+    "overview": { "check": "system.version", "primaryAction": "system.update" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

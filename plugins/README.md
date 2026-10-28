@@ -5,10 +5,11 @@ Plugins shipped with DevBox, one directory per plugin with `plugin.json`, `check
 unpacked on first use into `${xdg:data}/devbox/builtin/<version>-<hash>/`, which comes
 last in the plugin search order, so a team can replace any of them.
 
-| Plugin | Work package |
-| --- | --- |
-| `java` | AP-13 (reference plugin) |
-| `node` | AP-17 |
+| Plugin   | Work package             |
+| -------- | ------------------------ |
+| `java`   | AP-13 (reference plugin) |
+| `system` | AP-17                    |
+| `node`   | AP-17                    |
 
 The remaining plugins follow in AP-17 to AP-19, the language packs `lang-de` and
 `lang-en` in AP-28.
