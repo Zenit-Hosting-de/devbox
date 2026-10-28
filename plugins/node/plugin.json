@@ -1,0 +1,156 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "node",
+  "version": "1.0.0",
+  "name": "Node.js",
+  "description": "Install, switch and update Node.js and carry global packages along",
+  "category": "runtime",
+  "icon": "hexagon",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["tar"],
+    "plugins": { "base": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": ["${node.distUrl}", "https://registry.npmjs.org"],
+    "files": {
+      "read": ["${env:HOME}"],
+      "write": ["${node.installDir}", "${node.envFile}"]
+    },
+    "sudo": false,
+    "credentials": []
+  },
+  "settings": {
+    "distUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://nodejs.org/dist",
+      "label": "Distribution server",
+      "help": "Server with index.json, SHASUMS256.txt and the Node.js archives (layout of nodejs.org/dist). Change it to use a mirror in the own network."
+    },
+    "channel": {
+      "type": "string",
+      "enum": ["lts", "current"],
+      "default": "lts",
+      "label": "Release channel",
+      "help": "lts takes the newest long-term support release, current the newest release of all."
+    },
+    "defaultVersion": {
+      "type": "string",
+      "pattern": "^[0-9]*$",
+      "default": "",
+      "label": "Default major version",
+      "help": "Major version to install and use by default, e.g. 22. Empty takes the newest release of the channel."
+    },
+    "installDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:data}/node",
+      "label": "Install location",
+      "advanced": true
+    },
+    "keepPatches": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "default": 1,
+      "label": "Patch versions to keep per major version"
+    },
+    "globalPackages": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": [],
+      "label": "Global npm packages",
+      "help": "Packages installed with npm install -g into every Node.js version that is installed or updated. Names may carry a version, e.g. typescript@5."
+    },
+    "manager": {
+      "type": "string",
+      "enum": ["direct"],
+      "default": "direct",
+      "label": "Installation method",
+      "help": "direct unpacks the official archives. Support for nvm is planned.",
+      "advanced": true
+    },
+    "envFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d/node.sh",
+      "label": "Shell environment file",
+      "help": "Puts the default Node.js in PATH of new shells.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "installed": {
+      "label": "Installed Node.js versions",
+      "run": ["checks/installed.sh"],
+      "timeout": "5s",
+      "cache": "10m",
+      "refreshOn": ["session.finished:node.*"]
+    },
+    "latest": {
+      "label": "New versions",
+      "run": ["checks/latest.sh"],
+      "timeout": "20s",
+      "cache": "6h",
+      "network": true
+    }
+  },
+  "actions": {
+    "install": {
+      "label": "Install Node.js",
+      "run": ["actions/install.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "default": "${node.defaultVersion}",
+          "pattern": "^([0-9]+(\\.[0-9]+){0,2}|lts|current)?$",
+          "label": "Version",
+          "help": "Major version (22), full version (22.11.0), lts or current. Empty follows the settings."
+        },
+        "makeDefault": { "type": "boolean", "default": true, "label": "Make it the default" }
+      },
+      "timeout": "20m"
+    },
+    "update": { "label": "Update and clean up", "run": ["actions/update.sh"], "timeout": "30m" },
+    "use": {
+      "label": "Switch default Node.js",
+      "run": ["actions/use.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "label": "Version",
+          "optionsFrom": "node.installed#/data/items/*/version"
+        }
+      }
+    },
+    "remove": {
+      "label": "Remove Node.js",
+      "run": ["actions/remove.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "label": "Version",
+          "optionsFrom": "node.installed#/data/items/*/version"
+        }
+      },
+      "confirm": "The Node.js version is deleted together with its global packages. Projects that rely on it need another one afterwards.",
+      "danger": true
+    },
+    "globals": {
+      "label": "Install global packages",
+      "run": ["actions/globals.sh"],
+      "timeout": "20m"
+    }
+  },
+  "contributes": {
+    "groups": { "update-all": ["node.update"] },
+    "setup": [{ "action": "node.install", "after": ["base.packages"] }],
+    "overview": { "check": "node.installed", "primaryAction": "node.update" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

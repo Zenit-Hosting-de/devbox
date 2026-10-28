@@ -1,0 +1,21 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "System",
+  "plugin.description": "Rechnerdaten, Umgebungs-Lader für Shell und systemd, Selbst-Update von DevBox",
+  "settings.releaseUrl.label": "Liste der Releases",
+  "settings.releaseUrl.help": "GitHub-kompatible Liste der DevBox-Releases (JSON-Array mit tag_name, prerelease, draft und assets). Für einen Spiegel im eigenen Netz ändern.",
+  "settings.updateChannel.label": "Update-Kanal",
+  "settings.updateChannel.help": "stable installiert nur fertige Releases, prerelease nimmt auch Vorabversionen.",
+  "settings.shells.label": "Shells",
+  "settings.shells.help": "Shells, deren Startdatei (~/.bashrc, ~/.zshrc) die Umgebungsdateien lädt.",
+  "settings.envDir.label": "Umgebungsdateien",
+  "settings.envDir.help": "Ordner mit den *.sh-Dateien, die Plugins schreiben; jede Shell lädt alle Dateien darin.",
+  "settings.systemd.label": "Variablen auch für systemd-Sitzungen bereitstellen",
+  "settings.systemd.help": "Schreibt die einfachen export-Zeilen der Umgebungsdateien in eine environment.d-Datei, die grafische Sitzungen und Benutzerdienste beim Anmelden lesen.",
+  "settings.systemdFile.label": "Umgebungsdatei für systemd",
+  "checks.host.label": "Dieser Rechner",
+  "checks.version.label": "DevBox-Version",
+  "actions.envLoader.label": "Umgebungs-Lader einrichten",
+  "actions.update.label": "DevBox aktualisieren",
+  "actions.update.params.force.label": "Auch einen Entwicklungsstand ersetzen"
+}
