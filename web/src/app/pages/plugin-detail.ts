@@ -18,10 +18,12 @@ import { ActionLauncher } from "../actions/action-launcher";
 import { ApiProblem } from "../api/problem";
 import type { CheckSummary } from "../api/types";
 import { checkBadge, pluginBadge, problemText } from "../core/status";
+import { WrapText } from "../core/wrap-text";
 import { I18n } from "../i18n/i18n";
 import { PluginText } from "../i18n/plugin-text";
 import { SettingsGroup } from "../settings/settings-group";
 import { ChecksStore } from "../stores/checks.store";
+import { InfoStore } from "../stores/info.store";
 import { PluginsStore } from "../stores/plugins.store";
 import { SettingsStore } from "../stores/settings.store";
 
@@ -56,6 +58,7 @@ interface ActionView {
     ZPanelActions,
     ZSkeleton,
     ZSpecList,
+    WrapText,
   ],
   template: `
     @if (plugin(); as p) {
@@ -80,7 +83,7 @@ interface ActionView {
               <div>
                 {{ i18n.t("reason." + reason.code) }}
                 @if (reason.detail) {
-                  <span class="z-mono">{{ reason.detail }}</span>
+                  <dbx-wrap-text class="z-mono" [text]="reason.detail" />
                 }
               </div>
             }
@@ -116,7 +119,7 @@ interface ActionView {
                       <z-badge [status]="checkBadge(result.status)" dot>
                         {{ i18n.t("check.status." + result.status) }}
                       </z-badge>
-                      <span>{{ result.summary }}</span>
+                      <dbx-wrap-text [text]="result.summary" />
                     } @else {
                       <span class="z-subtle">{{ i18n.t("plugin.noResult") }}</span>
                     }
@@ -127,7 +130,6 @@ interface ActionView {
                     }
                     @for (hint of result.hints ?? []; track $index) {
                       <div class="hint">
-                        <span class="z-muted">{{ hint.text }}</span>
                         @if (p.state === "ready" && hint.action; as action) {
                           <button
                             zBtn="secondary"
@@ -137,6 +139,8 @@ interface ActionView {
                           >
                             {{ actionLabelOf(action) }}
                           </button>
+                        } @else {
+                          <span class="z-muted"><dbx-wrap-text [text]="hint.text" /></span>
                         }
                       </div>
                     }
@@ -235,6 +239,7 @@ export class PluginDetailPage {
   protected readonly plugins = inject(PluginsStore);
   protected readonly checks = inject(ChecksStore);
   protected readonly settings = inject(SettingsStore);
+  private readonly info = inject(InfoStore);
   private readonly text = inject(PluginText);
   private readonly launcher = inject(ActionLauncher);
   private readonly toast = inject(ZToast);
@@ -273,7 +278,10 @@ export class PluginDetailPage {
         ref,
         label: this.text.checkLabel(pluginId, name, result?.label ?? def.label),
         result,
-        details: (result?.details ?? []).map((d) => ({ term: d.label, value: d.value })),
+        details: (result?.details ?? []).map((d) => ({
+          term: d.label,
+          value: this.info.shorten(d.value),
+        })),
         running: this.checks.running().has(ref),
       };
     });

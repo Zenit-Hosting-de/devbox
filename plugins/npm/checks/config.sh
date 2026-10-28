@@ -8,6 +8,12 @@ default=$(sdk setting defaultRegistry)
 registry=""
 scopes=""
 summary_scopes=""
+if [ -e "$NPMRC" ] && [ ! -r "$NPMRC" ]; then
+  # An unreadable file hides the real registry: it is unknown, not the default.
+  printf '{"status":"missing","summary":%s,"data":{"registry":%s,"configured":false,"scopes":[]},"hints":[{"text":"Set the default registry","action":"npm.configure"}]}\n' \
+    "$(json_str "cannot read $NPMRC")" "$(json_str "$default")"
+  exit 0
+fi
 if [ -f "$NPMRC" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     line=${line%$'\r'}
@@ -31,8 +37,9 @@ if [ -f "$NPMRC" ]; then
 fi
 
 if [ -z "$registry" ]; then
-  printf '{"status":"missing","summary":%s,"data":{"registry":%s,"configured":false,"scopes":[%s]},"hints":[{"text":"Set the default registry","action":"npm.configure"}]}\n' \
-    "$(json_str "$default (default, not set in $NPMRC)")" "$(json_str "$default")" "$scopes"
+  # Nothing configured is a valid state: npm uses its default registry.
+  printf '{"status":"ok","summary":%s,"data":{"registry":%s,"configured":false,"scopes":[%s]}}\n' \
+    "$(json_str "Default registry $default")" "$(json_str "$default")" "$scopes"
 else
   summary=$registry
   [ -z "$summary_scopes" ] || summary+=" ($summary_scopes)"

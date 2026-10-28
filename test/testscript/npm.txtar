@@ -17,9 +17,10 @@ stdout '^ok +dry-run +npm.configure'
 stdout '^ok +repeat +npm.configure +no changes'
 ! stdout '^failed'
 
-# no credential: the check shows the fallback, configure sets the registry in a block
+# no credential: the check reports the default registry as fine, configure sets the
+# registry in a block
 exec devbox status
-stdout '^npm\.config +missing +https://registry\.npmjs\.org/ \(default, not set in '
+stdout '^npm\.config +ok +Default registry https://registry\.npmjs\.org/$'
 exec devbox run npm.configure --dry-run
 ! exists home/.npmrc
 exec devbox run npm.configure --set npm.defaultRegistry=https://registry.example.com/

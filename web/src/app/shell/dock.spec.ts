@@ -1,9 +1,12 @@
 import { TestBed } from "@angular/core/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ServerMessageOf, Session } from "../api/types";
 import { MockBackend } from "../mock/mock-backend";
 import { DockStore } from "../stores/dock.store";
+import { InfoStore } from "../stores/info.store";
 import { SessionsStore } from "../stores/sessions.store";
 import { byText, fakeTerminals, query, queryAll, setUpApp, settle } from "../testing/test-app";
+import type { SessionChannel } from "../ws/session-channel";
 import { Dock } from "./dock";
 
 describe("Dock (against the mock backend)", () => {
@@ -165,6 +168,103 @@ describe("Dock (against the mock backend)", () => {
     fakeTerminals[0]?.resize({ cols: 90, rows: 20 });
     await vi.waitFor(() => {
       expect(TestBed.inject(DockStore).size()).toEqual({ cols: 90, rows: 20 });
+    });
+  });
+
+  describe("a plugin that only speaks the protocol", () => {
+    const SESSION = {
+      id: "s_0123456789",
+      action: "java.update",
+      title: "Update",
+      state: "success",
+      dryRun: false,
+    } as const;
+
+    function openQuiet(session: Session = SESSION): SessionChannel {
+      const sessions = TestBed.inject(SessionsStore);
+      sessions.upsert(session);
+      const channel = sessions.openNew(session);
+      TestBed.inject(DockStore).openNew(session);
+      return channel;
+    }
+
+    function protocol(seq: number, event: Record<string, unknown>): void {
+      TestBed.inject(SessionsStore)
+        .channel(SESSION.id)
+        ?.handle({
+          type: "event",
+          session: SESSION.id,
+          seq,
+          time: "2026-03-01T12:00:00Z",
+          event,
+        } as unknown as ServerMessageOf<"event">);
+    }
+
+    it("lists the changes with target and summary, and says that the terminal is empty", async () => {
+      const fixture = TestBed.createComponent(Dock);
+      await TestBed.inject(InfoStore).load(); // the home directory
+      openQuiet();
+      protocol(0, { type: "step", id: "install", label: "Node.js 24", state: "done" });
+      protocol(1, {
+        type: "change",
+        kind: "file",
+        op: "create",
+        target: "/home/dev/.local/share/node/24.1.0",
+        summary: "Node.js 24.1.0",
+      });
+      protocol(2, {
+        type: "change",
+        kind: "link",
+        op: "update",
+        target: "node",
+        summary: "points to 24",
+      });
+      await settle(fixture, () => {
+        expect(queryAll(fixture, ".changes li")).toHaveLength(2);
+      });
+      const text = fixture.nativeElement.textContent as string;
+      expect(text).toContain("2 changes");
+      // The home directory is written as ~, the full path is the tooltip.
+      expect(text).toContain("~/.local/share/node/24.1.0");
+      expect(text).toContain("Node.js 24.1.0");
+      expect(text).toContain("points to 24");
+      expect(text).toContain("Created");
+      expect(text).toContain("Changed");
+      expect(text).toContain("No terminal output");
+      expect(fakeTerminals[0]?.text).toBe("");
+    });
+
+    it("shows planned changes in a dry run and the messages of the plugin", async () => {
+      const fixture = TestBed.createComponent(Dock);
+      openQuiet({ ...SESSION, dryRun: true });
+      protocol(0, {
+        type: "change",
+        kind: "file",
+        op: "delete",
+        target: "x",
+        summary: "would remove",
+      });
+      protocol(1, { type: "log", level: "error", text: "distribution server not reachable" });
+      await settle(fixture, () => {
+        expect(queryAll(fixture, ".changes li")).toHaveLength(2);
+      });
+      const text = fixture.nativeElement.textContent as string;
+      expect(text).toContain("1 planned change");
+      expect(text).toContain("Removed");
+      expect(text).toContain("Error");
+      expect(text).toContain("distribution server not reachable");
+    });
+
+    it("does not claim missing output once the terminal got some", async () => {
+      const fixture = TestBed.createComponent(Dock);
+      const channel = openQuiet();
+      channel.write(new TextEncoder().encode("hello\r\n"));
+      protocol(0, { type: "change", kind: "file", op: "create", target: "x", summary: "y" });
+      await settle(fixture, () => {
+        expect(queryAll(fixture, ".changes li")).toHaveLength(1);
+      });
+      expect(fixture.nativeElement.textContent).not.toContain("No terminal output");
+      expect(fakeTerminals[0]?.text).toContain("hello");
     });
   });
 });

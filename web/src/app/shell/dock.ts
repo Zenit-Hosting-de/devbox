@@ -10,6 +10,7 @@ import { ZBadge, ZButton, ZIcon, ZToast } from "zenit-ui";
 import { ApiProblem } from "../api/problem";
 import { isLive } from "../api/types";
 import { problemText, sessionBadge } from "../core/status";
+import { WrapText } from "../core/wrap-text";
 import { I18n } from "../i18n/i18n";
 import { PluginText } from "../i18n/plugin-text";
 import { DockStore } from "../stores/dock.store";
@@ -22,7 +23,7 @@ import { summarizeEvents } from "../ws/events";
 @Component({
   selector: "dbx-dock-session",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TerminalView, ZBadge, ZButton, ZIcon],
+  imports: [TerminalView, WrapText, ZBadge, ZButton, ZIcon],
   template: `
     <div class="body">
       <dbx-terminal
@@ -65,8 +66,11 @@ import { summarizeEvents } from "../ws/events";
             }
           }
         </div>
+        @if (!hasOutput() && started()) {
+          <p class="z-muted note">{{ i18n.t("dock.noOutput") }}</p>
+        }
         @if (summary().steps.length > 0) {
-          <details class="steps">
+          <details class="steps" open>
             <summary>{{ i18n.t("dock.steps", { count: summary().steps.length }) }}</summary>
             <ol>
               @for (step of summary().steps; track step.id) {
@@ -78,6 +82,41 @@ import { summarizeEvents } from "../ws/events";
             </ol>
           </details>
         }
+        @if (summary().changes.length > 0) {
+          <section>
+            <h3 class="title-sm">
+              {{
+                i18n.t(session()?.dryRun ? "dock.changesPlanned" : "dock.changes", {
+                  count: summary().changes.length,
+                })
+              }}
+            </h3>
+            <ul class="changes">
+              @for (change of summary().changes; track $index) {
+                <li class="change">
+                  <span class="z-muted mark" aria-hidden="true">{{ opMark[change.op] }}</span>
+                  <span class="z-visually-hidden">{{ i18n.t("change.op." + change.op) }}</span>
+                  <span class="what">
+                    <dbx-wrap-text class="z-mono" [text]="change.target" />
+                    <span class="z-muted"><dbx-wrap-text [text]="change.summary" /></span>
+                  </span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+        @if (summary().logs.length > 0) {
+          <ul class="changes" [attr.aria-label]="i18n.t('dock.messages')">
+            @for (entry of summary().logs; track $index) {
+              <li>
+                <z-badge [status]="logBadge[entry.level]">{{
+                  i18n.t("log.level." + entry.level)
+                }}</z-badge>
+                <dbx-wrap-text [text]="entry.text" />
+              </li>
+            }
+          </ul>
+        }
         @for (notice of summary().notices; track $index) {
           <p class="z-muted">
             <z-icon name="info" size="sm" /> {{ i18n.t("notice." + notice.kind) }}
@@ -87,16 +126,57 @@ import { summarizeEvents } from "../ws/events";
     </div>
   `,
   styles: `
+    /* Narrow: the terminal above, steps and changes below. Wide: side by side, so the list
+       of changes has room even while the terminal stays empty. */
     .body {
       display: grid;
-      grid-template-rows: minmax(0, 1fr) auto;
+      grid-template-rows: minmax(0, 1fr) minmax(0, auto);
       gap: var(--space-2);
       block-size: 100%;
       min-block-size: 0;
     }
+    @media (min-width: 48rem) {
+      .body {
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+        grid-template-rows: minmax(0, 1fr);
+        gap: var(--space-3);
+      }
+    }
     .status {
       display: grid;
+      align-content: start;
+      gap: var(--space-2);
+      min-block-size: 0;
+      overflow-y: auto;
+    }
+    .note {
+      margin: 0;
+    }
+    .changes {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
       gap: var(--space-1);
+    }
+    .changes li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: var(--space-2);
+      min-inline-size: 0;
+    }
+    .change {
+      flex-wrap: nowrap;
+    }
+    .mark {
+      flex: none;
+      inline-size: var(--space-3);
+    }
+    .what {
+      display: flex;
+      flex-direction: column;
+      min-inline-size: 0;
     }
     .line {
       display: flex;
@@ -129,6 +209,8 @@ export class DockSession {
   private readonly text = inject(PluginText);
 
   protected readonly sessionBadge = sessionBadge;
+  protected readonly opMark = { create: "+", update: "~", delete: "-" } as const;
+  protected readonly logBadge = { info: "info", warn: "warning", error: "danger" } as const;
 
   protected readonly channel = computed(() => this.sessions.channel(this.sessionId()) ?? null);
   protected readonly session = computed(() => this.sessions.sessions().get(this.sessionId()));
@@ -137,6 +219,13 @@ export class DockSession {
     return s !== undefined && isLive(s.state);
   });
   protected readonly summary = computed(() => summarizeEvents(this.channel()?.events() ?? []));
+  /** False while a plugin has printed nothing to the terminal, which the bundled ones do not. */
+  protected readonly hasOutput = computed(() => (this.channel()?.outputBytes() ?? 0) > 0);
+  /** The terminal has no pending log load and the session is known. */
+  protected readonly started = computed(() => {
+    const channel = this.channel();
+    return this.session() !== undefined && channel !== null && !channel.loading();
+  });
   protected readonly title = computed(() => dockTitle(this.text, this.session()));
 
   protected onResized(size: TerminalSize): void {

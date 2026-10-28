@@ -16,6 +16,7 @@ import { ActionLauncher } from "../actions/action-launcher";
 import { ApiProblem } from "../api/problem";
 import type { CheckSummary, PluginDetail } from "../api/types";
 import { checkBadge, pluginBadge, problemText } from "../core/status";
+import { WrapText } from "../core/wrap-text";
 import { I18n } from "../i18n/i18n";
 import { PluginText } from "../i18n/plugin-text";
 import { ChecksStore } from "../stores/checks.store";
@@ -79,6 +80,7 @@ interface Group {
     ZPageHeader,
     ZPanel,
     ZSkeleton,
+    WrapText,
   ],
   template: `
     <z-page-header [title]="i18n.t('nav.overview')" [sub]="infoLine()">
@@ -124,9 +126,9 @@ interface Group {
         </z-empty-state>
       </z-panel>
     } @else {
-      <div class="z-stack">
+      <div class="groups">
         @for (group of groups(); track group.category) {
-          <section [attr.aria-labelledby]="'cat-' + group.category">
+          <section class="group" [attr.aria-labelledby]="'cat-' + group.category">
             <h2 class="heading-2 group-title" [id]="'cat-' + group.category">{{ group.label }}</h2>
             <div class="tiles">
               @for (tile of group.tiles; track tile.plugin.id) {
@@ -146,7 +148,7 @@ interface Group {
                           <li>
                             {{ i18n.t("reason." + reason.code) }}
                             @if (reason.detail) {
-                              <span class="z-mono">{{ reason.detail }}</span>
+                              <dbx-wrap-text class="z-mono" [text]="reason.detail" />
                             }
                           </li>
                         }
@@ -157,11 +159,10 @@ interface Group {
                         <z-badge [status]="checkBadge(check.status)" dot>
                           {{ i18n.t("check.status." + check.status) }}
                         </z-badge>
-                        <span>{{ check.summary }}</span>
                       </div>
+                      <p class="summary"><dbx-wrap-text [text]="check.summary" /></p>
                       @for (hint of tile.hints; track $index) {
                         <div class="hint">
-                          <span class="z-muted">{{ hint.text }}</span>
                           @if (hint.action; as action) {
                             <button
                               zBtn="secondary"
@@ -171,6 +172,8 @@ interface Group {
                             >
                               {{ action.label }}
                             </button>
+                          } @else {
+                            <span class="z-muted"><dbx-wrap-text [text]="hint.text" /></span>
                           }
                         </div>
                       }
@@ -198,13 +201,32 @@ interface Group {
     }
   `,
   styles: `
+    /* Most categories hold one or two plugins, so a row per category would leave the page
+       mostly empty. The groups flow into columns instead (one on a phone, two or three on a
+       desktop) and a group never breaks across two of them. */
+    .groups {
+      padding-block-start: var(--space-4);
+      column-width: calc(var(--space-9) * 3.5);
+      column-gap: var(--space-5);
+    }
+    .group {
+      break-inside: avoid;
+      margin-block-end: var(--space-5);
+    }
     .tiles {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(calc(var(--space-9) * 3), 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--space-9) * 3)), 1fr));
       gap: var(--space-4);
     }
+    .tiles > * {
+      min-inline-size: 0;
+    }
     .group-title {
-      margin-block-end: var(--space-3);
+      margin-block: 0 var(--space-3);
+    }
+    .summary {
+      margin: 0;
+      min-inline-size: 0;
     }
     .tile {
       gap: var(--space-3);

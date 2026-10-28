@@ -2,6 +2,7 @@ import { TestBed } from "@angular/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../api/api-client";
 import type { Session, WsServerMessage } from "../api/types";
+import { I18n } from "../i18n/i18n";
 import { bytesToBase64 } from "../ws/base64";
 import { SOCKET_FACTORY, browserSocketFactory, type SocketLike } from "../ws/socket";
 import { setUpApp } from "../testing/test-app";
@@ -388,5 +389,18 @@ describe("SessionsStore", () => {
     sockets[0]?.onmessage?.("42");
     sockets[0]?.receive({ no: "type" });
     expect(store.status()).toBe("open");
+  });
+
+  it("starts actions in the language of the UI", async () => {
+    const store = use();
+    const create = vi.spyOn(TestBed.inject(ApiClient), "createSession");
+    await store.create({ action: "java.update", dryRun: false });
+    expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ lang: "en" }));
+    await TestBed.inject(I18n).setLanguage("de");
+    await store.create({ action: "node.update", dryRun: true });
+    expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ lang: "de" }));
+    // An explicit language of the caller wins.
+    await store.create({ action: "system.selfUpdate", lang: "fr" });
+    expect(create).toHaveBeenLastCalledWith(expect.objectContaining({ lang: "fr" }));
   });
 });

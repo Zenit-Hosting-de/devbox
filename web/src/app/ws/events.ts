@@ -15,6 +15,11 @@ export interface ChangeView {
   summary: string;
 }
 
+export interface LogView {
+  level: "info" | "warn" | "error";
+  text: string;
+}
+
 export interface NoticeView {
   kind: "relogin" | "reboot" | "restart-shell";
   text: string;
@@ -25,6 +30,7 @@ export interface EventSummary {
   progress: { percent: number | null; text?: string } | null;
   result: { summary: string } | null;
   changes: ChangeView[];
+  logs: LogView[];
   notices: NoticeView[];
 }
 
@@ -36,6 +42,7 @@ export function summarizeEvents(events: readonly SessionEvent[]): EventSummary {
     progress: null,
     result: null,
     changes: [],
+    logs: [],
     notices: [],
   };
   for (const { event } of events) {
@@ -56,6 +63,9 @@ export function summarizeEvents(events: readonly SessionEvent[]): EventSummary {
           target: event.target,
           summary: event.summary,
         });
+        break;
+      case "log":
+        summary.logs.push({ level: event.level, text: event.text });
         break;
       case "notice":
         summary.notices.push({ kind: event.kind, text: event.text });

@@ -48,8 +48,12 @@ export class ApiClient {
     );
   }
 
-  checks(): Promise<StatusReport> {
-    return firstValueFrom(this.http.get<StatusReport>(`${this.base}/checks`));
+  /** `lang`: results produced for another language run again (DEVBOX_LANG of the checks). */
+  checks(lang?: string): Promise<StatusReport> {
+    const params = lang ? new HttpParams().set("lang", lang) : undefined;
+    return firstValueFrom(
+      this.http.get<StatusReport>(`${this.base}/checks`, params ? { params } : {}),
+    );
   }
 
   check(id: Ref): Promise<CheckSummary> {
@@ -58,8 +62,11 @@ export class ApiClient {
     );
   }
 
-  async refreshChecks(ids?: readonly Ref[]): Promise<void> {
-    const body = ids && ids.length > 0 ? { ids: [...ids] } : {};
+  async refreshChecks(ids?: readonly Ref[], lang?: string): Promise<void> {
+    const body = {
+      ...(ids && ids.length > 0 ? { ids: [...ids] } : {}),
+      ...(lang ? { lang } : {}),
+    };
     await firstValueFrom(this.http.post(`${this.base}/checks/refresh`, body));
   }
 

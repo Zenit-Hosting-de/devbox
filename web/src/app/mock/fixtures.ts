@@ -27,6 +27,7 @@ export const infoFixture = {
     arch: "amd64",
     desktop: "xfce",
   },
+  home: "/home/dev",
   features: ["ui", "ws", "socket"],
   ui: { scheme: "system" },
 } satisfies Info;

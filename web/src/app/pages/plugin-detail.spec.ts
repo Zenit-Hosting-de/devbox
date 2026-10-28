@@ -54,7 +54,9 @@ describe("PluginDetailPage (against the mock backend)", () => {
     expect(text).toContain("2 JDKs installed, default 21");
     expect(text).toContain("Install location");
     expect(text).toContain("/home/dev/.local/share/jdk");
-    expect(text).toContain("A newer patch version of JDK 21 is available.");
+    // A hint with an action shows the (translated) label of the action, not the hint text.
+    expect(text).not.toContain("A newer patch version of JDK 21 is available.");
+    expect(byText(fixture, ".hint button", "Update and clean up")).toBeDefined();
     // Actions as buttons; the dangerous one is styled as danger.
     expect(byText(fixture, "button", "Install JDK")).toBeDefined();
     expect(byText(fixture, "button", "Remove JDK")?.classList.contains("z-btn--danger")).toBe(true);

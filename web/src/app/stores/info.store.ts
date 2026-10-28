@@ -1,7 +1,8 @@
-import { Injectable, inject, signal } from "@angular/core";
+import { Injectable, computed, inject, signal } from "@angular/core";
 import { ApiClient } from "../api/api-client";
 import { ApiProblem, toApiProblem } from "../api/problem";
 import type { Info } from "../api/types";
+import { shortenHome } from "../core/paths";
 
 /** Version, host and configured appearance of the core. */
 @Injectable({ providedIn: "root" })
@@ -10,12 +11,19 @@ export class InfoStore {
 
   readonly info = signal<Info | null>(null);
   readonly error = signal<ApiProblem | null>(null);
+  /** Home directory of the user the core runs as, when the core tells. */
+  readonly home = computed(() => this.info()?.home);
   private pending: Promise<Info | null> | null = null;
 
   /** Loads /info once; later calls return the same result. */
   load(): Promise<Info | null> {
     this.pending ??= this.fetch();
     return this.pending;
+  }
+
+  /** The text with the home directory written as `~`. */
+  shorten(text: string): string {
+    return shortenHome(text, this.home());
   }
 
   private async fetch(): Promise<Info | null> {

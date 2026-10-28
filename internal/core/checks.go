@@ -110,6 +110,13 @@ func RunChecks(ctx context.Context, st *State, r *runner.Runner, filter func(ref
 // RunChecksNotify is RunChecks that also calls done as each check finishes. done may
 // be called from several goroutines at once.
 func RunChecksNotify(ctx context.Context, st *State, r *runner.Runner, filter func(ref string) bool, done func(CheckOutcome)) []CheckOutcome {
+	return RunChecksLang(ctx, st, r, "", filter, done)
+}
+
+// RunChecksLang is RunChecksNotify with an explicit language for DEVBOX_LANG of the
+// checks, e.g. the language of the UI; an empty lang falls back to ui.language of the
+// configuration.
+func RunChecksLang(ctx context.Context, st *State, r *runner.Runner, lang string, filter func(ref string) bool, done func(CheckOutcome)) []CheckOutcome {
 	var jobs []CheckRef
 	for _, c := range Checks(st.Evaluate()) {
 		if filter == nil || filter(c.ID()) {
@@ -117,7 +124,9 @@ func RunChecksNotify(ctx context.Context, st *State, r *runner.Runner, filter fu
 		}
 	}
 	host := st.Host()
-	lang := st.UILanguage()
+	if lang == "" {
+		lang = st.UILanguage()
+	}
 	proxy := st.ProxyEnv()
 
 	out := make([]CheckOutcome, len(jobs))
