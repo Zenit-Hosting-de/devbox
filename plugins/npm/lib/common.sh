@@ -31,14 +31,38 @@ has_block() {
   [[ $content == *"# >>> devbox:$2 >>>"* ]]
 }
 
-# drop_block FILE NAME: removes the marked block; a file that is empty afterwards (so
-# DevBox created it) is deleted, which leaves the system as before.
+CREATED_BLOCK="npm-created"
+
+# mark_created FILE [MODE]: when FILE does not exist yet, records in a marked block of
+# its own that DevBox creates it. Call it before the first block is written.
+mark_created() {
+  local file=$1 mode=${2:-}
+  [ ! -e "$file" ] || return 0
+  if [ -n "$mode" ]; then
+    printf 'File created by DevBox.\n' | sdk block "$file" "$CREATED_BLOCK" --mode "$mode"
+  else
+    printf 'File created by DevBox.\n' | sdk block "$file" "$CREATED_BLOCK"
+  fi
+}
+
+# only_created_mark FILE: whether FILE holds nothing but the creation mark (and blanks).
+only_created_mark() {
+  local content rest
+  has_block "$1" "$CREATED_BLOCK" || return 1
+  content=$(<"$1")
+  rest=${content/"# >>> devbox:$CREATED_BLOCK >>>"*"# <<< devbox:$CREATED_BLOCK <<<"/}
+  [[ -z ${rest//[[:space:]]/} ]]
+}
+
+# drop_block FILE NAME: removes the marked block. A file that DevBox created (it carries
+# the creation mark) and that holds nothing else afterwards is deleted; a file that
+# existed before stays, even when it is empty, so the system is as before.
 drop_block() {
   local file=$1 name=$2
   has_block "$file" "$name" || return 0
   sdk block-remove "$file" "$name"
-  if ! is_dry_run && [ ! -s "$file" ]; then
+  if ! is_dry_run && only_created_mark "$file"; then
     rm -f "$file"
-    sdk emit change file delete "$file" "empty after removing devbox:$name"
+    sdk emit change file delete "$file" "created by devbox, empty after removing devbox:$name"
   fi
 }

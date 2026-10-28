@@ -139,6 +139,22 @@ exec devbox cred remove team-registry --force
 cmp home/.npmrc pre.npmrc
 ! exists home/.config/devbox/env.d/npm.sh
 
+# files that existed before (even empty ones) stay when the credential is removed
+cp empty.npmrc home/.npmrc
+mkdir home/.config/devbox/env.d
+cp empty.npmrc home/.config/devbox/env.d/npm.sh
+exec devbox cred add keep --type registry --field url=$REGISTRY --field layout=artifactory --consumer 'npm:repository=npm-virtual'
+stdin token.txt
+exec devbox cred set keep --from-stdin
+grep 't0k3n-ok' home/.config/devbox/env.d/npm.sh
+exec devbox cred remove keep --force
+exists home/.npmrc
+exists home/.config/devbox/env.d/npm.sh
+cmp home/.npmrc empty.npmrc
+cmp home/.config/devbox/env.d/npm.sh empty.npmrc
+rm home/.npmrc
+rm home/.config/devbox/env.d/npm.sh
+
 # the history knows the consumer runs
 exec devbox history --json
 stdout '"action": "npm.apply"'
@@ -147,6 +163,7 @@ stdout '"action": "npm.remove"'
 
 -- token.txt --
 t0k3n-ok
+-- empty.npmrc --
 -- pre.npmrc --
 ; own setting
 registry=https://own.example.com/

@@ -59,10 +59,13 @@ fi
 sdk emit step "apply-$name" running "$registry"
 if [ "$MODE" = env ]; then
   is_dry_run || { [ ! -e "$ENV_FILE" ] || chmod 600 "$ENV_FILE"; }
+  mark_created "$ENV_FILE" 600
   printf 'export %s=%s\n' "$var" "$(shell_quote "$value")" | sdk block "$ENV_FILE" "$block" --mode 600
+  mark_created "$NPMRC"
   printf '%s' "$text" | sdk block "$NPMRC" "$block"
 else
   is_dry_run || { [ ! -e "$NPMRC" ] || chmod 600 "$NPMRC"; }
+  mark_created "$NPMRC" 600
   printf '%s' "$text" | sdk block "$NPMRC" "$block" --mode 600
   drop_block "$ENV_FILE" "$block"
 fi
