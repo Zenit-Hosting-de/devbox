@@ -137,6 +137,30 @@ func withDefaults(st *state, values map[string]any, fields map[string]any) (map[
 	return out, nil
 }
 
+// checkFields validates the effective field values and the locked names of an
+// instance against the field definitions of its credential type.
+func checkFields(inst *credentials.Instance, values, defs map[string]any) error {
+	for _, k := range sortedNames(values) {
+		field, known := defs[k].(map[string]any)
+		if !known {
+			return &config.Error{Code: config.CodeValidation, Key: inst.Name, Detail: fmt.Sprintf("unknown field %q for the type %s", k, inst.Type)}
+		}
+		frag, err := schema.CompileField(field)
+		if err == nil {
+			err = frag.Validate(k, values[k])
+		}
+		if err != nil {
+			return &config.Error{Code: config.CodeValidation, Key: inst.Name + "." + k, Detail: firstLineOf(err.Error())}
+		}
+	}
+	for _, l := range inst.Locked {
+		if _, known := defs[l]; !known {
+			return &config.Error{Code: config.CodeValidation, Key: inst.Name, Detail: fmt.Sprintf("locked entry %q names no field of the type %s", l, inst.Type)}
+		}
+	}
+	return nil
+}
+
 // fieldValue converts and checks a value given as text against a field.
 func fieldValue(field map[string]any, key, raw string) (any, error) {
 	v, err := config.Coerce(field, raw)
@@ -459,7 +483,16 @@ func (a *app) openVault(st *state, backend string) (vault.Backend, error) {
 		Backend: backend, DataDir: filepath.Join(st.env.ctx.XDG.Data, "devbox"),
 		Keyring: vault.SystemKeyring{}, Validator: st.env.validator,
 	}
-	if passphrase && backend != vault.BackendKeyring {
+	if passphrase {
+		switch strings.ToLower(backend) {
+		case vault.BackendKeyring:
+			passphrase = false
+		case "", vault.BackendAuto:
+			// the Secret Service wins when there is one; the passphrase then has no use
+			passphrase = !vault.NewKeyring(opts.Keyring).Available()
+		}
+	}
+	if passphrase {
 		p, err := a.readPassphrase("Vault passphrase: ")
 		if err != nil {
 			return nil, err
@@ -751,9 +784,15 @@ func (a *app) runVerify(ctx context.Context, c *credCtx, r *runner.Runner, inst 
 	if !found {
 		return false, ref + ": no such action", ""
 	}
+	if !mayAccess(p, inst.Type) {
+		return false, ref + ": the plugin does not declare the type " + inst.Type + " in permissions.credentials", ""
+	}
 	td, _ := c.typeOf(inst)
 	fields, err := withDefaults(c.st, inst.Fields, td.fields())
 	if err != nil {
+		return false, err.Error(), ""
+	}
+	if err := checkFields(inst, fields, td.fields()); err != nil {
 		return false, err.Error(), ""
 	}
 	params, err := actionParams(c.st, action, ref, nil)
@@ -956,6 +995,9 @@ func (a *app) runConsumer(ctx context.Context, c *credCtx, r *runner.Runner, ins
 	td, _ := c.typeOf(inst)
 	fields, err := withDefaults(c.st, inst.Fields, td.fields())
 	if err != nil {
+		return false, err.Error()
+	}
+	if err := checkFields(inst, fields, td.fields()); err != nil {
 		return false, err.Error()
 	}
 	spec := runner.Spec{

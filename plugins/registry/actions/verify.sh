@@ -15,7 +15,10 @@ fi
 url=$(sdk field url)
 layout=$(sdk field layout 2>/dev/null) || layout=custom
 user=$(sdk field username 2>/dev/null) || user=""
-path=$(sdk json-get "$DEVBOX_REQUEST" "/settings/verifyPaths/$layout" 2>/dev/null) || path=""
+if ! path=$(sdk json-get "$DEVBOX_REQUEST" "/settings/verifyPaths/$layout" 2>/dev/null); then
+  sdk emit result "No verification path for the layout $layout"
+  exit 2
+fi
 timeout=$(sdk setting timeout)
 secret=$(sdk secret)
 case "$secret$user$url" in
