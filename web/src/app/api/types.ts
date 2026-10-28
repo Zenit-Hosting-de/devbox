@@ -1,11 +1,8 @@
 // Contract types used by the application. Everything is derived from the OpenAPI types
 // (components['schemas']); a few `object` schemas are narrowed here because the contract
 // leaves them open (manifest, field, check data).
-//
-// TEMPORARY: the contract currently comes from ./contract.draft (see the header there).
-// After AP-09 is merged, change the import below to '../gen/api.js' and delete the draft.
 
-import type { components, paths } from "./contract.draft";
+import type { components, paths } from "../gen/api";
 import type { FormField } from "../schema-form/field";
 import type { Message as ProtocolMessage } from "../gen/event";
 

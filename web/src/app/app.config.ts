@@ -1,3 +1,4 @@
+import { APP_BASE_HREF } from "@angular/common";
 import { provideHttpClient, withInterceptors } from "@angular/common/http";
 import {
   provideAppInitializer,
@@ -73,6 +74,8 @@ export function initialAppearance(): Promise<void> {
 export const appConfig: ApplicationConfig = {
   providers: [
     provideZonelessChangeDetection(),
+    // The page has no <base> element (the CSP forbids it); the UI is served from the root.
+    { provide: APP_BASE_HREF, useValue: "/" },
     provideRouter(routes, withComponentInputBinding()),
     provideHttpClient(withInterceptors([apiInterceptor, ...backendInterceptors])),
     provideZenitTheme({ defaultScheme: "system", storageKey: STORAGE_KEYS.theme }),
