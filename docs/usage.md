@@ -37,6 +37,8 @@ are:
 | History                   | `~/.local/state/devbox/history/<YYYY-MM>.jsonl`, one line per finished session        |
 | Session output and events | `~/.local/state/devbox/sessions/<id>.log`, `<id>.events.jsonl`                        |
 | Backups                   | `~/.local/state/devbox/backups/<id>/<path>`, originals of every changed file          |
+| Credentials (metadata)    | `~/.local/share/devbox/credentials.json`, no secrets                                  |
+| Vault without keyring     | `~/.local/share/devbox/vault.age` and its key `vault.key`                             |
 
 All files are JSON (or JSON Lines) with a schema in [`schema/`](../schema/). Old sessions
 are removed after `history.keepDays` (default 90) or beyond `history.keepSessions`
@@ -128,6 +130,40 @@ A profile can lock a key; `config set` then refuses it. Other parts of `config.j
 (opens `$VISUAL` or `$EDITOR`) and checked with `devbox config validate`. The proxy and CA
 file from `network` are passed to every plugin.
 
+## Credentials
+
+A credential instance has a type (defined by a plugin, e.g. `registry`), fields, a secret
+and consumers: plugins that write it into the configuration of their tool. Profiles can
+prepare instances (fields preset or locked, consumers listed), so only the secret is
+missing. The metadata lives in `~/.local/share/devbox/credentials.json` (mode 0600, no
+secrets); the secret goes into the vault (`vault.backend`: the Secret Service, or the
+age-encrypted `vault.age` with the key `vault.key`, both 0600).
+
+```bash
+devbox cred add company --type registry \
+  --field url=https://nexus.example.com --field layout=nexus --field username=m.muster \
+  --consumer 'npm:repository=npm-group,scopes=["@example"]' --consumer maven:mirror=maven-public
+devbox cred set company                      # hidden input; or: … | devbox cred set company --from-stdin
+devbox cred set company --expires 2027-01-25 # with an expiry date
+devbox cred list                             # --json for the merged view of profile and user
+devbox cred verify company                   # runs the verify action of the type
+devbox cred apply company --dry-run          # runs every consumer's apply
+devbox cred remove company                   # runs every consumer's remove, then deletes the secret
+```
+
+`cred set` stores the secret, runs the verification of the type (for `registry` a request
+to the registry; the paths per layout are the setting `registry.verifyPaths`) and, when it
+succeeds, applies every consumer. Consumers run one after another, each as a session in
+`devbox history`; one failing consumer does not stop the others, and the exit code is 1 if
+any failed. Consumers of disabled plugins are skipped. `cred remove` keeps the secret when a
+consumer fails to remove it, unless `--force` is given; for an instance a profile prepares,
+only the secret and the consumers the user added go. The check `credentials.expiry` warns
+`credentials.warnDays` (default 14) days before a secret expires.
+
+Plugins get the credential only through the request file, never through the environment
+or the command line; their output is masked. A consumer reads it with `devbox sdk instance`,
+`devbox sdk field NAME`, `devbox sdk option NAME` and `devbox sdk secret`.
+
 ## Dry run and backups
 
 - `--dry-run` sets `DEVBOX_DRY_RUN=1` for the plugin. It still reads, checks and
@@ -177,7 +213,8 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
 - web UI, `devbox serve`, `devbox service …`, terminal menu (`devbox` without arguments)
 - `devbox setup`, `devbox group run` (for example `update-all`), `devbox check`,
   `devbox actions`, `devbox status --strict` (exit codes 5 and 6)
-- `devbox cred …` (credentials and the registry consumers npm, Maven, NuGet, pip, Docker)
+- the registry consumers `npm`, `maven`, `nuget`, `pip`, `docker` and the credential types
+  `git-host`, `ssh-key`, `generic`; the event `credential.changed`
 - `devbox profile …`; profiles from HTTPS or Git sources (only `file://` works today)
 - `devbox plugin install|update|remove` and plugin catalogs
 - `devbox doctor`, `devbox schema print`, `devbox migrate`, `devbox completion`
