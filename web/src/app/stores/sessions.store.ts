@@ -10,6 +10,7 @@ import type {
   WsServerMessage,
 } from "../api/types";
 import { isLive } from "../api/types";
+import { I18n } from "../i18n/i18n";
 import { SOCKET_FACTORY, socketUrl, type SocketLike } from "../ws/socket";
 import { SessionChannel } from "../ws/session-channel";
 import { utf8ToBase64 } from "../ws/base64";
@@ -41,6 +42,7 @@ export class SessionsStore {
   private readonly api = inject(ApiClient);
   private readonly factory = inject(SOCKET_FACTORY);
   private readonly doc = inject(DOCUMENT);
+  private readonly i18n = inject(I18n);
 
   readonly status = signal<ConnectionStatus>("idle");
   /** Summaries of sessions seen so far (REST and WebSocket), keyed by ID. */
@@ -253,7 +255,8 @@ export class SessionsStore {
   }
 
   async create(body: Parameters<ApiClient["createSession"]>[0]): Promise<Session> {
-    const session = await this.api.createSession(body);
+    // The action runs in the language of the UI (DEVBOX_LANG), unless the caller says otherwise.
+    const session = await this.api.createSession({ lang: this.i18n.language(), ...body });
     this.upsert(session);
     this.transition.set({ kind: "started", session });
     return session;

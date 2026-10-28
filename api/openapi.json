@@ -193,6 +193,18 @@
         "tags": ["checks"],
         "operationId": "listChecks",
         "summary": "Cached check results of all plugins.",
+        "description": "With lang, results that were produced for another language count as stale and run again (DEVBOX_LANG of the check); they are still listed until the new result arrives over the WebSocket topic \"checks\".",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "description": "Language the viewer reads, e.g. de.",
+            "schema": {
+              "$ref": "#/components/schemas/Lang"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Status report with all cached check results.",
@@ -795,6 +807,11 @@
       }
     },
     "schemas": {
+      "Lang": {
+        "description": "Language tag, e.g. de or pt-BR.",
+        "type": "string",
+        "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+      },
       "Name": {
         "description": "Identifier of a plugin, credential instance, repository or schema.",
         "type": "string",
@@ -887,6 +904,10 @@
           },
           "host": {
             "$ref": "#/components/schemas/Host"
+          },
+          "home": {
+            "type": "string",
+            "description": "Home directory of the user the core runs as; the UI shortens paths below it to ~."
           },
           "features": {
             "type": "array",
@@ -1040,6 +1061,10 @@
             "items": {
               "$ref": "#/components/schemas/Ref"
             }
+          },
+          "lang": {
+            "$ref": "#/components/schemas/Lang",
+            "description": "Language of the run (DEVBOX_LANG); default is ui.language of the configuration."
           }
         }
       },
@@ -1130,6 +1155,10 @@
           "yes": {
             "type": "boolean",
             "description": "The user confirmed the confirm prompt of the action; also passed to the plugin as Spec.Yes."
+          },
+          "lang": {
+            "$ref": "#/components/schemas/Lang",
+            "description": "Language of the run (DEVBOX_LANG); default is ui.language of the configuration."
           }
         }
       },

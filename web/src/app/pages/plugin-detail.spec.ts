@@ -1,6 +1,7 @@
 import { Component } from "@angular/core";
 import { TestBed, type ComponentFixture } from "@angular/core/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { InfoStore } from "../stores/info.store";
 import { MockBackend, MockProblem } from "../mock/mock-backend";
 import { Dock } from "../shell/dock";
 import { DockStore } from "../stores/dock.store";
@@ -54,13 +55,32 @@ describe("PluginDetailPage (against the mock backend)", () => {
     expect(text).toContain("2 JDKs installed, default 21");
     expect(text).toContain("Install location");
     expect(text).toContain("/home/dev/.local/share/jdk");
-    expect(text).toContain("A newer patch version of JDK 21 is available.");
+    // A hint with an action shows the (translated) label of the action, not the hint text.
+    expect(text).not.toContain("A newer patch version of JDK 21 is available.");
+    expect(byText(fixture, ".hint button", "Update and clean up")).toBeDefined();
     // Actions as buttons; the dangerous one is styled as danger.
     expect(byText(fixture, "button", "Install JDK")).toBeDefined();
     expect(byText(fixture, "button", "Remove JDK")?.classList.contains("z-btn--danger")).toBe(true);
     // The settings of the plugin, via the shared group component.
     expect(queryAll(fixture, "dbx-settings-group dbx-schema-form")).toHaveLength(1);
     expect(text).toContain("Release API");
+  });
+
+  it("shows check details with ~ for the home directory and the full path as tooltip", async () => {
+    await TestBed.inject(InfoStore).load();
+    const fixture = await open();
+    const value = [...fixture.nativeElement.querySelectorAll("dd dbx-wrap-text span")].find((el) =>
+      (el as HTMLElement).textContent?.includes("~/.local/share/jdk"),
+    ) as HTMLElement | undefined;
+    expect(value).toBeDefined();
+    expect(fixture.nativeElement.textContent).not.toContain("/home/dev/.local/share/jdk");
+    expect(value?.getAttribute("tabindex")).toBe("0");
+    value?.focus();
+    await settle(fixture, () => {
+      expect(document.querySelector(".cdk-overlay-container")?.textContent ?? "").toContain(
+        "/home/dev/.local/share/jdk",
+      );
+    });
   });
 
   it("refreshes only the checks of this plugin", async () => {

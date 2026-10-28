@@ -34,6 +34,8 @@ func summaryOf(o core.CheckOutcome) CheckSummary {
 type cachedCheck struct {
 	out core.CheckOutcome
 	at  time.Time
+	// lang is the language (DEVBOX_LANG) the check ran with.
+	lang string
 }
 
 // checkCache keeps the last result per check in memory. Nothing is written to disk
@@ -72,9 +74,9 @@ func (c *checkCache) claim(id string) (uint64, bool) {
 
 // store keeps the result of a check and ends the claim gen that produced it. A newer
 // claim of the same check, made after this result arrived, stays.
-func (c *checkCache) store(o core.CheckOutcome, gen uint64) {
+func (c *checkCache) store(o core.CheckOutcome, gen uint64, lang string) {
 	c.mu.Lock()
-	c.results[o.ID] = cachedCheck{out: o, at: time.Now()}
+	c.results[o.ID] = cachedCheck{out: o, at: time.Now(), lang: lang}
 	if c.running[o.ID] == gen {
 		delete(c.running, o.ID)
 	}
@@ -101,10 +103,11 @@ func (c *checkCache) isRunning(id string) bool {
 }
 
 // StartChecks starts a background refresh of all checks.
-func (s *Server) StartChecks() { s.refreshWhere(func(core.CheckRef) bool { return true }) }
+func (s *Server) StartChecks() { s.refreshWhere(func(core.CheckRef) bool { return true }, "") }
 
-// refreshWhere runs, in the background, the checks that match and do not run yet.
-func (s *Server) refreshWhere(match func(core.CheckRef) bool) {
+// refreshWhere runs, in the background, the checks that match and do not run yet. lang
+// is the language of the run (DEVBOX_LANG); empty means ui.language of the configuration.
+func (s *Server) refreshWhere(match func(core.CheckRef) bool, lang string) {
 	st, err := s.load()
 	if err != nil {
 		s.log.Warn("checks: cannot load the configuration", "error", err)
@@ -114,6 +117,9 @@ func (s *Server) refreshWhere(match func(core.CheckRef) bool) {
 	if err != nil {
 		s.log.Warn("checks: cannot prepare the runner", "error", err)
 		return
+	}
+	if lang == "" {
+		lang = st.UILanguage()
 	}
 	claimed := map[string]uint64{}
 	for _, c := range core.Checks(st.Evaluate()) {
@@ -129,8 +135,8 @@ func (s *Server) refreshWhere(match func(core.CheckRef) bool) {
 	}
 	if !s.spawn(func() {
 		defer s.checks.release(claimed)
-		core.RunChecksNotify(s.ctx, st, rn, func(ref string) bool { _, ok := claimed[ref]; return ok }, func(o core.CheckOutcome) {
-			s.checks.store(o, claimed[o.ID])
+		core.RunChecksLang(s.ctx, st, rn, lang, func(ref string) bool { _, ok := claimed[ref]; return ok }, func(o core.CheckOutcome) {
+			s.checks.store(o, claimed[o.ID], lang)
 			s.bc.CheckChanged(summaryOf(o))
 		})
 	}) {
@@ -139,8 +145,8 @@ func (s *Server) refreshWhere(match func(core.CheckRef) bool) {
 }
 
 // refreshAfterSession refreshes the checks of the plugin of a finished session and
-// those whose refreshOn matches session.finished:<ref>.
-func (s *Server) refreshAfterSession(pluginID, ref string) {
+// those whose refreshOn matches session.finished:<ref>, in the language of the session.
+func (s *Server) refreshAfterSession(pluginID, ref, lang string) {
 	if s.ctx.Err() != nil {
 		return
 	}
@@ -154,7 +160,7 @@ func (s *Server) refreshAfterSession(pluginID, ref string) {
 			}
 		}
 		return false
-	})
+	}, lang)
 }
 
 // StatusReport is GET /checks (api/openapi.json, StatusReport).
@@ -166,6 +172,10 @@ type StatusReport struct {
 }
 
 func (s *Server) listChecks(w http.ResponseWriter, r *http.Request) error {
+	lang, err := langParam(r.URL.Query().Get("lang"), "/lang")
+	if err != nil {
+		return err
+	}
 	st, err := s.load()
 	if err != nil {
 		return err
@@ -190,10 +200,13 @@ func (s *Server) listChecks(w http.ResponseWriter, r *http.Request) error {
 		if ttl := cached.out.Cache; ttl > 0 && now.Sub(cached.at) > ttl {
 			stale[id] = true
 		}
+		if lang != "" && cached.lang != lang {
+			stale[id] = true // produced for another language: listed now, replaced when it arrives
+		}
 	}
 	report.Summary = core.Summarize(known)
 	if len(stale) > 0 {
-		s.refreshWhere(func(c core.CheckRef) bool { return stale[c.ID()] })
+		s.refreshWhere(func(c core.CheckRef) bool { return stale[c.ID()] }, lang)
 		// Checks that were just claimed now count as running.
 		report.Running = report.Running[:0]
 		for _, c := range refs {
@@ -222,6 +235,10 @@ func (s *Server) refreshChecks(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	lang, err := langParam(stringOf(body["lang"]), "/lang")
+	if err != nil {
+		return err
+	}
 	st, err := s.load()
 	if err != nil {
 		return err
@@ -244,7 +261,20 @@ func (s *Server) refreshChecks(w http.ResponseWriter, r *http.Request) error {
 	if len(errs) > 0 {
 		return invalid("unknown checks", errs...)
 	}
-	s.refreshWhere(func(c core.CheckRef) bool { return len(ids) == 0 || want[c.ID()] })
+	s.refreshWhere(func(c core.CheckRef) bool { return len(ids) == 0 || want[c.ID()] }, lang)
 	w.WriteHeader(http.StatusAccepted)
 	return nil
+}
+
+// langParam checks an optional language tag of a request; empty stays empty.
+func langParam(lang, pointer string) (string, error) {
+	if lang != "" && !langPattern.MatchString(lang) {
+		return "", invalid("the language is not valid", fieldError{Pointer: pointer, Code: "pattern", Message: "not a language tag such as de or pt-BR"})
+	}
+	return lang, nil
+}
+
+func stringOf(v any) string {
+	s, _ := v.(string)
+	return s
 }

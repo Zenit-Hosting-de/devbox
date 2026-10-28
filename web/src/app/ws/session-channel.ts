@@ -16,6 +16,11 @@ export class SessionChannel {
   readonly events = signal<readonly SessionEvent[]>([]);
   /** True while the log is being (re)loaded; stream messages wait in a queue. */
   readonly loading = signal(false);
+  /**
+   * Bytes of terminal output seen so far. A plugin that only speaks the protocol (steps,
+   * changes, result) prints nothing to the terminal; the dock then says so.
+   */
+  readonly outputBytes = signal(0);
   /** The seq the next output chunk or event is expected to carry. */
   expectedSeq = 0;
 
@@ -47,6 +52,7 @@ export class SessionChannel {
     if (bytes.length === 0) {
       return;
     }
+    this.outputBytes.update((n) => n + bytes.length);
     if (this.sink) {
       this.sink(bytes);
     } else {
@@ -57,6 +63,7 @@ export class SessionChannel {
   /** Clears the terminal (and anything not yet written to it). */
   resetTerminal(): void {
     this.pending = [];
+    this.outputBytes.set(0);
     this.clear?.();
   }
 

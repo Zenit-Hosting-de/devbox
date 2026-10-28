@@ -34,6 +34,12 @@ export const routes: Routes = [
     loadComponent: () => import("./pages/credentials").then((m) => m.CredentialsPage),
     data: { title: "nav.credentials" },
   },
+  // The pages have German paths; the English names redirect, so both work as links and
+  // after a reload.
+  { path: "history", pathMatch: "full", redirectTo: "verlauf" },
+  { path: "history/:id", redirectTo: "verlauf/:id" },
+  { path: "settings", pathMatch: "full", redirectTo: "einstellungen" },
+  { path: "credentials", pathMatch: "full", redirectTo: "zugaenge" },
   {
     path: "**",
     loadComponent: () => import("./pages/not-found").then((m) => m.NotFoundPage),

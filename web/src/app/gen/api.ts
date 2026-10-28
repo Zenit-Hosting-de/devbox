@@ -82,7 +82,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Cached check results of all plugins. */
+        /**
+         * Cached check results of all plugins.
+         * @description With lang, results that were produced for another language count as stale and run again (DEVBOX_LANG of the check); they are still listed until the new result arrives over the WebSocket topic "checks".
+         */
         get: operations["listChecks"];
         put?: never;
         post?: never;
@@ -340,6 +343,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Language tag, e.g. de or pt-BR. */
+        Lang: string;
         /** @description Identifier of a plugin, credential instance, repository or schema. */
         Name: string;
         /** @description Fully qualified check or action, <plugin>.<name>. */
@@ -397,6 +402,8 @@ export interface components {
              */
             auth: "local" | "pam" | "off";
             host: components["schemas"]["Host"];
+            /** @description Home directory of the user the core runs as; the UI shortens paths below it to ~. */
+            home?: string;
             /** @description Optional features of this build: ui = an embedded UI build is present, ws = the WebSocket is available, socket = the Unix socket is listening. */
             features?: string[];
             /** @description The ui section of the configuration file; the user file wins over the system file. */
@@ -455,6 +462,8 @@ export interface components {
         /** @description Checks to run again; without ids all checks run. */
         ChecksRefresh: {
             ids?: components["schemas"]["Ref"][];
+            /** @description Language of the run (DEVBOX_LANG); default is ui.language of the configuration. */
+            lang?: components["schemas"]["Lang"];
         };
         /** @description Value of a setting in one configuration layer. */
         SettingLayer: {
@@ -491,6 +500,8 @@ export interface components {
             rows?: number;
             /** @description The user confirmed the confirm prompt of the action; also passed to the plugin as Spec.Yes. */
             yes?: boolean;
+            /** @description Language of the run (DEVBOX_LANG); default is ui.language of the configuration. */
+            lang?: components["schemas"]["Lang"];
         };
         /** @description Summary of a session; also a line of the history (devbox history --json) and the payload of the WebSocket message "session". */
         Session: {
@@ -944,7 +955,10 @@ export interface operations {
     };
     listChecks: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Language the viewer reads, e.g. de. */
+                lang?: components["schemas"]["Lang"];
+            };
             header?: never;
             path?: never;
             cookie?: never;

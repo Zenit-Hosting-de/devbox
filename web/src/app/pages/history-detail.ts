@@ -27,6 +27,7 @@ import { toApiProblem } from "../api/problem";
 import type { Session, SessionEvent } from "../api/types";
 import { isLive } from "../api/types";
 import { problemText, sessionBadge } from "../core/status";
+import { WrapText } from "../core/wrap-text";
 import { I18n } from "../i18n/i18n";
 import { PluginText } from "../i18n/plugin-text";
 import { DockStore } from "../stores/dock.store";
@@ -51,6 +52,7 @@ import { summarizeEvents } from "../ws/events";
     ZPanel,
     ZSkeleton,
     ZSpecList,
+    WrapText,
   ],
   template: `
     @if (error()) {
@@ -108,8 +110,8 @@ import { summarizeEvents } from "../ws/events";
             <ul class="steps">
               @for (change of summary().changes; track $index) {
                 <li>
-                  <span class="z-mono">{{ change.target }}</span>
-                  <span class="z-muted"> {{ change.summary }}</span>
+                  <dbx-wrap-text class="z-mono" [text]="change.target" />
+                  <span class="z-muted"> <dbx-wrap-text [text]="change.summary" /></span>
                 </li>
               }
             </ul>

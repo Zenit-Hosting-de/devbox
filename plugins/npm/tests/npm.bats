@@ -14,6 +14,19 @@
   [[ "$output" != *"failed"* ]]
 }
 
+@test "the check reports the default registry as ok, an unreadable file as missing" {
+  rc="$BATS_TEST_TMPDIR/npmrc"
+  HOME="$BATS_TEST_TMPDIR" run devbox plugin test --set npm.npmrc="$rc" "$BATS_TEST_DIRNAME/.."
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"check"*"npm.config"*"ok"* ]]
+  [ "$(id -u)" -ne 0 ] || skip "root reads every file"
+  : >"$rc"
+  chmod 000 "$rc"
+  HOME="$BATS_TEST_TMPDIR" run devbox plugin test --set npm.npmrc="$rc" "$BATS_TEST_DIRNAME/.."
+  chmod 600 "$rc"
+  [[ "$output" == *"check"*"npm.config"*"missing"* ]]
+}
+
 @test "registry addresses follow the layout" {
   # shellcheck source=../lib/layout.sh
   . "$BATS_TEST_DIRNAME/../lib/layout.sh"

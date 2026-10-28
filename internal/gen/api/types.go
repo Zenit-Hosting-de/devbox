@@ -137,6 +137,9 @@ type CheckSummary struct {
 // ChecksRefresh Checks to run again; without ids all checks run.
 type ChecksRefresh struct {
 	Ids *[]Ref `json:"ids,omitempty"`
+
+	// Lang Language of the run (DEVBOX_LANG); default is ui.language of the configuration.
+	Lang *Lang `json:"lang,omitempty"`
 }
 
 // CredentialInstance A credential instance with profile and user parts merged; never contains the secret itself. Also the item of devbox cred list --json.
@@ -223,6 +226,9 @@ type Info struct {
 	// Features Optional features of this build: ui = an embedded UI build is present, ws = the WebSocket is available, socket = the Unix socket is listening.
 	Features *[]string `json:"features,omitempty"`
 
+	// Home Home directory of the user the core runs as; the UI shortens paths below it to ~.
+	Home *string `json:"home,omitempty"`
+
 	// Host Facts about the machine.
 	Host Host `json:"host"`
 
@@ -247,6 +253,9 @@ type Info struct {
 	// Version Version of the core.
 	Version string `json:"version"`
 }
+
+// Lang Language tag, e.g. de or pt-BR.
+type Lang = string
 
 // Messages Flat translation map of a plugin (plugins/<id>/i18n/<lang>.json without $schema and $comment).
 type Messages map[string]string
@@ -414,6 +423,9 @@ type SessionCreate struct {
 	// DryRun Report planned changes only.
 	DryRun *bool `json:"dryRun,omitempty"`
 
+	// Lang Language of the run (DEVBOX_LANG); default is ui.language of the configuration.
+	Lang *Lang `json:"lang,omitempty"`
+
 	// Params Action parameters.
 	Params *map[string]interface{} `json:"params,omitempty"`
 
@@ -538,6 +550,12 @@ type StatusReport struct {
 
 // DevBoxRequest defines model for DevBoxRequest.
 type DevBoxRequest string
+
+// ListChecksParams defines parameters for ListChecks.
+type ListChecksParams struct {
+	// Lang Language the viewer reads, e.g. de.
+	Lang *Lang `form:"lang,omitempty" json:"lang,omitempty"`
+}
 
 // RefreshChecksParams defines parameters for RefreshChecks.
 type RefreshChecksParams struct {

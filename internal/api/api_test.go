@@ -356,7 +356,7 @@ func TestCheckRefreshCoalesces(t *testing.T) {
 func TestCheckReleaseKeepsNewerClaim(t *testing.T) {
 	c := newCheckCache()
 	first, _ := c.claim("demo.state")
-	c.store(core.CheckOutcome{ID: "demo.state", Status: "ok"}, first)
+	c.store(core.CheckOutcome{ID: "demo.state", Status: "ok"}, first, "")
 	if c.isRunning("demo.state") {
 		t.Fatal("the result ends the claim")
 	}
@@ -372,11 +372,11 @@ func TestCheckReleaseKeepsNewerClaim(t *testing.T) {
 		t.Error("a third refresh must coalesce with the second")
 	}
 	// a late result of the old batch does not end the newer claim either
-	c.store(core.CheckOutcome{ID: "demo.state", Status: "ok"}, first)
+	c.store(core.CheckOutcome{ID: "demo.state", Status: "ok"}, first, "")
 	if !c.isRunning("demo.state") {
 		t.Error("a stale result released the newer claim")
 	}
-	c.store(core.CheckOutcome{ID: "demo.state", Status: "ok"}, second)
+	c.store(core.CheckOutcome{ID: "demo.state", Status: "ok"}, second, "")
 	if c.isRunning("demo.state") {
 		t.Error("the result of the current claim must end it")
 	}
@@ -417,6 +417,15 @@ func TestUI(t *testing.T) {
 		{"/", http.StatusOK, "app", "no-cache", true},
 		{"/index.html", http.StatusOK, "app", "no-cache", true},
 		{"/sessions/s_01J0000000000000000000", http.StatusOK, "app", "no-cache", true}, // client side route
+		// every page of the UI reloads from the server, German and English paths alike
+		{"/plugins", http.StatusOK, "app", "no-cache", true},
+		{"/plugins/java", http.StatusOK, "app", "no-cache", true},
+		{"/verlauf", http.StatusOK, "app", "no-cache", true},
+		{"/history/s_01J0000000000000000000", http.StatusOK, "app", "no-cache", true},
+		{"/einstellungen", http.StatusOK, "app", "no-cache", true},
+		{"/settings", http.StatusOK, "app", "no-cache", true},
+		{"/zugaenge", http.StatusOK, "app", "no-cache", true},
+		{"/credentials", http.StatusOK, "app", "no-cache", true},
 		{"/main-5ZJYEXWY.js", http.StatusOK, "console.log", "public, max-age=31536000, immutable", true},
 		{"/favicon.ico", http.StatusOK, "icon", "", true},
 		{"/assets/logo-AB.svg", http.StatusOK, "<svg/>", "", true},

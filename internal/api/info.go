@@ -19,6 +19,7 @@ type Info struct {
 	Protocol int               `json:"protocol"`
 	Auth     string            `json:"auth"`
 	Host     map[string]any    `json:"host"`
+	Home     string            `json:"home,omitempty"`
 	UI       map[string]string `json:"ui,omitempty"`
 	Features []string          `json:"features"`
 }
@@ -38,7 +39,7 @@ func (s *Server) getInfo(w http.ResponseWriter, r *http.Request) error {
 	info := Info{
 		Vendor: s.opts.Build.Vendor, Version: s.opts.Build.Version, Commit: s.opts.Build.Commit,
 		Date: s.opts.Build.Date, Protocol: s.opts.Build.Protocol, Auth: s.opts.Auth,
-		Host: st.Host(), UI: st.UI(), Features: []string{},
+		Host: st.Host(), Home: st.Env.Getenv("HOME"), UI: st.UI(), Features: []string{},
 	}
 	if len(info.UI) == 0 {
 		info.UI = nil

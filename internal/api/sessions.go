@@ -94,6 +94,13 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	lang, err := langParam(stringOf(body["lang"]), "/lang")
+	if err != nil {
+		return err
+	}
+	if lang != "" {
+		spec.Lang = lang
+	}
 	if n, ok := asInt(body["cols"]); ok && n > 0 && n <= 1<<16-1 {
 		spec.Cols = uint16(n)
 	}
@@ -196,7 +203,7 @@ func (s *Server) runLive(ctx context.Context, cancel context.CancelFunc, st *cor
 	live.finish(final)
 	s.live.remove(id) // the history has the entry now
 	s.bc.SessionChanged(final)
-	s.refreshAfterSession(spec.PluginID, ref)
+	s.refreshAfterSession(spec.PluginID, ref, spec.Lang)
 }
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) error {
