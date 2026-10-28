@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1](https://github.com/Zenit-Hosting-de/devbox/compare/v0.2.0...v0.2.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **ui:** polish overview, dock, language, routes and path display ([40a5ba2](https://github.com/Zenit-Hosting-de/devbox/commit/40a5ba236e5c8d65be203b5dfef1e5ab97482ef9))
+* **ui:** polish overview, dock, language, routes and path display ([d19201b](https://github.com/Zenit-Hosting-de/devbox/commit/d19201be42d74e0a168e2e7ce9c3d3f48a46269c))
+* **web:** regenerate types, wrap check details, make shortened text focusable ([997ab1a](https://github.com/Zenit-Hosting-de/devbox/commit/997ab1a18a9f2bfd447c8f1d5d15c38379c1ee15))
+
 ## [0.2.0](https://github.com/Zenit-Hosting-de/devbox/compare/v0.1.0...v0.2.0) (2026-10-28)
 
 
