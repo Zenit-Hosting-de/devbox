@@ -29,6 +29,7 @@ export class FakeTerminal implements TerminalLike {
   text = "";
   resets = 0;
   colors: TerminalColors | null = null;
+  interactive: boolean | null = null;
   private readonly dataCallbacks: ((data: string) => void)[] = [];
   private readonly resizeCallbacks: ((size: TerminalSize) => void)[] = [];
 
@@ -47,6 +48,9 @@ export class FakeTerminal implements TerminalLike {
   }
   setColors(colors: TerminalColors): void {
     this.colors = colors;
+  }
+  setInteractive(interactive: boolean): void {
+    this.interactive = interactive;
   }
   onData(callback: (data: string) => void): void {
     this.dataCallbacks.push(callback);

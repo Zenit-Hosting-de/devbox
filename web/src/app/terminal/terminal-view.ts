@@ -117,6 +117,14 @@ export class TerminalView {
       }
     });
 
+    // Keyboard input follows the session: a terminal created before the session was known
+    // to be live still becomes interactive later.
+    effect(() => {
+      const term = this.term();
+      const interactive = this.interactive();
+      term?.setInteractive(interactive);
+    });
+
     // Tab became visible.
     effect(() => {
       const term = this.term();

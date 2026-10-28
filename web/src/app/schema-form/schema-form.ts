@@ -99,9 +99,13 @@ interface Choice {
               (checkedChange)="setValue(name, $event)"
               [disabled]="isLocked(name)"
               [ariaLabelledby]="idFor(name) + '-title'"
-              [ariaDescribedby]="idFor(name) + '-meta'"
+              [ariaDescribedby]="describedBy(name, true)"
             />
           </z-setting>
+          @if (descriptionOf(name)) {
+            <!-- z-setting renders the description without an id; this copy is what the toggle references. -->
+            <span hidden [id]="idFor(name) + '-desc'">{{ descriptionOf(name) }}</span>
+          }
           <ng-container *ngTemplateOutlet="metaTpl; context: { $implicit: name }" />
         } @else {
           <z-field
@@ -127,6 +131,8 @@ interface Choice {
               }
               @case ("segment") {
                 <z-segment
+                  [id]="idFor(name)"
+                  [attr.aria-describedby]="describedBy(name) || null"
                   [options]="choicesOf(field)"
                   [value]="currentChoice(name)"
                   (valueChange)="onChoice(name, field, $event)"
@@ -201,7 +207,8 @@ interface Choice {
                       <input
                         zInput
                         mono
-                        [id]="idFor(name) + '-' + $index"
+                        [id]="$index === 0 ? idFor(name) : idFor(name) + '-' + $index"
+                        [attr.aria-describedby]="describedBy(name) || null"
                         [attr.aria-label]="
                           i18n.t('form.itemLabel', { label: labelOf(name), n: $index + 1 })
                         "
@@ -256,7 +263,9 @@ interface Choice {
           </z-field>
         }
         @if (errorOf(name) && field.type === "boolean") {
-          <span class="z-field__error">{{ errorOf(name) }}</span>
+          <span class="z-field__error" role="alert" [id]="idFor(name) + '-error'">{{
+            errorOf(name)
+          }}</span>
         }
       }
     </ng-template>
@@ -264,7 +273,7 @@ interface Choice {
     <ng-template #metaTpl let-name>
       @let badge = badges()[name];
       @let lockedBy = locked()[name];
-      @if (badge || lockedBy || resettable()[name]) {
+      @if (hasMeta(name)) {
         <div class="meta" [id]="idFor(name) + '-meta'">
           @if (badge) {
             <z-badge [status]="badge.status ?? 'neutral'">{{ badge.text }}</z-badge>
@@ -428,6 +437,37 @@ export class SchemaForm {
     return error.index === undefined
       ? message
       : this.i18n.t("form.error.item", { n: error.index + 1, message });
+  }
+
+  protected hasMeta(name: string): boolean {
+    return !!this.badges()[name] || !!this.locked()[name] || !!this.resettable()[name];
+  }
+
+  /**
+   * The IDs of the help, meta and error elements that exist for a field, for controls that
+   * z-field cannot wire by itself (toggle, segment, list). A `setting` row (toggle) has no
+   * z-field: its description copy, meta element and error are referenced; otherwise it is the
+   * error, or the hint when there is none, as z-field renders them.
+   */
+  protected describedBy(name: string, setting = false): string {
+    const id = this.idFor(name);
+    const ids: string[] = [];
+    if (setting) {
+      if (this.descriptionOf(name)) {
+        ids.push(`${id}-desc`);
+      }
+      if (this.hasMeta(name)) {
+        ids.push(`${id}-meta`);
+      }
+      if (this.errorOf(name)) {
+        ids.push(`${id}-error`);
+      }
+    } else if (this.errorOf(name)) {
+      ids.push(`${id}-error`);
+    } else if (this.hintOf(name)) {
+      ids.push(`${id}-hint`);
+    }
+    return ids.join(" ");
   }
 
   protected hasError(name: string): boolean {

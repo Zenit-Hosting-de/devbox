@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  inject,
+  input,
+} from "@angular/core";
 import { ZBadge, ZButton, ZIcon, ZToast } from "zenit-ui";
 import { ApiProblem } from "../api/problem";
 import { isLive } from "../api/types";
@@ -173,38 +180,49 @@ function dockTitle(
   template: `
     <section class="dock" [attr.aria-label]="i18n.t('dock.title')">
       <div class="bar">
-        <div class="tabs" role="tablist" [attr.aria-label]="i18n.t('dock.tabs')">
-          @for (tab of dock.tabs(); track tab.id) {
-            @let session = sessions.sessions().get(tab.id);
-            <div class="tab" [class.active]="tab.id === dock.active()">
-              <button
-                type="button"
-                role="tab"
-                class="tab-label"
-                [id]="'dock-tab-' + tab.id"
-                [attr.aria-selected]="tab.id === dock.active()"
-                [attr.aria-controls]="'dock-panel-' + tab.id"
-                (click)="dock.select(tab.id)"
-              >
-                @if (session) {
-                  <z-badge [status]="badge(session.state)" dot>
-                    {{ i18n.t("session.state." + session.state) }}
-                  </z-badge>
-                }
-                <span>{{ titleOf(tab.id) }}</span>
-              </button>
+        <div class="tabs">
+          @if (dock.tabs().length > 0) {
+            <div
+              class="tablist"
+              role="tablist"
+              [attr.aria-label]="i18n.t('dock.tabs')"
+              (keydown)="onKeydown($event)"
+            >
+              @for (tab of dock.tabs(); track tab.id) {
+                @let session = sessions.sessions().get(tab.id);
+                <button
+                  type="button"
+                  role="tab"
+                  class="tab-label"
+                  [class.active]="tab.id === dock.active()"
+                  [id]="'dock-tab-' + tab.id"
+                  [attr.aria-selected]="tab.id === dock.active()"
+                  [attr.aria-controls]="'dock-panel-' + tab.id"
+                  [attr.tabindex]="tab.id === dock.active() ? 0 : -1"
+                  (click)="dock.select(tab.id)"
+                >
+                  @if (session) {
+                    <z-badge [status]="badge(session.state)" dot>
+                      {{ i18n.t("session.state." + session.state) }}
+                    </z-badge>
+                  }
+                  <span>{{ titleOf(tab.id) }}</span>
+                </button>
+              }
+            </div>
+            @if (dock.active(); as activeId) {
               <button
                 zBtn="ghost"
                 size="sm"
                 iconOnly
                 type="button"
-                [attr.aria-label]="i18n.t('dock.close', { title: titleOf(tab.id) })"
-                (click)="dock.close(tab.id)"
+                [attr.aria-label]="i18n.t('dock.close', { title: titleOf(activeId) })"
+                (click)="dock.close(activeId)"
               >
                 <z-icon name="close" />
               </button>
-            </div>
-          } @empty {
+            }
+          } @else {
             <span class="z-subtle empty">{{ i18n.t("dock.empty") }}</span>
           }
         </div>
@@ -264,12 +282,14 @@ function dockTitle(
       overflow-x: auto;
       min-inline-size: 0;
     }
-    .tab {
+    .tablist {
       display: flex;
       align-items: center;
-      border-radius: var(--radius-sm);
+      gap: var(--space-1);
+      min-inline-size: 0;
+      overflow-x: auto;
     }
-    .tab.active {
+    .tab-label.active {
       background: var(--surface-hover);
     }
     .tab-label {
@@ -284,6 +304,7 @@ function dockTitle(
       font: inherit;
       cursor: pointer;
       white-space: nowrap;
+      border-radius: var(--radius-sm);
     }
     .empty {
       padding-inline: var(--space-2);
@@ -305,7 +326,57 @@ export class Dock {
   protected readonly sessions = inject(SessionsStore);
   private readonly text = inject(PluginText);
 
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
   protected badge = sessionBadge;
+
+  /** Arrow keys, Home and End move between the tabs (roving tabindex); Delete closes one. */
+  protected onKeydown(event: KeyboardEvent): void {
+    const tabs = this.dock.tabs();
+    const current = tabs.findIndex((t) => `dock-tab-${t.id}` === (event.target as Element).id);
+    if (current < 0) {
+      return;
+    }
+    let next: number;
+    switch (event.key) {
+      case "ArrowRight":
+        next = (current + 1) % tabs.length;
+        break;
+      case "ArrowLeft":
+        next = (current - 1 + tabs.length) % tabs.length;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = tabs.length - 1;
+        break;
+      case "Delete": {
+        event.preventDefault();
+        const id = tabs[current]?.id;
+        const neighbour = tabs[current + 1] ?? tabs[current - 1];
+        if (id !== undefined) {
+          this.dock.close(id);
+          if (neighbour) {
+            this.focusTab(neighbour.id);
+          }
+        }
+        return;
+      }
+      default:
+        return;
+    }
+    event.preventDefault();
+    const id = tabs[next]?.id;
+    if (id !== undefined) {
+      this.dock.select(id);
+      this.focusTab(id);
+    }
+  }
+
+  private focusTab(id: string): void {
+    this.host.nativeElement.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus();
+  }
 
   protected titleOf(id: string): string {
     return dockTitle(this.text, this.sessions.sessions().get(id)) || id;

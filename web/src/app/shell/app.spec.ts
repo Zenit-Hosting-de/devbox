@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { routes } from "../app.routes";
 import { I18n } from "../i18n/i18n";
 import type { MockBackend } from "../mock/mock-backend";
+import { InfoStore } from "../stores/info.store";
 import { DockStore } from "../stores/dock.store";
 import { SessionsStore } from "../stores/sessions.store";
 import { byText, queryAll, setUpApp, settle } from "../testing/test-app";
@@ -68,6 +69,38 @@ describe("App shell (against the mock backend)", () => {
     expect(fixture.nativeElement.querySelector("a.z-skip-link")?.textContent).toContain(
       "Zum Hauptinhalt springen",
     );
+  });
+
+  it("keeps the header and the language select in place when the language changes", async () => {
+    const fixture = TestBed.createComponent(App);
+    await settle(fixture, () => {
+      expect(queryAll(fixture, "z-sidebar .z-side__item")).toHaveLength(5);
+    });
+    const header = fixture.nativeElement.querySelector("z-app-header") as HTMLElement;
+    const select = header.querySelector("select") as HTMLSelectElement;
+    select.focus();
+    select.value = "de";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(fixture, () => {
+      expect(queryAll(fixture, "z-sidebar .z-side__item")[0]?.textContent).toContain("Übersicht");
+    });
+    expect(fixture.nativeElement.querySelector("z-app-header")).toBe(header);
+    expect(header.querySelector("select")).toBe(select);
+    expect(document.activeElement).toBe(select);
+    expect(header.querySelector("nav")?.getAttribute("aria-label")).toBe("Hauptnavigation");
+  });
+
+  it("does not open the socket when the core announces no WebSocket", async () => {
+    const info = backend.info();
+    vi.spyOn(backend, "info").mockReturnValue({ ...info, features: ["ui"] });
+    const fixture = TestBed.createComponent(App);
+    await settle(fixture);
+    await vi.waitFor(() => {
+      expect(TestBed.inject(InfoStore).info()).not.toBeNull();
+    });
+    await settle(fixture);
+    expect(TestBed.inject(SessionsStore).status()).toBe("idle");
+    expect(fixture.nativeElement.textContent).not.toContain("No connection to the core");
   });
 
   it("shows an offline banner while the connection is down", async () => {

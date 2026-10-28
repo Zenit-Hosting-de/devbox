@@ -71,32 +71,27 @@ const NAV: readonly { path: string; icon: string; key: string; exact: boolean }[
 
     <div class="app">
       <div class="z-container">
-        @for (lang of [i18n.language()]; track lang) {
-          <z-app-header [navLabel]="i18n.t('shell.mainNav')">
-            <a zBrand routerLink="/">DevBox</a>
-            <z-select zHeaderEnd size="sm">
-              <select
-                [attr.aria-label]="i18n.t('appearance.language')"
-                (change)="onLanguage($event)"
-              >
-                @for (l of languages; track l.code) {
-                  <option [value]="l.code" [selected]="l.code === i18n.language()">
-                    {{ l.name }}
-                  </option>
-                }
-              </select>
-            </z-select>
-            <z-select zHeaderEnd size="sm">
-              <select [attr.aria-label]="i18n.t('appearance.theme')" (change)="onScheme($event)">
-                @for (scheme of schemes; track scheme) {
-                  <option [value]="scheme" [selected]="scheme === theme.scheme()">
-                    {{ i18n.t("theme." + scheme) }}
-                  </option>
-                }
-              </select>
-            </z-select>
-          </z-app-header>
-        }
+        <z-app-header [navLabel]="i18n.t('shell.mainNav')">
+          <a zBrand routerLink="/">DevBox</a>
+          <z-select zHeaderEnd size="sm">
+            <select [attr.aria-label]="i18n.t('appearance.language')" (change)="onLanguage($event)">
+              @for (l of languages; track l.code) {
+                <option [value]="l.code" [selected]="l.code === i18n.language()">
+                  {{ l.name }}
+                </option>
+              }
+            </select>
+          </z-select>
+          <z-select zHeaderEnd size="sm">
+            <select [attr.aria-label]="i18n.t('appearance.theme')" (change)="onScheme($event)">
+              @for (scheme of schemes; track scheme) {
+                <option [value]="scheme" [selected]="scheme === theme.scheme()">
+                  {{ i18n.t("theme." + scheme) }}
+                </option>
+              }
+            </select>
+          </z-select>
+        </z-app-header>
       </div>
 
       @if (sessions.status() === "offline") {
@@ -109,24 +104,22 @@ const NAV: readonly { path: string; icon: string; key: string; exact: boolean }[
 
       <div class="z-container content">
         <div class="z-panel-shell">
-          @for (lang of [i18n.language()]; track lang) {
-            <z-sidebar [ariaLabel]="i18n.t('shell.sideNav')">
-              <z-sidebar-group>
-                @for (item of nav(); track item.path) {
-                  <a
-                    zSidebarItem
-                    [icon]="item.icon"
-                    [routerLink]="item.path"
-                    routerLinkActive
-                    #link="routerLinkActive"
-                    [routerLinkActiveOptions]="{ exact: item.exact }"
-                    [active]="link.isActive"
-                    >{{ item.label }}</a
-                  >
-                }
-              </z-sidebar-group>
-            </z-sidebar>
-          }
+          <z-sidebar [ariaLabel]="i18n.t('shell.sideNav')">
+            <z-sidebar-group>
+              @for (item of nav(); track item.path) {
+                <a
+                  zSidebarItem
+                  [icon]="item.icon"
+                  [routerLink]="item.path"
+                  routerLinkActive
+                  #link="routerLinkActive"
+                  [routerLinkActiveOptions]="{ exact: item.exact }"
+                  [active]="link.isActive"
+                  >{{ item.label }}</a
+                >
+              }
+            </z-sidebar-group>
+          </z-sidebar>
           <main id="inhalt" tabindex="-1" class="main">
             <router-outlet />
           </main>
@@ -205,7 +198,7 @@ export class App {
   constructor() {
     // Instantiated here so translation files are fetched as soon as plugins are known.
     inject(PluginMessagesStore);
-    inject(InfoStore);
+    const info = inject(InfoStore);
 
     this.sessions.on("error", (message) => {
       this.toast.error(
@@ -215,8 +208,14 @@ export class App {
       );
     });
 
+    // The socket is only opened when the core announces it; without /info (core not
+    // reachable) the store still connects and shows the offline state.
     afterNextRender(() => {
-      this.sessions.connect();
+      void info.load().then((loaded) => {
+        if (loaded === null || loaded.features?.includes("ws")) {
+          this.sessions.connect();
+        }
+      });
     });
 
     this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe(() => {

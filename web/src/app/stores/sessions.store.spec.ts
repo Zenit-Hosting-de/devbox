@@ -276,6 +276,17 @@ describe("SessionsStore", () => {
     expect(written).toEqual(["history", "new"]);
   });
 
+  it("remembers the summary of a session that is opened from the history", async () => {
+    const store = use();
+    const api = TestBed.inject(ApiClient);
+    vi.spyOn(api, "sessionLog").mockResolvedValue({ data: new Uint8Array(), nextSeq: 0 });
+    vi.spyOn(api, "sessionEvents").mockResolvedValue({ events: [] });
+    expect(store.sessions().has(SESSION.id)).toBe(false);
+    await store.openExisting(SESSION);
+    expect(store.sessions().get(SESSION.id)).toEqual(SESSION);
+    expect(store.live().map((s) => s.id)).toEqual([SESSION.id]);
+  });
+
   it("resets the terminal and reloads the log on a gap", async () => {
     const store = use();
     const api = TestBed.inject(ApiClient);

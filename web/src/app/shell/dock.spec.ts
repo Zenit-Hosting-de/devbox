@@ -109,6 +109,51 @@ describe("Dock (against the mock backend)", () => {
     expect(localStorage.getItem("devbox.dock.collapsed")).toBe("1");
   });
 
+  it("keeps only tabs inside the tablist and moves between them with the keyboard", async () => {
+    const fixture = TestBed.createComponent(Dock);
+    await settle(fixture);
+    expect(query(fixture, "[role=tablist]")).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain("No session open");
+
+    const first = await start("java.update");
+    const second = await start("node.update");
+    await settle(fixture, () => {
+      expect(queryAll(fixture, "[role=tab]")).toHaveLength(2);
+    });
+    const list = query(fixture, "[role=tablist]") as HTMLElement;
+    expect([...list.children].every((c) => c.getAttribute("role") === "tab")).toBe(true);
+    expect(query(fixture, "[role=tablist] button:not([role=tab])")).toBeNull();
+
+    const tabs = queryAll<HTMLButtonElement>(fixture, "[role=tab]");
+    expect(tabs.map((t) => t.tabIndex)).toEqual([-1, 0]);
+    const press = async (target: HTMLElement, key: string) => {
+      target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+      await settle(fixture);
+    };
+    const dock = TestBed.inject(DockStore);
+    await press(tabs[1] as HTMLElement, "ArrowRight");
+    expect(dock.active()).toBe(first.id);
+    expect(document.activeElement?.id).toBe(`dock-tab-${first.id}`);
+    await press(tabs[0] as HTMLElement, "End");
+    expect(dock.active()).toBe(second.id);
+    await press(tabs[1] as HTMLElement, "Home");
+    expect(dock.active()).toBe(first.id);
+    await press(tabs[0] as HTMLElement, "ArrowLeft");
+    expect(dock.active()).toBe(second.id);
+    expect(queryAll<HTMLButtonElement>(fixture, "[role=tab]").map((t) => t.tabIndex)).toEqual([
+      -1, 0,
+    ]);
+
+    // The close button of the active tab sits next to the tablist, not inside it.
+    const closeButton = query<HTMLButtonElement>(fixture, ".tabs > button");
+    expect(closeButton?.getAttribute("aria-label")).toContain("Close");
+    closeButton?.click();
+    await settle(fixture);
+    expect(dock.tabs().map((t) => t.id)).toEqual([first.id]);
+    await press(query(fixture, "[role=tab]") as HTMLElement, "Delete");
+    expect(dock.tabs()).toEqual([]);
+  });
+
   it("reports the terminal size and sends resize messages for a running session", async () => {
     const fixture = TestBed.createComponent(Dock);
     await settle(fixture);

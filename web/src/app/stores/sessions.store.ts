@@ -290,6 +290,7 @@ export class SessionsStore {
    * stream is subscribed from the sequence number the log ends at.
    */
   async openExisting(session: Session): Promise<SessionChannel> {
+    this.upsert(session);
     const existing = this.channels.get(session.id);
     if (existing) {
       return existing;

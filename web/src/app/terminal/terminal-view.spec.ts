@@ -82,6 +82,23 @@ describe("TerminalView", () => {
     expect(fixture.componentInstance.typed).toEqual(["a"]);
   });
 
+  it("switches the terminal input on when the session becomes live later", async () => {
+    const fixture = TestBed.createComponent(Host);
+    fixture.componentInstance.interactive.set(false);
+    await settle(fixture, () => {
+      expect(fakeTerminals).toHaveLength(1);
+    });
+    await settle(fixture, () => {
+      expect(fakeTerminals[0]?.interactive).toBe(false);
+    });
+    fixture.componentInstance.interactive.set(true);
+    await settle(fixture, () => {
+      expect(fakeTerminals[0]?.interactive).toBe(true);
+    });
+    fakeTerminals[0]?.type("sudo");
+    expect(fixture.componentInstance.typed).toEqual(["sudo"]);
+  });
+
   it("reports size changes debounced", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {

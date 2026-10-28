@@ -30,6 +30,8 @@ export interface TerminalLike {
   fit(): void;
   focus(): void;
   setColors(colors: TerminalColors): void;
+  /** Enables the keyboard input and the blinking cursor, or turns both off. */
+  setInteractive(interactive: boolean): void;
   onData(callback: (data: string) => void): void;
   onResize(callback: (size: TerminalSize) => void): void;
   dispose(): void;
@@ -121,6 +123,10 @@ export const xtermFactory: TerminalFactory = async (host, options) => {
     },
     setColors: (colors) => {
       term.options.theme = colors;
+    },
+    setInteractive: (interactive) => {
+      term.options.disableStdin = !interactive;
+      term.options.cursorBlink = interactive;
     },
     onData: (callback) => {
       term.onData(callback);
