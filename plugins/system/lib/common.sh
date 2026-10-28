@@ -85,7 +85,8 @@ release_asset_url() {
 }
 
 # newest_release FILE CHANNEL ARCH: sets LATEST_VERSION and LATEST_INDEX to the newest
-# release of the channel (stable, prerelease) that has an archive for ARCH. Drafts,
+# release of the channel (stable, prerelease) that has an archive for ARCH; tags are
+# vX.Y.Z or devbox-vX.Y.Z. Drafts,
 # tags that are not versions and releases without binaries are ignored. Returns 1
 # when there is none.
 # shellcheck disable=SC2034 # LATEST_VERSION and LATEST_INDEX are read by the callers
@@ -99,7 +100,8 @@ newest_release() {
   for i in "${!tags[@]}"; do
     [ "${drafts[$i]:-false}" = true ] && continue
     [ "$channel" = stable ] && [ "${pres[$i]:-false}" = true ] && continue
-    v=${tags[$i]#v}
+    v=${tags[$i]#devbox-} # release-please component tags (devbox-vX.Y.Z)
+    v=${v#v}
     [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || continue
     if [ -n "$LATEST_VERSION" ] && ! version_newer "$v" "$LATEST_VERSION"; then
       continue
