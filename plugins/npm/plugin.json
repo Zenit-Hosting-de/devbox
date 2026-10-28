@@ -1,0 +1,107 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "npm",
+  "version": "1.0.0",
+  "name": "npm",
+  "description": "Write package registries and their credentials into the npm configuration",
+  "category": "tool",
+  "icon": "package",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["base64", "chmod", "rm"],
+    "plugins": { "registry": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": [],
+    "files": {
+      "read": ["${npm.npmrc}"],
+      "write": ["${npm.npmrc}", "${npm.envFile}"]
+    },
+    "sudo": false,
+    "credentials": ["registry"]
+  },
+  "settings": {
+    "mode": {
+      "type": "string",
+      "enum": ["file", "env"],
+      "default": "file",
+      "label": "Where tokens are stored",
+      "help": "file: the token is written into the npm configuration file (mode 0600). env: the file refers to an environment variable and the token is exported from a shell environment file."
+    },
+    "npmrc": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.npmrc",
+      "label": "npm configuration file",
+      "advanced": true
+    },
+    "defaultRegistry": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://registry.npmjs.org/",
+      "label": "Default registry",
+      "help": "Written by the action configure. A credential without scopes replaces it."
+    },
+    "alwaysAuth": {
+      "type": "boolean",
+      "default": false,
+      "label": "Always send credentials",
+      "help": "Adds always-auth for registries with a credential, for tools that do not send them on their own."
+    },
+    "envFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d/npm.sh",
+      "label": "Shell environment file",
+      "help": "Exports the token variables in mode env.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "config": {
+      "label": "Effective registry",
+      "run": ["checks/config.sh"],
+      "timeout": "5s",
+      "cache": "1m",
+      "refreshOn": ["session.finished:npm.*"]
+    }
+  },
+  "actions": {
+    "configure": {
+      "label": "Set default registry",
+      "run": ["actions/configure.sh"],
+      "params": {
+        "registry": {
+          "type": "string",
+          "format": "uri",
+          "default": "${npm.defaultRegistry}",
+          "label": "Registry"
+        }
+      },
+      "timeout": "1m"
+    }
+  },
+  "consumes": {
+    "registry": {
+      "apply": ["consume/apply.sh"],
+      "remove": ["consume/remove.sh"],
+      "options": {
+        "repository": { "type": "string", "label": "Repository name" },
+        "url": { "type": "string", "format": "uri", "label": "Full address" },
+        "scopes": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^@[a-z0-9-~][a-z0-9-._~]*$" },
+          "label": "Scopes"
+        }
+      }
+    }
+  },
+  "contributes": {
+    "overview": { "check": "npm.config", "primaryAction": "npm.configure" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}
