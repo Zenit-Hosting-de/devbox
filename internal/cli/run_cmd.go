@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
+	"github.com/Zenit-Hosting-de/devbox/internal/history"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
 	"github.com/Zenit-Hosting-de/devbox/internal/runner"
 	"github.com/Zenit-Hosting-de/devbox/internal/schema"
@@ -118,14 +120,18 @@ func (a *app) run(ctx context.Context, ref string, f runFlags) error {
 		spec.Input = a.io.Stdin
 	}
 
+	store := history.New(r.Env.StateDir, st.env.validator)
+	sess, err := store.Create(spec.SessionID)
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	cb := runner.Callbacks{Output: a.io.Stdout}
-	seq := 0
+	cb := runner.Callbacks{Output: io.MultiWriter(a.io.Stdout, sess)}
 	emit := func(msg map[string]any) {
+		ev := sess.Event(msg, time.Now())
 		if a.jsonOut {
-			_ = json.NewEncoder(a.io.Stdout).Encode(eventLine{Seq: seq, Time: time.Now().UTC().Format(time.RFC3339Nano), Event: msg})
-			seq++
+			_ = json.NewEncoder(a.io.Stdout).Encode(ev)
 		}
 		if msg["type"] == "setting" {
 			key := pluginID + "." + fmt.Sprint(msg["key"])
@@ -136,12 +142,16 @@ func (a *app) run(ctx context.Context, ref string, f runFlags) error {
 	}
 	cb.Message = emit
 	if a.jsonOut {
-		cb.Output = nil // JSON Lines only
+		cb.Output = sess // JSON Lines only on stdout
 	}
 	res, err := r.Run(ctx, spec, cb)
+	if cerr := sess.Close(); cerr != nil {
+		_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", cerr)
+	}
 	if err != nil {
 		return err
 	}
+	a.record(st, store, spec, action, res)
 	for _, w := range res.Warnings {
 		_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", w)
 	}
@@ -157,11 +167,65 @@ func (a *app) run(ctx context.Context, ref string, f runFlags) error {
 	}
 }
 
-// eventLine is one session event (schema/event.v1.json), keys in schema order.
-type eventLine struct {
-	Seq   int            `json:"seq"`
-	Time  string         `json:"time"`
-	Event map[string]any `json:"event"`
+// record writes the history line of a finished session and applies the retention
+// settings. Failures are warnings: the action itself has already run.
+func (a *app) record(st *state, store *history.Store, spec runner.Spec, action map[string]any, res *runner.Result) {
+	title, _ := action["label"].(string)
+	if title == "" {
+		title = spec.PluginID + "." + spec.Name
+	}
+	e := history.Entry{
+		ID:        spec.SessionID,
+		Action:    spec.PluginID + "." + spec.Name,
+		Plugin:    spec.PluginID,
+		Title:     title,
+		User:      st.env.ctx.Host.User,
+		Origin:    history.OriginCLI,
+		DryRun:    spec.DryRun,
+		StartedAt: history.Timestamp(res.Started),
+		EndedAt:   history.Timestamp(res.Ended),
+		State:     res.State,
+		Changes:   res.Changes,
+	}
+	if res.ExitCode >= 0 {
+		code := res.ExitCode
+		e.ExitCode = &code
+	}
+	if res.Result != nil {
+		e.Summary, _ = res.Result["summary"].(string)
+	}
+	if err := store.Append(e); err != nil {
+		_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", err)
+	}
+	keepDays, keepSessions := retention(st)
+	if _, err := store.Prune(time.Now(), keepDays, keepSessions); err != nil {
+		_, _ = fmt.Fprintln(a.io.Stderr, "devbox: warning:", err)
+	}
+}
+
+// intValue reads a JSON integer as parsed by jsonfile (json.Number).
+func intValue(v any) (int, bool) {
+	n, ok := v.(json.Number)
+	if !ok {
+		return 0, false
+	}
+	i, err := n.Int64()
+	return int(i), err == nil
+}
+
+// retention reads history.keepDays and history.keepSessions; the user file wins over
+// the system file, zero means the schema default.
+func retention(st *state) (keepDays, keepSessions int) {
+	for _, f := range []*config.File{st.system, st.user} {
+		h, _ := f.Plain()["history"].(map[string]any)
+		if n, ok := intValue(h["keepDays"]); ok {
+			keepDays = n
+		}
+		if n, ok := intValue(h["keepSessions"]); ok {
+			keepSessions = n
+		}
+	}
+	return keepDays, keepSessions
 }
 
 func findPlugin(plugins []*plugin.Plugin, id string) *plugin.Plugin {

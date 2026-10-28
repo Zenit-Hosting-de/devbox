@@ -1,0 +1,88 @@
+# AP-06: every session writes exactly one history line, its output, its events and
+# backups; retention removes old sessions with their files.
+
+chmod 755 home/.local/share/devbox/plugins/demo/act.sh
+env STATE=$HOME/.local/state/devbox
+
+# an old session from 2020 is removed by the retention (keepDays defaults to 90)
+exists $STATE/history/2020-01.jsonl
+exists $STATE/sessions/s_01DXF6DT00AAAAAAAAAAAAAAAA.log
+exists $STATE/backups/s_01DXF6DT00AAAAAAAAAAAAAAAA/etc/demo
+
+exec devbox run demo.edit
+stdout 'editing'
+
+! exists $STATE/history/2020-01.jsonl
+! exists $STATE/sessions/s_01DXF6DT00AAAAAAAAAAAAAAAA.log
+! exists $STATE/backups/s_01DXF6DT00AAAAAAAAAAAAAAAA
+
+# exactly one line for the session
+exec devbox history --json
+stdout '"sessions": \['
+stdout '"action": "demo.edit"'
+stdout '"title": "Edit"'
+stdout '"origin": "cli"'
+stdout '"state": "success"'
+stdout '"exitCode": 0'
+stdout '"changes": 1'
+stdout '"summary": "edited"'
+exec sh -c 'cat $STATE/history/*.jsonl | wc -l'
+stdout '^ *1$'
+
+# a failed dry run adds a second line
+! exec devbox run demo.fail --dry-run
+exec sh -c 'cat $STATE/history/*.jsonl | wc -l'
+stdout '^ *2$'
+exec devbox history --limit 1
+stdout 'failed\s+demo.fail\s+dry-run'
+! stdout 'demo.edit'
+
+# output, events and backups of the first session
+exec sh -c 'devbox history --json | grep -o "\"id\": \"s_[^\"]*\"" | tail -n1 | cut -d\" -f4'
+cp stdout first.txt
+exec sh -c 'devbox logs $(cat first.txt)'
+stdout '^editing'
+exec sh -c 'devbox logs --json $(cat first.txt)'
+stdout '"backups": \[\s*"[^"]*/home/.demorc"'
+stdout '"events": "[^"]*\.events\.jsonl"'
+exec sh -c 'cat $STATE/sessions/$(cat first.txt).events.jsonl'
+stdout '"type":"change"'
+stdout '"type":"result"'
+
+# unknown or malformed session IDs
+! exec devbox logs s_0000000000
+stderr 'not-found'
+! exec devbox logs ../etc
+stderr 'validation'
+
+-- home/.demorc --
+keep=1
+-- home/.local/state/devbox/history/2020-01.jsonl --
+{"id":"s_01DXF6DT00AAAAAAAAAAAAAAAA","action":"demo.edit","title":"Edit","user":"dev","origin":"cli","dryRun":false,"startedAt":"2020-01-01T00:00:00Z","endedAt":"2020-01-01T00:01:00Z","state":"success","exitCode":0,"changes":0,"summary":""}
+-- home/.local/state/devbox/sessions/s_01DXF6DT00AAAAAAAAAAAAAAAA.log --
+old
+-- home/.local/state/devbox/backups/s_01DXF6DT00AAAAAAAAAAAAAAAA/etc/demo --
+old
+-- home/.local/share/devbox/plugins/demo/plugin.json --
+{
+  "id": "demo",
+  "version": "1.0.0",
+  "name": "Demo",
+  "actions": {
+    "edit": { "label": "Edit", "run": ["act.sh", "edit"] },
+    "fail": { "label": "Fail", "run": ["act.sh", "fail"] }
+  }
+}
+-- home/.local/share/devbox/plugins/demo/act.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1" in
+edit)
+  echo editing
+  printf 'demo=1\n' | "$DEVBOX_BIN" sdk block ~/.demorc demo
+  printf '%s\n' '{"type":"result","summary":"edited"}' >&3
+  ;;
+fail)
+  exit 1
+  ;;
+esac

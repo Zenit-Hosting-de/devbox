@@ -50,23 +50,33 @@ type ConfigV1Json struct {
 // Retention of the session history.
 type ConfigV1JsonHistory struct {
 	// Days a session is kept.
-	KeepDays *int `json:"keepDays,omitempty,omitzero"`
+	KeepDays int `json:"keepDays,omitempty,omitzero"`
 
 	// Maximum number of sessions kept.
-	KeepSessions *int `json:"keepSessions,omitempty,omitzero"`
+	KeepSessions int `json:"keepSessions,omitempty,omitzero"`
 }
 
 // UnmarshalJSON implements json.Unmarshaler.
 func (j *ConfigV1JsonHistory) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
 	type Plain ConfigV1JsonHistory
 	var plain Plain
 	if err := json.Unmarshal(value, &plain); err != nil {
 		return err
 	}
-	if plain.KeepDays != nil && 1 > *plain.KeepDays {
+	if v, ok := raw["keepDays"]; !ok || v == nil {
+		plain.KeepDays = 90
+	}
+	if 1 > plain.KeepDays {
 		return fmt.Errorf("field %s: must be >= %v", "keepDays", 1)
 	}
-	if plain.KeepSessions != nil && 10 > *plain.KeepSessions {
+	if v, ok := raw["keepSessions"]; !ok || v == nil {
+		plain.KeepSessions = 500
+	}
+	if 10 > plain.KeepSessions {
 		return fmt.Errorf("field %s: must be >= %v", "keepSessions", 10)
 	}
 	*j = ConfigV1JsonHistory(plain)
