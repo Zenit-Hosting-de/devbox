@@ -50,6 +50,7 @@ type Plugin struct {
 	Manifest *Manifest // nil when invalid
 	State    State
 	Reasons  []Reason
+	Origin   Origin
 	// Shadowed lists directories of later plugins with the same ID, which this one
 	// replaces (first found wins).
 	Shadowed []string
@@ -82,7 +83,7 @@ func Evaluate(cands []Candidate, env Env) []*Plugin {
 			first.Shadowed = append(first.Shadowed, c.Dir)
 			continue
 		}
-		p := &Plugin{ID: id, Dir: c.Dir, Manifest: c.Manifest}
+		p := &Plugin{ID: id, Dir: c.Dir, Manifest: c.Manifest, Origin: c.Origin}
 		if c.Manifest == nil {
 			p.State = StateInvalid
 			detail := ""
@@ -296,12 +297,13 @@ type Status struct {
 	State    State    `json:"state"`
 	Reasons  []Reason `json:"reasons"`
 	Path     string   `json:"path"`
+	Origin   Origin   `json:"origin"`
 	Shadowed []string `json:"shadowed,omitempty"`
 }
 
 // Status returns the JSON form.
 func (p *Plugin) Status() Status {
-	s := Status{ID: p.ID, State: p.State, Reasons: p.Reasons, Path: p.Dir, Shadowed: p.Shadowed}
+	s := Status{ID: p.ID, State: p.State, Reasons: p.Reasons, Path: p.Dir, Origin: p.Origin, Shadowed: p.Shadowed}
 	if s.Reasons == nil {
 		s.Reasons = []Reason{}
 	}

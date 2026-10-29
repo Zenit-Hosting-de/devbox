@@ -81,6 +81,8 @@ export class MockSocket implements SocketLike, MockListener {
         return this.topics.has("sessions") || this.topics.has(`session:${message.session.id}`);
       case "settings":
         return this.topics.has("settings");
+      case "plugins":
+        return this.topics.has("plugins");
       case "output":
       case "event":
       case "gap":

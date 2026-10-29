@@ -16,6 +16,7 @@ const (
 	topicChecks   = "checks"
 	topicSessions = "sessions"
 	topicSettings = "settings"
+	topicPlugins  = "plugins"
 	topicSession  = "session:"
 )
 
@@ -132,7 +133,7 @@ type Hub struct {
 	closed   bool
 	sessions map[string]*sessionBuf
 	clients  map[*client]struct{}
-	topics   map[string]map[*client]struct{} // checks, sessions, settings
+	topics   map[string]map[*client]struct{} // checks, sessions, settings, plugins
 }
 
 func newHub(o hubOptions) *Hub {
@@ -171,6 +172,11 @@ type (
 	wsSettings struct {
 		Type string   `json:"type"`
 		Keys []string `json:"keys"`
+	}
+	wsPlugins struct {
+		Type         string   `json:"type"`
+		IDs          []string `json:"ids"`
+		Repositories []string `json:"repositories"`
 	}
 	wsGap struct {
 		Type     string `json:"type"`
@@ -341,6 +347,17 @@ func (h *Hub) SettingsChanged(keys []string) {
 		keys = []string{}
 	}
 	h.publish(topicSettings, encode(wsSettings{Type: "settings", Keys: keys}))
+}
+
+// PluginsChanged implements Broadcaster.
+func (h *Hub) PluginsChanged(ids, repositories []string) {
+	if ids == nil {
+		ids = []string{}
+	}
+	if repositories == nil {
+		repositories = []string{}
+	}
+	h.publish(topicPlugins, encode(wsPlugins{Type: "plugins", IDs: ids, Repositories: repositories}))
 }
 
 func (h *Hub) publish(topic string, msg []byte) {
@@ -555,5 +572,12 @@ func (m multiBroadcaster) CheckChanged(c CheckSummary) {
 func (m multiBroadcaster) SettingsChanged(keys []string) {
 	for _, b := range m {
 		b.SettingsChanged(keys)
+	}
+}
+
+// PluginsChanged implements Broadcaster.
+func (m multiBroadcaster) PluginsChanged(ids, repositories []string) {
+	for _, b := range m {
+		b.PluginsChanged(ids, repositories)
 	}
 }

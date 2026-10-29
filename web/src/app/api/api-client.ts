@@ -7,8 +7,12 @@ import type {
   CredentialList,
   Info,
   Messages,
+  PluginDetail,
   PluginList,
   Ref,
+  Repository,
+  RepositoryCreate,
+  RepositoryList,
   Session,
   SessionCreate,
   SessionEventList,
@@ -76,6 +80,49 @@ export class ApiClient {
 
   async patchSettings(patch: Readonly<Record<string, unknown>>): Promise<void> {
     await firstValueFrom(this.http.patch(`${this.base}/settings`, patch));
+  }
+
+  /** Switches a plugin on or off for the user (plugins.disabled of the user configuration). */
+  patchPlugin(id: string, enabled: boolean): Promise<PluginDetail> {
+    return firstValueFrom(
+      this.http.patch<PluginDetail>(`${this.base}/plugins/${encodeURIComponent(id)}`, { enabled }),
+    );
+  }
+
+  repositories(): Promise<RepositoryList> {
+    return firstValueFrom(this.http.get<RepositoryList>(`${this.base}/repositories`));
+  }
+
+  /** Writes the entry to the user configuration and syncs it once; this can take long. */
+  createRepository(body: RepositoryCreate): Promise<Repository> {
+    return firstValueFrom(this.http.post<Repository>(`${this.base}/repositories`, body));
+  }
+
+  syncRepository(name: string): Promise<Repository> {
+    return firstValueFrom(
+      this.http.post<Repository>(
+        `${this.base}/repositories/${encodeURIComponent(name)}/sync`,
+        null,
+      ),
+    );
+  }
+
+  approveRepository(name: string, revision: string): Promise<Repository> {
+    return firstValueFrom(
+      this.http.post<Repository>(`${this.base}/repositories/${encodeURIComponent(name)}/approve`, {
+        revision,
+      }),
+    );
+  }
+
+  discardRepository(name: string): Promise<Repository> {
+    return firstValueFrom(
+      this.http.delete<Repository>(`${this.base}/repositories/${encodeURIComponent(name)}/pending`),
+    );
+  }
+
+  async deleteRepository(name: string): Promise<void> {
+    await firstValueFrom(this.http.delete(`${this.base}/repositories/${encodeURIComponent(name)}`));
   }
 
   credentials(): Promise<CredentialList> {

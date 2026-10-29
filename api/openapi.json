@@ -5,7 +5,7 @@
     "title": "DevBox API",
     "version": "1",
     "summary": "The only interface between the DevBox core and its frontends (web UI, CLI, terminal menu).",
-    "description": "The contract covers the web UI milestone (AP-09 subset): info, plugins, checks, settings, credentials (read only), sessions, the WebSocket and the embedded schemas. Authentication, profiles, groups, setup and catalog endpoints follow. All responses are JSON with camelCase fields and RFC 3339 UTC times; errors use RFC 9457 problem details with a stable code.",
+    "description": "The contract covers the web UI milestone (AP-09 subset): info, plugins, checks, settings, credentials (read only), plugin repositories, sessions, the WebSocket and the embedded schemas. Authentication, profiles, groups, setup and catalog endpoints follow. All responses are JSON with camelCase fields and RFC 3339 UTC times; errors use RFC 9457 problem details with a stable code.",
     "license": {
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
@@ -21,6 +21,10 @@
     {
       "name": "info",
       "description": "Version and capabilities of the core."
+    },
+    {
+      "name": "repositories",
+      "description": "Plugin repositories (kind plugins): sources, revisions, review and approval."
     },
     {
       "name": "plugins",
@@ -139,6 +143,60 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      },
+      "patch": {
+        "tags": ["plugins"],
+        "operationId": "patchPlugin",
+        "summary": "Switch a plugin on or off.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Plugin ID.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The plugin after the change.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Writes plugins.disabled of the user configuration; doing the same twice changes nothing. 409 conflict for a plugin of the category core (cannot be switched off) and for switching on a plugin that the system configuration or a profile switches off (the detail names the source)."
       }
     },
     "/plugins/{id}/messages/{lang}": {
@@ -457,6 +515,251 @@
         }
       }
     },
+    "/repositories": {
+      "get": {
+        "tags": ["repositories"],
+        "operationId": "listRepositories",
+        "summary": "All repositories with sync state.",
+        "responses": {
+          "200": {
+            "description": "Repositories sorted by name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "tags": ["repositories"],
+        "operationId": "createRepository",
+        "summary": "Add a plugin repository and sync it.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The repository entry exists and was synced once. When the sync failed, state is error and lastError says why.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Repository"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Writes the entry (kind plugins) into the user configuration, validates it against the config schema and syncs it. With trust prompt the fetched revision is pending until approved; with pinned it is active at once. 409 conflict when a repository of this name exists in any layer, 422 validation for an invalid body (for example pinned without a full commit in ref)."
+      }
+    },
+    "/repositories/{name}": {
+      "delete": {
+        "tags": ["repositories"],
+        "operationId": "deleteRepository",
+        "summary": "Remove a repository.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name of the repository.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The entry and its files are gone."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Deletes the entry from the user configuration and the stored revisions. 409 conflict for an entry of the system configuration or a profile (the detail names the origin). The plugins of the repository are no longer found."
+      }
+    },
+    "/repositories/{name}/sync": {
+      "post": {
+        "tags": ["repositories"],
+        "operationId": "syncRepository",
+        "summary": "Fetch the repository and compare it with the active revision.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name of the repository.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The repository after the sync.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Repository"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "424": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "A new revision becomes pending (trust prompt) or active (trust pinned); the same revision changes nothing (lastSync.changed is false). Runs at most 5 minutes. Failure: 424 prerequisite when git, the network or access is missing, 422 validation for an invalid entry or content (a link in an archive, a missing path), 409 conflict for a disabled or unsupported entry. A failure is stored in lastError, too."
+      }
+    },
+    "/repositories/{name}/approve": {
+      "post": {
+        "tags": ["repositories"],
+        "operationId": "approveRepository",
+        "summary": "Make the pending revision active.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name of the repository.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryApprove"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The repository with the approved revision as active.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Repository"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "revision must be the pending revision, otherwise 409 conflict (also without a pending revision). The older revision is deleted."
+      }
+    },
+    "/repositories/{name}/pending": {
+      "delete": {
+        "tags": ["repositories"],
+        "operationId": "discardPendingRepository",
+        "summary": "Discard the pending revision.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name of the repository.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The repository without the pending revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Repository"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "404 not-found when no revision is pending. The active revision stays."
+      }
+    },
     "/sessions": {
       "get": {
         "tags": ["sessions"],
@@ -736,7 +1039,7 @@
         "tags": ["sessions", "ws"],
         "operationId": "openWebSocket",
         "summary": "WebSocket for live data.",
-        "description": "Upgrades to a WebSocket. Client messages follow WsClientMessage, core messages WsServerMessage. The Origin header is required and must be allowed; otherwise 403 csrf. Clients subscribe to topics (checks, sessions, settings, session:<id>); output and events of a session carry a sequence number (seq) and can be replayed with fromSeq. Both sides send a ping every 30 seconds.",
+        "description": "Upgrades to a WebSocket. Client messages follow WsClientMessage, core messages WsServerMessage. The Origin header is required and must be allowed; otherwise 403 csrf. Clients subscribe to topics (checks, sessions, settings, plugins, session:<id>); output and events of a session carry a sequence number (seq) and can be replayed with fromSeq. Both sides send a ping every 30 seconds.",
         "responses": {
           "101": {
             "description": "Switching Protocols"
@@ -1313,9 +1616,10 @@
               "unauthenticated",
               "csrf",
               "conflict",
+              "prerequisite",
               "internal"
             ],
-            "description": "Stable error code."
+            "description": "Stable error code. prerequisite: a command (git), the network or a permission is missing (424)."
           },
           "detail": {
             "type": "string",
@@ -1372,7 +1676,7 @@
       "PluginStatus": {
         "description": "A found plugin with its state.",
         "type": "object",
-        "required": ["id", "state", "reasons", "path"],
+        "required": ["id", "state", "reasons", "path", "origin"],
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -1402,6 +1706,9 @@
           "path": {
             "type": "string",
             "description": "Plugin directory."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/PluginOrigin"
           },
           "shadowed": {
             "type": "array",
@@ -1422,7 +1729,7 @@
       "PluginDetail": {
         "description": "A plugin with its manifest (absent when the manifest is invalid).",
         "type": "object",
-        "required": ["id", "state", "reasons", "path"],
+        "required": ["id", "state", "reasons", "path", "origin"],
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -1452,6 +1759,9 @@
           "path": {
             "type": "string",
             "description": "Plugin directory."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/PluginOrigin"
           },
           "shadowed": {
             "type": "array",
@@ -1729,9 +2039,9 @@
             "minItems": 1,
             "items": {
               "type": "string",
-              "pattern": "^(checks|sessions|settings|session:s_[0-9A-HJKMNP-TV-Z]{10,26})$"
+              "pattern": "^(checks|sessions|settings|plugins|session:s_[0-9A-HJKMNP-TV-Z]{10,26})$"
             },
-            "description": "checks, sessions, settings or session:<id>."
+            "description": "checks, sessions, settings, plugins or session:<id>."
           },
           "fromSeq": {
             "type": "integer",
@@ -2028,6 +2338,9 @@
             "$ref": "#/components/schemas/WsSettings"
           },
           {
+            "$ref": "#/components/schemas/WsPlugins"
+          },
+          {
             "$ref": "#/components/schemas/WsGap"
           },
           {
@@ -2040,6 +2353,333 @@
             "$ref": "#/components/schemas/WsPong"
           }
         ]
+      },
+      "PluginOrigin": {
+        "description": "Where a plugin was found: bundled with the binary, in a directory of plugins.paths, or in the active revision of a plugin repository.",
+        "type": "object",
+        "required": ["kind"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": ["builtin", "path", "repository"],
+            "description": "builtin: bundled plugin; path: a directory of plugins.paths; repository: the active revision of a plugins repository."
+          },
+          "path": {
+            "type": "string",
+            "description": "The search path (kind path)."
+          },
+          "repository": {
+            "$ref": "#/components/schemas/Name",
+            "description": "Name of the repository (kind repository)."
+          },
+          "revision": {
+            "type": "string",
+            "description": "Short form (12 characters) of the active revision (kind repository)."
+          }
+        }
+      },
+      "PluginPatch": {
+        "description": "Switches a plugin on or off for the user (plugins.disabled of the user configuration).",
+        "type": "object",
+        "required": ["enabled"],
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "true removes the plugin from plugins.disabled, false adds it."
+          }
+        }
+      },
+      "RepositoryKind": {
+        "enum": ["plugins", "catalog", "profile", "templates", "packages"],
+        "description": "Kind of repository (schema/config.v1.json). Only plugins is handled; the others have the state unsupported."
+      },
+      "RepositoryTrust": {
+        "enum": ["prompt", "pinned", "signature"],
+        "description": "prompt: a new revision waits for approval; pinned: the commit named in ref is activated without asking; signature: a Sigstore identity is configured, which arrives with the catalog (AP-23) and makes the repository state error."
+      },
+      "RepositoryState": {
+        "enum": ["new", "active", "pending", "error", "disabled", "unsupported"],
+        "description": "new: never synced. active: an active revision, nothing waits. pending: a revision waits for approval (the active one, if any, stays in use). error: the entry is invalid or the last sync failed, see lastError (an active revision stays in use after a failed sync). disabled: enabled is false, nothing is loaded. unsupported: another kind than plugins."
+      },
+      "RepositoryPermission": {
+        "description": "A permission a plugin declares. new is true in a pending revision when the active revision does not declare it for the plugin (all permissions of an added plugin are new); it is false everywhere else.",
+        "type": "object",
+        "required": ["kind", "value", "new"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": ["network", "files.read", "files.write", "sudo", "credentials"],
+            "description": "network: a target; files.read and files.write: a path; sudo: the value is true; credentials: a credential type."
+          },
+          "value": {
+            "type": "string",
+            "description": "The target, path or credential type, or true for sudo. Placeholders are not resolved."
+          },
+          "new": {
+            "type": "boolean",
+            "description": "Not declared by the active revision."
+          }
+        }
+      },
+      "RepositoryPlugin": {
+        "description": "A plugin folder of a revision with its declared permissions.",
+        "type": "object",
+        "required": ["id", "digest", "permissions", "requiresCommands"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Plugin ID from the manifest; the folder name when the manifest is invalid."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name from the manifest."
+          },
+          "version": {
+            "type": "string",
+            "description": "Plugin version from the manifest."
+          },
+          "description": {
+            "type": "string",
+            "description": "Short description from the manifest."
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "description": "SHA-256 digest of the plugin folder (sorted relative paths, executable bit, content)."
+          },
+          "change": {
+            "enum": ["added", "removed", "changed", "unchanged"],
+            "description": "Only in a pending revision, compared with the active one: added (not in the active revision), removed (only in the active revision; its data are those of the active revision), changed (another digest), unchanged. Absent in an active revision."
+          },
+          "previousVersion": {
+            "type": "string",
+            "description": "Version of the plugin in the active revision; only for change changed."
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepositoryPermission"
+            },
+            "description": "Declared permissions, in the order network, files.read, files.write, sudo, credentials."
+          },
+          "requiresCommands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "requires.commands of the manifest."
+          },
+          "error": {
+            "type": "string",
+            "description": "Why the plugin is invalid (manifest error, duplicate ID); a plugin with an error is not loaded."
+          }
+        }
+      },
+      "RepositoryActive": {
+        "description": "The revision whose plugins are loaded.",
+        "type": "object",
+        "required": ["revision", "syncedAt", "plugins"],
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "type": "string",
+            "description": "Commit SHA (git), SHA-256 of the tarball (https) or tree digest (file)."
+          },
+          "path": {
+            "type": "string",
+            "description": "Sub-directory with the plugin folders as it was when the revision was fetched."
+          },
+          "syncedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the revision was fetched."
+          },
+          "plugins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepositoryPlugin"
+            },
+            "description": "Plugins of the revision, sorted by folder name."
+          }
+        }
+      },
+      "RepositoryPending": {
+        "description": "A fetched revision that waits for approval, compared with the active one.",
+        "type": "object",
+        "required": ["revision", "fetchedAt", "plugins"],
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "type": "string",
+            "description": "Revision to pass to the approve endpoint."
+          },
+          "path": {
+            "type": "string",
+            "description": "Sub-directory with the plugin folders."
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the revision was fetched."
+          },
+          "plugins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepositoryPlugin"
+            },
+            "description": "The plugins of the pending revision plus the plugins that only the active revision has (change removed), sorted by ID. Every entry has change."
+          }
+        }
+      },
+      "RepositoryLastSync": {
+        "description": "Result of the last successful sync.",
+        "type": "object",
+        "required": ["at", "changed"],
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the sync finished."
+          },
+          "changed": {
+            "type": "boolean",
+            "description": "Whether it changed the active or the pending revision (false when the remote still has the known revision)."
+          }
+        }
+      },
+      "Repository": {
+        "description": "A repository entry of the configuration with its sync state. Entries come from the system configuration, profiles and the user configuration; the user wins unless a lower layer locks the entry.",
+        "type": "object",
+        "required": ["name", "kind", "enabled", "origin", "locked", "state"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RepositoryKind"
+          },
+          "source": {
+            "type": "string",
+            "description": "As written in the configuration (git+https://, git+ssh://, git+file://, https:// tarball, file://); placeholders are not resolved."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Git branch, tag or commit; absent means the HEAD of the remote."
+          },
+          "path": {
+            "type": "string",
+            "description": "Sub-directory with the plugin folders; absent means the root."
+          },
+          "trust": {
+            "$ref": "#/components/schemas/RepositoryTrust"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "false lists the entry but loads nothing."
+          },
+          "origin": {
+            "type": "string",
+            "description": "user, system or profile:<id>."
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "A lower layer locks the entry; it cannot be overridden or removed by the user."
+          },
+          "state": {
+            "$ref": "#/components/schemas/RepositoryState"
+          },
+          "active": {
+            "$ref": "#/components/schemas/RepositoryActive"
+          },
+          "pending": {
+            "$ref": "#/components/schemas/RepositoryPending"
+          },
+          "lastSync": {
+            "$ref": "#/components/schemas/RepositoryLastSync"
+          },
+          "lastError": {
+            "type": "string",
+            "description": "Why the entry is invalid or why the last sync failed."
+          }
+        }
+      },
+      "RepositoryList": {
+        "description": "All repositories sorted by name.",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Repository"
+        }
+      },
+      "RepositoryCreate": {
+        "description": "A new repository of kind plugins; it is written to the user configuration and synced.",
+        "type": "object",
+        "required": ["name", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(file|https|git\\+https|git\\+ssh|git\\+file)://",
+            "description": "git+https://, git+ssh://, git+file:// (a local Git repository), https:// (tar.gz, at most 100 MiB) or file:// (a local directory, file:///absolute/path)."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Git branch, tag or commit; only for git sources."
+          },
+          "path": {
+            "type": "string",
+            "description": "Relative sub-directory that holds the plugin folders."
+          },
+          "trust": {
+            "enum": ["prompt", "pinned"],
+            "default": "prompt",
+            "description": "pinned is only valid for a git source whose ref is a full 40-character commit; the synced revision is then active without approval."
+          }
+        }
+      },
+      "RepositoryApprove": {
+        "description": "Approval of the pending revision.",
+        "type": "object",
+        "required": ["revision"],
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "type": "string",
+            "description": "The revision of pending.revision the user reviewed."
+          }
+        }
+      },
+      "WsPlugins": {
+        "description": "Core to client: plugins were switched on or off, or the plugins of a repository changed (sync, approval, discard, removal). Reload the plugins and repositories.",
+        "type": "object",
+        "required": ["type", "ids", "repositories"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "plugins"
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Name"
+            },
+            "description": "Plugins concerned; may be empty."
+          },
+          "repositories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Name"
+            },
+            "description": "Repositories concerned; empty when only a plugin was switched."
+          }
+        }
       }
     }
   }

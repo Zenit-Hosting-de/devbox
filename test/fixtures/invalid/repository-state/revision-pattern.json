@@ -1,0 +1,8 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/repository-state.v1.json",
+  "pending": {
+    "revision": "main",
+    "fetchedAt": "2026-10-28T09:00:00Z",
+    "plugins": []
+  }
+}

@@ -134,7 +134,7 @@ describe("SessionsStore", () => {
     sockets[0]?.open();
     expect(store.status()).toBe("open");
     expect(sockets[0]?.sent).toEqual([
-      { type: "subscribe", topics: ["checks", "sessions", "settings"] },
+      { type: "subscribe", topics: ["checks", "sessions", "settings", "plugins"] },
     ]);
   });
 
@@ -211,7 +211,7 @@ describe("SessionsStore", () => {
     sockets[1]?.open();
 
     expect(sockets[1]?.sent).toEqual([
-      { type: "subscribe", topics: ["checks", "sessions", "settings"] },
+      { type: "subscribe", topics: ["checks", "sessions", "settings", "plugins"] },
       { type: "subscribe", topics: [`session:${SESSION.id}`], fromSeq: 3 },
     ]);
     await vi.advanceTimersByTimeAsync(0);

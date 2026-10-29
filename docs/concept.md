@@ -673,8 +673,8 @@ Paket-Registries für npm, Maven, NuGet, PyPI und Docker sind keine Repositories
 **Regeln**
 
 - Name des Eintrags passt auf `^[a-z][a-z0-9-]{1,31}$` und ist die ID in CLI, API und Oberfläche. Gleiche Namen in Profil und Benutzerkonfiguration: der Benutzer gewinnt, außer das Profil sperrt den Eintrag mit `"locked": true`.
-- `source` kennt `git+https://`, `git+ssh://`, `https://` (Tarball oder `index.json`) und `file://`. `ref` ist ein Branch, Tag oder Commit; Tags oder Commits werden für Teams empfohlen, weil dann jeder denselben Stand hat.
-- `credential` verweist auf eine Zugangs-Instanz (`git-host` oder `registry`) für private Repositories. Das Token geht nur an Git oder den Download, nie an Plugins.
+- `source` kennt `git+https://`, `git+ssh://`, `git+file://` (lokales Git-Repository), `https://` (Tarball oder `index.json`) und `file://` (lokaler Ordner, `file:///absoluter/pfad`). `ref` ist ein Branch, Tag oder Commit; Tags oder Commits werden für Teams empfohlen, weil dann jeder denselben Stand hat.
+- `credential` verweist auf eine Zugangs-Instanz (`git-host` oder `registry`) für private Repositories. Das Token geht nur an Git oder den Download, nie an Plugins. Anmeldedaten (`credential`) und Sigstore-Signaturen (`trust` als Objekt) für Plugin-Repositories folgen später; bis dahin meldet DevBox beides als Fehler.
 - `trust` legt fest, wie Code aus dem Repository freigegeben wird: ein Objekt mit Sigstore-Identität (Signatur Pflicht), `"prompt"` (bei jeder neuen Version die Rechte anzeigen und bestätigen lassen) oder `"pinned"` (nur der in `ref` genannte Commit, ohne Rückfrage). Ohne Angabe gilt `"prompt"`.
 - `when` begrenzt einen Eintrag auf Distributionen oder Architekturen, damit ein Profil für gemischte Teams funktioniert.
 - Paketquellen schreibt `base` als eigene, markierte Dateien: deb822-Format unter `/etc/apt/sources.list.d/devbox-<name>.sources` mit Schlüssel unter `/etc/apt/keyrings/`, `/etc/yum.repos.d/devbox-<name>.repo`, entsprechend für zypper und pacman. Das braucht `sudo` und läuft als angekündigte Aktion `base.repositories`. Entfernen räumt Datei und Schlüssel wieder weg.
@@ -685,8 +685,10 @@ Paket-Registries für npm, Maven, NuGet, PyPI und Docker sind keine Repositories
 | CLI | API | Wirkung |
 | --- | --- | --- |
 | `devbox repo list` | `GET /repositories` | alle Einträge mit Art, Herkunft (Profil oder Benutzer), Stand, letzter Synchronisation |
-| `devbox repo add NAME --kind plugins --source URL [--ref R] [--credential C] [--trust prompt]` | `POST /repositories` | Eintrag anlegen, prüfen, erste Synchronisation |
-| `devbox repo sync [NAME]` | `POST /repositories/{name}/sync` | neuen Stand holen, Änderungen und neue Rechte anzeigen |
+| `devbox repo add NAME --source URL [--ref R] [--path P] [--trust prompt\|pinned]` | `POST /repositories` | Eintrag anlegen, prüfen, erste Synchronisation; `--kind` gibt es erst später, bisher ist `plugins` die einzige Art |
+| `devbox repo sync [NAME]` | `POST /repositories/{name}/sync` | neuen Stand holen, Änderungen (neu, geändert, entfernt, unverändert) und neue Rechte anzeigen; bei `prompt` wartet der neue Stand auf Freigabe |
+| `devbox repo approve NAME [--yes]` | `POST /repositories/{name}/approve` | wartenden Stand freigeben und aktivieren; im Terminal mit Rückfrage, ohne Terminal nur mit `--yes` |
+| `devbox repo discard NAME` | `DELETE /repositories/{name}/pending` | wartenden Stand verwerfen, der aktive bleibt |
 | `devbox repo remove NAME` | `DELETE /repositories/{name}` | Eintrag entfernen; Plugins daraus werden abgeschaltet, Paketquellen zurückgebaut |
 
 In der Oberfläche gibt es dazu unter Einstellungen den Bereich „Repositories“ mit Liste, Formular aus dem Schema, Synchronisieren und Entfernen. Der Plugin-Katalog `devbox-plugins` von zenit-hosting ist selbst nur ein vorbelegter Eintrag vom Typ `catalog` und kann abgeschaltet oder ersetzt werden, etwa in Netzen ohne Zugang zu GitHub.
@@ -703,7 +705,8 @@ Die API ist der einzige Weg, wie Oberfläche, CLI und Terminal-Menü mit dem Ker
 | --- | --- |
 | `GET /info` | Version, Rechner, Anmeldemodus, Protokollversion, Funktionen |
 | `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` | Anmeldung mit Systemkonto (nur bei `server.auth: pam`) |
-| `GET /plugins`, `GET /plugins/{id}` | Plugins mit Zustand, Manifest und Grund bei `blocked` oder `invalid` |
+| `GET /plugins`, `GET /plugins/{id}` | Plugins mit Zustand, Herkunft, Manifest und Grund bei `blocked` oder `invalid` |
+| `PATCH /plugins/{id}` | Plugin ein- oder ausschalten, Body `{ "enabled": true }` |
 | `DELETE /plugins/{id}` | aus Katalog installiertes Plugin entfernen |
 | `GET /checks`, `GET /checks/{id}` | zwischengespeicherte Prüfergebnisse |
 | `POST /checks/refresh` | Prüfungen neu ausführen, Body `{ "ids": ["java.installed"] }` oder leer für alle |
@@ -720,6 +723,9 @@ Die API ist der einzige Weg, wie Oberfläche, CLI und Terminal-Menü mit dem Ker
 | `POST /sessions/{id}/cancel` | abbrechen |
 | `GET /groups`, `POST /groups/{id}/run` | Gruppen ansehen und als Folge von Sitzungen starten |
 | `GET /setup`, `POST /setup/run` | Plan der Ersteinrichtung mit Zustand je Schritt, Ausführen ab dem ersten offenen Schritt |
+| `GET /repositories`, `POST /repositories` | Repositories mit Art, Herkunft, Stand und Revisionen auflisten; Eintrag anlegen und erstmals synchronisieren |
+| `POST /repositories/{name}/sync`, `POST /repositories/{name}/approve` | neuen Stand holen; wartenden Stand freigeben |
+| `DELETE /repositories/{name}/pending`, `DELETE /repositories/{name}` | wartenden Stand verwerfen; Eintrag samt Dateien entfernen |
 | `GET /catalog/search?q=`, `POST /catalog/install` | Plugins im Katalog finden und installieren |
 | `GET /schema/{name}` | eingebettete JSON-Schemas für Editoren und Formulare |
 
@@ -727,7 +733,7 @@ Die API ist der einzige Weg, wie Oberfläche, CLI und Terminal-Menü mit dem Ker
 
 | Richtung | `type` | Felder |
 | --- | --- | --- |
-| Client → Kern | `subscribe` | `topics`: `checks`, `sessions`, `settings`, `credentials`, `session:<id>`; bei Sitzungen optional `fromSeq` für Wiederaufnahme |
+| Client → Kern | `subscribe` | `topics`: `checks`, `sessions`, `settings`, `plugins`, `credentials`, `session:<id>`; bei Sitzungen optional `fromSeq` für Wiederaufnahme |
 | Client → Kern | `unsubscribe` | `topics` |
 | Client → Kern | `input` | `session`, `data` (Base64), z. B. für das `sudo`-Passwort |
 | Client → Kern | `resize` | `session`, `cols`, `rows` |
@@ -736,6 +742,7 @@ Die API ist der einzige Weg, wie Oberfläche, CLI und Terminal-Menü mit dem Ker
 | Kern → Client | `session` | `session` (Zusammenfassung: Zustand, Titel, Zeiten, Fortschritt) |
 | Kern → Client | `check` | `id`, `result` |
 | Kern → Client | `settings` | `keys` (geänderte Schlüssel) |
+| Kern → Client | `plugins` | `ids` (geänderte Plugins), `repositories` (geänderte Repositories) |
 | Kern → Client | `credential` | `name`, `state`, `expiresAt` |
 | beide | `ping`, `pong` | alle 30 Sekunden |
 
@@ -765,6 +772,7 @@ Der Kern hält je Sitzung die letzten 2 MiB Ausgabe im Speicher; mit `fromSeq` h
 | `unauthenticated` | 401 | keine gültige Anmeldung |
 | `csrf` | 403 | Kopfzeile `X-DevBox-Request` oder Origin fehlt oder passt nicht |
 | `conflict` | 409 | gleiche Aktion läuft schon und ist nicht wiederholbar |
+| `prerequisite` | 424 | Voraussetzung fehlt: `git`, Netz oder Recht |
 | `internal` | 500 | Fehler im Kern, mit `traceId` für das Log |
 
 **Schutz.** Verändernde Anfragen brauchen die Kopfzeile `X-DevBox-Request: 1` und einen `Origin`, der zur Adresse des Dienstes oder zu `server.allowedOrigins` passt. Das Sitzungs-Cookie ist `HttpOnly`, `SameSite=Strict` und bei TLS `Secure`. Die CLI spricht über den Unix-Socket `$XDG_RUNTIME_DIR/devbox/api.sock` (Modus 0600) und braucht keine Anmeldung.
@@ -788,6 +796,8 @@ Die CLI ist vollständig: alles, was die Oberfläche kann, geht auch hier. Ohne 
 | `devbox profile add\|list\|show\|update\|remove` | Profile verwalten |
 | `devbox cred list\|add\|set\|verify\|apply\|remove` | Zugangsdaten verwalten, `set` liest verdeckt oder mit `--from-stdin` |
 | `devbox plugin list\|info\|install\|update\|remove` | Plugins und Katalog |
+| `devbox plugin enable\|disable ID` | Plugin ein- oder ausschalten (`plugins.disabled` in der Benutzerdatei) |
+| `devbox repo list\|add\|sync\|approve\|discard\|remove` | Repositories verwalten, Plugin-Repositories synchronisieren und freigeben |
 | `devbox plugin new NAME [--lang bash\|ts\|python\|go]` | neues Plugin aus Vorlage anlegen |
 | `devbox plugin validate PFAD` | Manifest, Skripte und Rechte prüfen |
 | `devbox plugin test PFAD` | Prüfungen und Probeläufe aller Aktionen in einer Sandbox ausführen |

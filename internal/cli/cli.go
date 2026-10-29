@@ -18,6 +18,8 @@ const (
 	ExitOK      = 0
 	ExitFailed  = 1
 	ExitInvalid = 2
+	// ExitPrerequisite is a missing command, network or permission, as in the plugin protocol.
+	ExitPrerequisite = 3
 )
 
 // SystemConfigEnv overrides the path of the system configuration, e.g. for tests and
@@ -82,7 +84,14 @@ func Main(args []string, build Build, sys IO) int {
 	}
 	var ce *config.Error
 	if errors.As(err, &ce) {
-		code = ExitInvalid
+		switch ce.Code {
+		case config.CodePrerequisite:
+			code = ExitPrerequisite
+		case config.CodeConflict:
+			code = ExitFailed
+		default:
+			code = ExitInvalid
+		}
 	}
 	_, _ = fmt.Fprintln(sys.Stderr, "devbox:", err)
 	return code
@@ -104,7 +113,7 @@ func (a *app) rootCommand() *cobra.Command {
 	pf.BoolVar(&a.jsonOut, "json", false, "print JSON")
 	pf.StringVar(&a.configPath, "config", "", "user configuration file")
 	pf.StringArrayVar(&a.sets, "set", nil, "set a value for this call (key=value)")
-	root.AddCommand(a.versionCommand(), a.configCommand(), a.pluginCommand(), a.runCommand(), a.historyCommand(), a.logsCommand(), a.statusCommand(), a.credCommand(), a.sdkCommand(), a.serveCommand())
+	root.AddCommand(a.versionCommand(), a.configCommand(), a.pluginCommand(), a.runCommand(), a.historyCommand(), a.logsCommand(), a.statusCommand(), a.repoCommand(), a.credCommand(), a.sdkCommand(), a.serveCommand())
 	return root
 }
 

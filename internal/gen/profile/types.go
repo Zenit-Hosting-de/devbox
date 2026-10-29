@@ -349,8 +349,8 @@ type Repository struct {
 	// Branch, tag or commit; tags or commits are recommended for teams.
 	Ref *string `json:"ref,omitempty,omitzero"`
 
-	// Location: git+https://, git+ssh://, https:// (tarball or index.json) or
-	// file://.
+	// Location: git+https://, git+ssh://, git+file:// (a local Git repository),
+	// https:// (tarball or index.json) or file://.
 	Source *string `json:"source,omitempty,omitzero"`
 
 	// Suite of a packages repository, e.g. the distribution codename (apt).
@@ -495,8 +495,8 @@ func (j *Repository) UnmarshalJSON(value []byte) error {
 		plain.Enabled = true
 	}
 	if plain.Source != nil {
-		if matched, _ := regexp.MatchString(`^(file|https|git\+https|git\+ssh)://`, string(*plain.Source)); !matched {
-			return fmt.Errorf("field %s pattern match: must match %s", "Source", `^(file|https|git\+https|git\+ssh)://`)
+		if matched, _ := regexp.MatchString(`^(file|https|git\+https|git\+ssh|git\+file)://`, string(*plain.Source)); !matched {
+			return fmt.Errorf("field %s pattern match: must match %s", "Source", `^(file|https|git\+https|git\+ssh|git\+file)://`)
 		}
 	}
 	if v, ok := raw["trust"]; !ok || v == nil {

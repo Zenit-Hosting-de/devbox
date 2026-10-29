@@ -15,7 +15,7 @@ import {
 import { ActionLauncher } from "../actions/action-launcher";
 import { ApiProblem } from "../api/problem";
 import type { CheckSummary, PluginDetail } from "../api/types";
-import { checkBadge, pluginBadge, problemText } from "../core/status";
+import { checkBadge, pluginBadge, problemText, reasonDetail } from "../core/status";
 import { WrapText } from "../core/wrap-text";
 import { I18n } from "../i18n/i18n";
 import { PluginText } from "../i18n/plugin-text";
@@ -148,7 +148,7 @@ interface Group {
                           <li>
                             {{ i18n.t("reason." + reason.code) }}
                             @if (reason.detail) {
-                              <dbx-wrap-text class="z-mono" [text]="reason.detail" />
+                              <dbx-wrap-text class="z-mono" [text]="reasonDetail(i18n, reason)" />
                             }
                           </li>
                         }
@@ -254,6 +254,7 @@ export class OverviewPage {
 
   protected readonly checkBadge = checkBadge;
   protected readonly pluginBadge = pluginBadge;
+  protected readonly reasonDetail = reasonDetail;
   protected readonly placeholders = [1, 2, 3];
 
   protected readonly loading = computed(() => {

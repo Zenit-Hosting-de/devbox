@@ -24,6 +24,7 @@ const (
 	codeUnauthenticated  = "unauthenticated"
 	codeCSRF             = "csrf"
 	codeConflict         = "conflict"
+	codePrerequisite     = "prerequisite"
 	codeInternal         = "internal"
 )
 
@@ -36,6 +37,7 @@ var problemTitles = map[string]string{
 	codeUnauthenticated:  "Authentication required",
 	codeCSRF:             "Request not allowed",
 	codeConflict:         "Conflict",
+	codePrerequisite:     "Prerequisite missing",
 	codeInternal:         "Internal error",
 }
 
@@ -118,6 +120,10 @@ func toAPIError(err error) *apiError {
 			return notFound(ce.Detail)
 		case config.CodeSettingLocked:
 			return newError(http.StatusConflict, codeSettingLocked, ce.Detail)
+		case config.CodeConflict:
+			return conflict(ce.Detail)
+		case config.CodePrerequisite:
+			return newError(http.StatusFailedDependency, codePrerequisite, ce.Detail)
 		case config.CodeValidation:
 			e := invalid(ce.Detail)
 			if ce.Key != "" {

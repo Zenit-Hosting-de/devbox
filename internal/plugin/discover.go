@@ -25,18 +25,64 @@ type Manifest struct {
 	Data []byte
 }
 
+// Origin kinds of a plugin.
+const (
+	OriginBuiltin    = "builtin"
+	OriginPath       = "path"
+	OriginRepository = "repository"
+)
+
+// Origin says where a plugin was found (api/openapi.json, PluginOrigin).
+type Origin struct {
+	Kind string `json:"kind"`
+	// Path is the search path of a "path" origin.
+	Path string `json:"path,omitempty"`
+	// Repository and Revision (short) name the active revision of a "repository" origin.
+	Repository string `json:"repository,omitempty"`
+	Revision   string `json:"revision,omitempty"`
+}
+
+// String is the short text form: builtin, path:<dir> or repository:<name>@<revision>.
+func (o Origin) String() string {
+	switch o.Kind {
+	case OriginPath:
+		return OriginPath + ":" + o.Path
+	case OriginRepository:
+		return OriginRepository + ":" + o.Repository + "@" + o.Revision
+	}
+	return o.Kind
+}
+
+// Root is a directory with plugin directories and where they come from.
+type Root struct {
+	Dir    string
+	Origin Origin
+}
+
 // Candidate is a plugin directory found while searching, valid or not.
 type Candidate struct {
 	Dir      string
 	Manifest *Manifest // nil when the manifest is invalid
 	Err      error
+	Origin   Origin
 }
 
 // Search lists the plugin directories below each search path, in path order, and
-// parses their manifests. Missing search paths are skipped.
+// parses their manifests. Missing search paths are skipped. All plugins have the
+// origin "path".
 func Search(v *schema.Validator, paths []string) ([]Candidate, error) {
+	roots := make([]Root, 0, len(paths))
+	for _, p := range paths {
+		roots = append(roots, Root{Dir: p, Origin: Origin{Kind: OriginPath, Path: p}})
+	}
+	return SearchRoots(v, roots)
+}
+
+// SearchRoots is Search with an origin per search path.
+func SearchRoots(v *schema.Validator, roots []Root) ([]Candidate, error) {
 	var out []Candidate
-	for _, root := range paths {
+	for _, r := range roots {
+		root := r.Dir
 		entries, err := os.ReadDir(root)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
@@ -57,7 +103,7 @@ func Search(v *schema.Validator, paths []string) ([]Candidate, error) {
 				continue
 			}
 			m, err := Load(v, dir)
-			out = append(out, Candidate{Dir: dir, Manifest: m, Err: err})
+			out = append(out, Candidate{Dir: dir, Manifest: m, Err: err, Origin: r.Origin})
 		}
 	}
 	return out, nil

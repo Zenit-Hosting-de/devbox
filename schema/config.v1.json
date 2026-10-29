@@ -196,8 +196,8 @@
         },
         "source": {
           "type": "string",
-          "description": "Location: git+https://, git+ssh://, https:// (tarball or index.json) or file://.",
-          "pattern": "^(file|https|git\\+https|git\\+ssh)://"
+          "description": "Location: git+https://, git+ssh://, git+file:// (a local Git repository), https:// (tarball or index.json) or file://.",
+          "pattern": "^(file|https|git\\+https|git\\+ssh|git\\+file)://"
         },
         "ref": {
           "type": "string",

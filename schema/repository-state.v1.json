@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://devbox.zenit-hosting.de/schema/repository-state.v1.json",
+  "title": "DevBox plugin repository state",
+  "description": "State of one plugin repository (~/.local/share/devbox/repositories/<name>/state.json): the active and the pending revision with the plugins they hold, and the result of the last sync.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "URL of the schema this file follows."
+    },
+    "$comment": {
+      "type": "string",
+      "description": "Free-form comment; ignored by DevBox."
+    },
+    "active": {
+      "$ref": "#/$defs/revision",
+      "description": "The revision whose plugins are loaded. Absent until a first revision is approved (or pinned)."
+    },
+    "pending": {
+      "$ref": "#/$defs/revision",
+      "description": "A fetched revision that waits for approval. The active revision stays in use meanwhile."
+    },
+    "lastSync": {
+      "type": "object",
+      "description": "Result of the last successful sync.",
+      "required": ["at", "changed"],
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the sync finished."
+        },
+        "changed": {
+          "type": "boolean",
+          "description": "Whether the sync changed the active or the pending revision."
+        }
+      }
+    },
+    "lastError": {
+      "type": "string",
+      "description": "Why the last sync failed; absent after a successful sync."
+    }
+  },
+  "$defs": {
+    "revision": {
+      "type": "object",
+      "description": "A fetched revision of the repository.",
+      "required": ["revision", "fetchedAt", "plugins"],
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "type": "string",
+          "description": "Commit SHA of a Git source, SHA-256 of the tarball of an HTTPS source, SHA-256 tree digest of a local directory.",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "path": {
+          "type": "string",
+          "description": "Sub-directory of the snapshot that holds the plugin folders, in slash form. Empty or absent for the root. The plugins of the revision are loaded from here, whatever the configuration says now."
+        },
+        "fetchedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the revision was fetched."
+        },
+        "plugins": {
+          "type": "array",
+          "description": "The plugin folders found below path, sorted by folder name.",
+          "items": { "$ref": "#/$defs/revisionPlugin" }
+        }
+      }
+    },
+    "revisionPlugin": {
+      "type": "object",
+      "description": "One plugin folder of a revision.",
+      "required": ["id", "digest", "permissions", "requiresCommands"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Plugin ID from the manifest; the folder name when the manifest is invalid."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name from the manifest."
+        },
+        "version": {
+          "type": "string",
+          "description": "Plugin version from the manifest."
+        },
+        "description": {
+          "type": "string",
+          "description": "Short description from the manifest."
+        },
+        "digest": {
+          "type": "string",
+          "description": "SHA-256 digest of the plugin folder (sorted relative paths, executable bit and content).",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "permissions": {
+          "type": "array",
+          "description": "The permissions the manifest declares, one entry per value.",
+          "items": { "$ref": "#/$defs/permission" }
+        },
+        "requiresCommands": {
+          "type": "array",
+          "description": "requires.commands of the manifest.",
+          "items": { "type": "string" }
+        },
+        "error": {
+          "type": "string",
+          "description": "Why the plugin is invalid (manifest error or duplicate ID); absent for a valid plugin."
+        }
+      }
+    },
+    "permission": {
+      "type": "object",
+      "description": "One declared permission.",
+      "required": ["kind", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": ["network", "files.read", "files.write", "sudo", "credentials"],
+          "description": "network: a target; files.read and files.write: a path; sudo: the value is true; credentials: a credential type."
+        },
+        "value": {
+          "type": "string",
+          "description": "The target, path, credential type, or \"true\" for sudo."
+        }
+      }
+    }
+  }
+}

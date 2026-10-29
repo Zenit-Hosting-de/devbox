@@ -31,14 +31,19 @@ describe("routes", () => {
     expect(text).not.toContain("Page not found");
   });
 
-  it.each(["/", "/plugins", "/plugins/java", "/verlauf", "/einstellungen", "/zugaenge"])(
-    "opens %s without a redirect",
-    async (path) => {
-      const { url, text } = await open(path);
-      expect(url).toBe(path);
-      expect(text).not.toContain("Page not found");
-    },
-  );
+  it.each([
+    "/",
+    "/plugins",
+    "/plugins/sources",
+    "/plugins/java",
+    "/verlauf",
+    "/einstellungen",
+    "/zugaenge",
+  ])("opens %s without a redirect", async (path) => {
+    const { url, text } = await open(path);
+    expect(url).toBe(path);
+    expect(text).not.toContain("Page not found");
+  });
 
   it("still shows the not-found page for an unknown address", async () => {
     const { url, text } = await open("/nothing-here");

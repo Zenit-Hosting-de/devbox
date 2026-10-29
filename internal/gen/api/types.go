@@ -52,6 +52,96 @@ func (e PutCredentialSecretParamsXDevBoxRequest) Valid() bool {
 	}
 }
 
+// Defines values for PatchPluginParamsXDevBoxRequest.
+const (
+	PatchPluginParamsXDevBoxRequestN1 PatchPluginParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the PatchPluginParamsXDevBoxRequest enum.
+func (e PatchPluginParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case PatchPluginParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateRepositoryParamsXDevBoxRequest.
+const (
+	CreateRepositoryParamsXDevBoxRequestN1 CreateRepositoryParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the CreateRepositoryParamsXDevBoxRequest enum.
+func (e CreateRepositoryParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case CreateRepositoryParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeleteRepositoryParamsXDevBoxRequest.
+const (
+	DeleteRepositoryParamsXDevBoxRequestN1 DeleteRepositoryParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the DeleteRepositoryParamsXDevBoxRequest enum.
+func (e DeleteRepositoryParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case DeleteRepositoryParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ApproveRepositoryParamsXDevBoxRequest.
+const (
+	ApproveRepositoryParamsXDevBoxRequestN1 ApproveRepositoryParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the ApproveRepositoryParamsXDevBoxRequest enum.
+func (e ApproveRepositoryParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case ApproveRepositoryParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DiscardPendingRepositoryParamsXDevBoxRequest.
+const (
+	DiscardPendingRepositoryParamsXDevBoxRequestN1 DiscardPendingRepositoryParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the DiscardPendingRepositoryParamsXDevBoxRequest enum.
+func (e DiscardPendingRepositoryParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case DiscardPendingRepositoryParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SyncRepositoryParamsXDevBoxRequest.
+const (
+	SyncRepositoryParamsXDevBoxRequestN1 SyncRepositoryParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the SyncRepositoryParamsXDevBoxRequest enum.
+func (e SyncRepositoryParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case SyncRepositoryParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateSessionParamsXDevBoxRequest.
 const (
 	CreateSessionParamsXDevBoxRequestN1 CreateSessionParamsXDevBoxRequest = "1"
@@ -277,6 +367,9 @@ type PluginDetail struct {
 	// Name Display name from the manifest.
 	Name *string `json:"name,omitempty"`
 
+	// Origin Where a plugin was found: bundled with the binary, in a directory of plugins.paths, or in the active revision of a plugin repository.
+	Origin PluginOrigin `json:"origin"`
+
 	// Path Plugin directory.
 	Path    string         `json:"path"`
 	Reasons []PluginReason `json:"reasons"`
@@ -297,6 +390,27 @@ type PluginDetail struct {
 // PluginList All found plugins, sorted by ID. manifest and resolvedDefaults appear only with ?manifest=true.
 type PluginList = []PluginDetail
 
+// PluginOrigin Where a plugin was found: bundled with the binary, in a directory of plugins.paths, or in the active revision of a plugin repository.
+type PluginOrigin struct {
+	// Kind builtin: bundled plugin; path: a directory of plugins.paths; repository: the active revision of a plugins repository.
+	Kind interface{} `json:"kind"`
+
+	// Path The search path (kind path).
+	Path *string `json:"path,omitempty"`
+
+	// Repository Name of the repository (kind repository).
+	Repository *Name `json:"repository,omitempty"`
+
+	// Revision Short form (12 characters) of the active revision (kind repository).
+	Revision *string `json:"revision,omitempty"`
+}
+
+// PluginPatch Switches a plugin on or off for the user (plugins.disabled of the user configuration).
+type PluginPatch struct {
+	// Enabled true removes the plugin from plugins.disabled, false adds it.
+	Enabled bool `json:"enabled"`
+}
+
 // PluginReason Why a plugin is not ready, or a note about it. code is stable and translated by the frontends.
 type PluginReason struct {
 	// Code Reason code.
@@ -311,7 +425,7 @@ type PluginState = interface{}
 
 // Problem Error in RFC 9457 format with a stable code.
 type Problem struct {
-	// Code Stable error code.
+	// Code Stable error code. prerequisite: a command (git), the network or a permission is missing (424).
 	Code interface{} `json:"code"`
 
 	// Detail Readable explanation of this occurrence.
@@ -348,6 +462,171 @@ type ProblemError struct {
 
 // Ref Fully qualified check or action, <plugin>.<name>.
 type Ref = string
+
+// Repository A repository entry of the configuration with its sync state. Entries come from the system configuration, profiles and the user configuration; the user wins unless a lower layer locks the entry.
+type Repository struct {
+	// Active The revision whose plugins are loaded.
+	Active *RepositoryActive `json:"active,omitempty"`
+
+	// Enabled false lists the entry but loads nothing.
+	Enabled bool `json:"enabled"`
+
+	// Kind Kind of repository (schema/config.v1.json). Only plugins is handled; the others have the state unsupported.
+	Kind RepositoryKind `json:"kind"`
+
+	// LastError Why the entry is invalid or why the last sync failed.
+	LastError *string `json:"lastError,omitempty"`
+
+	// LastSync Result of the last successful sync.
+	LastSync *RepositoryLastSync `json:"lastSync,omitempty"`
+
+	// Locked A lower layer locks the entry; it cannot be overridden or removed by the user.
+	Locked bool `json:"locked"`
+
+	// Name Identifier of a plugin, credential instance, repository or schema.
+	Name Name `json:"name"`
+
+	// Origin user, system or profile:<id>.
+	Origin string `json:"origin"`
+
+	// Path Sub-directory with the plugin folders; absent means the root.
+	Path *string `json:"path,omitempty"`
+
+	// Pending A fetched revision that waits for approval, compared with the active one.
+	Pending *RepositoryPending `json:"pending,omitempty"`
+
+	// Ref Git branch, tag or commit; absent means the HEAD of the remote.
+	Ref *string `json:"ref,omitempty"`
+
+	// Source As written in the configuration (git+https://, git+ssh://, git+file://, https:// tarball, file://); placeholders are not resolved.
+	Source *string `json:"source,omitempty"`
+
+	// State new: never synced. active: an active revision, nothing waits. pending: a revision waits for approval (the active one, if any, stays in use). error: the entry is invalid or the last sync failed, see lastError (an active revision stays in use after a failed sync). disabled: enabled is false, nothing is loaded. unsupported: another kind than plugins.
+	State RepositoryState `json:"state"`
+
+	// Trust prompt: a new revision waits for approval; pinned: the commit named in ref is activated without asking; signature: a Sigstore identity is configured, which arrives with the catalog (AP-23) and makes the repository state error.
+	Trust *RepositoryTrust `json:"trust,omitempty"`
+}
+
+// RepositoryActive The revision whose plugins are loaded.
+type RepositoryActive struct {
+	// Path Sub-directory with the plugin folders as it was when the revision was fetched.
+	Path *string `json:"path,omitempty"`
+
+	// Plugins Plugins of the revision, sorted by folder name.
+	Plugins []RepositoryPlugin `json:"plugins"`
+
+	// Revision Commit SHA (git), SHA-256 of the tarball (https) or tree digest (file).
+	Revision string `json:"revision"`
+
+	// SyncedAt When the revision was fetched.
+	SyncedAt time.Time `json:"syncedAt"`
+}
+
+// RepositoryApprove Approval of the pending revision.
+type RepositoryApprove struct {
+	// Revision The revision of pending.revision the user reviewed.
+	Revision string `json:"revision"`
+}
+
+// RepositoryCreate A new repository of kind plugins; it is written to the user configuration and synced.
+type RepositoryCreate struct {
+	// Name Identifier of a plugin, credential instance, repository or schema.
+	Name Name `json:"name"`
+
+	// Path Relative sub-directory that holds the plugin folders.
+	Path *string `json:"path,omitempty"`
+
+	// Ref Git branch, tag or commit; only for git sources.
+	Ref *string `json:"ref,omitempty"`
+
+	// Source git+https://, git+ssh://, git+file:// (a local Git repository), https:// (tar.gz, at most 100 MiB) or file:// (a local directory, file:///absolute/path).
+	Source string `json:"source"`
+
+	// Trust pinned is only valid for a git source whose ref is a full 40-character commit; the synced revision is then active without approval.
+	Trust interface{} `json:"trust,omitempty"`
+}
+
+// RepositoryKind Kind of repository (schema/config.v1.json). Only plugins is handled; the others have the state unsupported.
+type RepositoryKind = interface{}
+
+// RepositoryLastSync Result of the last successful sync.
+type RepositoryLastSync struct {
+	// At When the sync finished.
+	At time.Time `json:"at"`
+
+	// Changed Whether it changed the active or the pending revision (false when the remote still has the known revision).
+	Changed bool `json:"changed"`
+}
+
+// RepositoryList All repositories sorted by name.
+type RepositoryList = []Repository
+
+// RepositoryPending A fetched revision that waits for approval, compared with the active one.
+type RepositoryPending struct {
+	// FetchedAt When the revision was fetched.
+	FetchedAt time.Time `json:"fetchedAt"`
+
+	// Path Sub-directory with the plugin folders.
+	Path *string `json:"path,omitempty"`
+
+	// Plugins The plugins of the pending revision plus the plugins that only the active revision has (change removed), sorted by ID. Every entry has change.
+	Plugins []RepositoryPlugin `json:"plugins"`
+
+	// Revision Revision to pass to the approve endpoint.
+	Revision string `json:"revision"`
+}
+
+// RepositoryPermission A permission a plugin declares. new is true in a pending revision when the active revision does not declare it for the plugin (all permissions of an added plugin are new); it is false everywhere else.
+type RepositoryPermission struct {
+	// Kind network: a target; files.read and files.write: a path; sudo: the value is true; credentials: a credential type.
+	Kind interface{} `json:"kind"`
+
+	// New Not declared by the active revision.
+	New bool `json:"new"`
+
+	// Value The target, path or credential type, or true for sudo. Placeholders are not resolved.
+	Value string `json:"value"`
+}
+
+// RepositoryPlugin A plugin folder of a revision with its declared permissions.
+type RepositoryPlugin struct {
+	// Change Only in a pending revision, compared with the active one: added (not in the active revision), removed (only in the active revision; its data are those of the active revision), changed (another digest), unchanged. Absent in an active revision.
+	Change interface{} `json:"change,omitempty"`
+
+	// Description Short description from the manifest.
+	Description *string `json:"description,omitempty"`
+
+	// Digest SHA-256 digest of the plugin folder (sorted relative paths, executable bit, content).
+	Digest string `json:"digest"`
+
+	// Error Why the plugin is invalid (manifest error, duplicate ID); a plugin with an error is not loaded.
+	Error *string `json:"error,omitempty"`
+
+	// Id Plugin ID from the manifest; the folder name when the manifest is invalid.
+	Id string `json:"id"`
+
+	// Name Display name from the manifest.
+	Name *string `json:"name,omitempty"`
+
+	// Permissions Declared permissions, in the order network, files.read, files.write, sudo, credentials.
+	Permissions []RepositoryPermission `json:"permissions"`
+
+	// PreviousVersion Version of the plugin in the active revision; only for change changed.
+	PreviousVersion *string `json:"previousVersion,omitempty"`
+
+	// RequiresCommands requires.commands of the manifest.
+	RequiresCommands []string `json:"requiresCommands"`
+
+	// Version Plugin version from the manifest.
+	Version *string `json:"version,omitempty"`
+}
+
+// RepositoryState new: never synced. active: an active revision, nothing waits. pending: a revision waits for approval (the active one, if any, stays in use). error: the entry is invalid or the last sync failed, see lastError (an active revision stays in use after a failed sync). disabled: enabled is false, nothing is loaded. unsupported: another kind than plugins.
+type RepositoryState = interface{}
+
+// RepositoryTrust prompt: a new revision waits for approval; pinned: the commit named in ref is activated without asking; signature: a Sigstore identity is configured, which arrives with the catalog (AP-23) and makes the repository state error.
+type RepositoryTrust = interface{}
 
 // SecretPut New secret of a credential instance.
 type SecretPut struct {
@@ -581,6 +860,60 @@ type ListPluginsParams struct {
 	Manifest *bool `form:"manifest,omitempty" json:"manifest,omitempty"`
 }
 
+// PatchPluginParams defines parameters for PatchPlugin.
+type PatchPluginParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest PatchPluginParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// PatchPluginParamsXDevBoxRequest defines parameters for PatchPlugin.
+type PatchPluginParamsXDevBoxRequest string
+
+// CreateRepositoryParams defines parameters for CreateRepository.
+type CreateRepositoryParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest CreateRepositoryParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// CreateRepositoryParamsXDevBoxRequest defines parameters for CreateRepository.
+type CreateRepositoryParamsXDevBoxRequest string
+
+// DeleteRepositoryParams defines parameters for DeleteRepository.
+type DeleteRepositoryParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest DeleteRepositoryParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// DeleteRepositoryParamsXDevBoxRequest defines parameters for DeleteRepository.
+type DeleteRepositoryParamsXDevBoxRequest string
+
+// ApproveRepositoryParams defines parameters for ApproveRepository.
+type ApproveRepositoryParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest ApproveRepositoryParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// ApproveRepositoryParamsXDevBoxRequest defines parameters for ApproveRepository.
+type ApproveRepositoryParamsXDevBoxRequest string
+
+// DiscardPendingRepositoryParams defines parameters for DiscardPendingRepository.
+type DiscardPendingRepositoryParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest DiscardPendingRepositoryParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// DiscardPendingRepositoryParamsXDevBoxRequest defines parameters for DiscardPendingRepository.
+type DiscardPendingRepositoryParamsXDevBoxRequest string
+
+// SyncRepositoryParams defines parameters for SyncRepository.
+type SyncRepositoryParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest SyncRepositoryParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// SyncRepositoryParamsXDevBoxRequest defines parameters for SyncRepository.
+type SyncRepositoryParamsXDevBoxRequest string
+
 // ListSessionsParams defines parameters for ListSessions.
 type ListSessionsParams struct {
 	// State Only sessions in this state.
@@ -628,6 +961,15 @@ type RefreshChecksJSONRequestBody = ChecksRefresh
 
 // PutCredentialSecretJSONRequestBody defines body for PutCredentialSecret for application/json ContentType.
 type PutCredentialSecretJSONRequestBody = SecretPut
+
+// PatchPluginJSONRequestBody defines body for PatchPlugin for application/json ContentType.
+type PatchPluginJSONRequestBody = PluginPatch
+
+// CreateRepositoryJSONRequestBody defines body for CreateRepository for application/json ContentType.
+type CreateRepositoryJSONRequestBody = RepositoryCreate
+
+// ApproveRepositoryJSONRequestBody defines body for ApproveRepository for application/json ContentType.
+type ApproveRepositoryJSONRequestBody = RepositoryApprove
 
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody = SessionCreate

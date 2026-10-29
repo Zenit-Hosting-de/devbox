@@ -239,7 +239,7 @@ export interface Repository {
    */
   kind: "plugins" | "catalog" | "profile" | "templates" | "packages";
   /**
-   * Location: git+https://, git+ssh://, https:// (tarball or index.json) or file://.
+   * Location: git+https://, git+ssh://, git+file:// (a local Git repository), https:// (tarball or index.json) or file://.
    */
   source?: string;
   /**

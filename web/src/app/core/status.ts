@@ -1,6 +1,6 @@
 import type { ZBadgeStatus } from "zenit-ui";
 import type { ApiProblem } from "../api/problem";
-import type { CheckStatus, PluginState, SessionState } from "../api/types";
+import type { CheckStatus, PluginOrigin, PluginState, SessionState } from "../api/types";
 import type { I18n } from "../i18n/i18n";
 
 export function checkBadge(status: CheckStatus): ZBadgeStatus {
@@ -70,4 +70,47 @@ export function fieldErrorText(
     return i18n.t(key);
   }
   return error.message ?? error.code;
+}
+
+/** Short origin of a plugin for a badge: bundled, folder, or the name of its source. */
+export function originBadge(i18n: I18n, origin: PluginOrigin): string {
+  switch (origin.kind) {
+    case "builtin":
+      return i18n.t("plugins.origin.builtin");
+    case "path":
+      return i18n.t("plugins.origin.path");
+    case "repository":
+      return origin.repository ?? "";
+  }
+}
+
+/** Full origin sentence of a plugin, e.g. for the detail page. */
+export function originLine(i18n: I18n, origin: PluginOrigin): string {
+  switch (origin.kind) {
+    case "builtin":
+      return i18n.t("plugins.originLine.builtin");
+    case "path":
+      return i18n.t("plugins.originLine.path", { path: origin.path ?? "" });
+    case "repository":
+      return i18n.t("plugins.originLine.repository", {
+        name: origin.repository ?? "",
+        revision: origin.revision ?? "",
+      });
+  }
+}
+
+/** Readable layer name: `system`, `user` or `profile:<id>`. */
+export function layerName(i18n: I18n, layer: string): string {
+  if (layer === "system" || layer === "user") {
+    return i18n.t(`origin.${layer}`);
+  }
+  return layer.startsWith("profile:")
+    ? i18n.t("origin.profile", { name: profileName(layer) })
+    : layer;
+}
+
+/** Detail of a plugin reason; for `disabled` the layer that switched the plugin off. */
+export function reasonDetail(i18n: I18n, reason: { code: string; detail?: string }): string {
+  const detail = reason.detail ?? "";
+  return reason.code === "disabled" && detail !== "" ? layerName(i18n, detail) : detail;
 }

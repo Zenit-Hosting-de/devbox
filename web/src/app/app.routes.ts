@@ -10,6 +10,11 @@ export const routes: Routes = [
     data: { title: "nav.plugins" },
   },
   {
+    path: "plugins/sources",
+    loadComponent: () => import("./pages/sources").then((m) => m.SourcesPage),
+    data: { title: "nav.plugins" },
+  },
+  {
     path: "plugins/:id",
     loadComponent: () => import("./pages/plugin-detail").then((m) => m.PluginDetailPage),
     data: { title: "nav.plugins" },

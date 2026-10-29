@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  signal,
+  viewChild,
+} from "@angular/core";
 import { RouterLink } from "@angular/router";
 import {
   ZAlert,
@@ -9,13 +17,22 @@ import {
   ZPageHeader,
   ZPanel,
   ZPanelActions,
+  ZSetting,
   ZSkeleton,
   ZToast,
+  ZToggle,
 } from "zenit-ui";
 import { ActionLauncher } from "../actions/action-launcher";
 import { ApiProblem } from "../api/problem";
 import type { CheckSummary } from "../api/types";
-import { checkBadge, pluginBadge, problemText } from "../core/status";
+import {
+  checkBadge,
+  layerName,
+  originLine,
+  pluginBadge,
+  problemText,
+  reasonDetail,
+} from "../core/status";
 import { WrapText } from "../core/wrap-text";
 import { I18n } from "../i18n/i18n";
 import { PluginText } from "../i18n/plugin-text";
@@ -53,7 +70,9 @@ interface ActionView {
     ZPageHeader,
     ZPanel,
     ZPanelActions,
+    ZSetting,
     ZSkeleton,
+    ZToggle,
     WrapText,
   ],
   template: `
@@ -68,6 +87,38 @@ interface ActionView {
         @if (description()) {
           <p class="z-muted">{{ description() }}</p>
         }
+        <p class="z-subtle origin">
+          <z-icon name="inventory_2" size="sm" />
+          <span>{{ i18n.t("plugins.originLabel") }}: {{ originText() }}</span>
+        </p>
+
+        @if (p.category !== "core") {
+          <z-panel>
+            <z-setting
+              [title]="i18n.t('plugin.enabled.title')"
+              [description]="i18n.t('plugin.enabled.help')"
+              titleId="plugin-enabled-title"
+            >
+              <z-toggle
+                [checked]="enabled()"
+                [disabled]="lockedBy() !== '' || switching()"
+                ariaLabelledby="plugin-enabled-title"
+                (checkedChange)="setEnabled($event)"
+              />
+            </z-setting>
+            @if (lockedBy()) {
+              <p class="z-muted caption">
+                <z-icon name="lock" size="sm" />
+                {{ i18n.t("plugin.enabled.lockedBy", { source: lockedBy() }) }}
+              </p>
+            }
+            @if (switchError()) {
+              <z-alert status="danger" icon="error" [title]="i18n.t('plugin.enabled.failed')">
+                {{ switchError() }}
+              </z-alert>
+            }
+          </z-panel>
+        }
 
         @if (p.state !== "ready") {
           <z-alert
@@ -79,7 +130,7 @@ interface ActionView {
               <div>
                 {{ i18n.t("reason." + reason.code) }}
                 @if (reason.detail) {
-                  <dbx-wrap-text class="z-mono" [text]="reason.detail" />
+                  <dbx-wrap-text class="z-mono" [text]="reasonDetail(i18n, reason)" />
                 }
               </div>
             }
@@ -230,6 +281,12 @@ interface ActionView {
     .sudo-note {
       margin-block-start: var(--space-3);
     }
+    .origin {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin: 0;
+    }
   `,
 })
 export class PluginDetailPage {
@@ -246,6 +303,7 @@ export class PluginDetailPage {
 
   protected readonly checkBadge = checkBadge;
   protected readonly pluginBadge = pluginBadge;
+  protected readonly reasonDetail = reasonDetail;
 
   protected readonly plugin = computed(() => this.plugins.byId().get(this.id()));
   protected readonly manifest = computed(() => this.plugin()?.manifest);
@@ -267,6 +325,27 @@ export class PluginDetailPage {
         })
       : "";
   });
+
+  protected readonly originText = computed(() => {
+    const plugin = this.plugin();
+    return plugin ? originLine(this.i18n, plugin.origin) : "";
+  });
+
+  /** The plugin is on unless a reason says it is switched off. */
+  private readonly disabledReason = computed(() =>
+    this.plugin()?.reasons.find((reason) => reason.code === "disabled"),
+  );
+  /** Layer that keeps the plugin off when it is not the user (the user cannot undo that). */
+  protected readonly lockedBy = computed(() => {
+    const layer = this.disabledReason()?.detail;
+    return layer && layer !== "user" ? layerName(this.i18n, layer) : "";
+  });
+  protected readonly enabled = computed(() => this.disabledReason() === undefined);
+  private readonly toggle = viewChild(ZToggle);
+  /** True while the switch is put back, so that the change is not taken for a click. */
+  private reverting = false;
+  protected readonly switching = signal(false);
+  protected readonly switchError = signal("");
 
   protected readonly checkViews = computed<CheckView[]>(() => {
     const pluginId = this.id();
@@ -308,6 +387,32 @@ export class PluginDetailPage {
       this.checks.ensureLoaded(),
       this.settings.ensureLoaded(),
     ]);
+  }
+
+  protected async setEnabled(enabled: boolean): Promise<void> {
+    if (this.reverting) {
+      return;
+    }
+    this.switchError.set("");
+    this.switching.set(true);
+    try {
+      await this.plugins.setEnabled(this.id(), enabled);
+      this.toast.success(
+        this.i18n.t(enabled ? "plugin.enabled.on" : "plugin.enabled.off", { name: this.name() }),
+      );
+    } catch (error) {
+      // The switch moved with the click; the core refused, so it goes back.
+      this.reverting = true;
+      this.toggle()?.checked.set(!enabled);
+      this.reverting = false;
+      if (error instanceof ApiProblem) {
+        this.switchError.set(problemText(this.i18n, error));
+      } else {
+        throw error;
+      }
+    } finally {
+      this.switching.set(false);
+    }
   }
 
   protected start(action: string): void {

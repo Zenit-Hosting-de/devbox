@@ -9,7 +9,7 @@ import {
 import { inject } from "@angular/core";
 import { Observable, delay } from "rxjs";
 import { environment } from "../../environments/environment";
-import type { SessionCreate, SessionsQuery } from "../api/types";
+import type { RepositoryCreate, SessionCreate, SessionsQuery } from "../api/types";
 import { MockBackend, MockProblem } from "./mock-backend";
 
 type Answer = { status: number; body: unknown; headers?: Record<string, string> };
@@ -32,6 +32,31 @@ function route(req: HttpRequest<unknown>, backend: MockBackend, path: string): A
     }
     if (method === "GET" && id && third === "messages" && fourth) {
       return ok(backend.messages(id, fourth));
+    }
+    if (method === "PATCH" && id && !third) {
+      const body = (req.body ?? {}) as { enabled?: boolean };
+      return ok(backend.patchPlugin(id, body.enabled === true));
+    }
+  }
+  if (area === "repositories") {
+    if (method === "GET" && !id) {
+      return ok(backend.repositoryList());
+    }
+    if (method === "POST" && !id) {
+      return { status: 201, body: backend.createRepository(req.body as RepositoryCreate) };
+    }
+    if (method === "POST" && id && third === "sync") {
+      return ok(backend.syncRepository(id));
+    }
+    if (method === "POST" && id && third === "approve") {
+      return ok(backend.approveRepository(id, (req.body as { revision: string }).revision));
+    }
+    if (method === "DELETE" && id && third === "pending") {
+      return ok(backend.discardRepository(id));
+    }
+    if (method === "DELETE" && id && !third) {
+      backend.deleteRepository(id);
+      return { status: 204, body: null };
     }
   }
   if (area === "checks") {
