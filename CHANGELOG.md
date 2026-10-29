@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.0](https://github.com/Zenit-Hosting-de/devbox/compare/v0.2.1...v0.3.0) (2026-10-29)
+
+
+### Features
+
+* plugin repositories and plugin on/off (AP-27, kind plugins) ([19e6d35](https://github.com/Zenit-Hosting-de/devbox/commit/19e6d3572408ec6e9fd1d6300384e69f8e1bc289))
+* **repo:** add plugin repositories and plugin on/off ([fdf86fc](https://github.com/Zenit-Hosting-de/devbox/commit/fdf86fcdccaba74f63ced68062ced62b2df8173e))
+* **web:** manage plugin sources and switch plugins on and off ([323aa57](https://github.com/Zenit-Hosting-de/devbox/commit/323aa57a877763032dd012883e726cbbb470a1de))
+
 ## [0.2.1](https://github.com/Zenit-Hosting-de/devbox/compare/v0.2.0...v0.2.1) (2026-10-28)
 
 
