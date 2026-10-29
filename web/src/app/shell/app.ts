@@ -29,6 +29,7 @@ import { I18n, LANGUAGES, isLanguage } from "../i18n/i18n";
 import { PluginMessagesStore } from "../i18n/plugin-messages";
 import { PluginText } from "../i18n/plugin-text";
 import { InfoStore } from "../stores/info.store";
+import { RestartStore } from "../stores/restart.store";
 import { SessionsStore } from "../stores/sessions.store";
 import { Dock } from "./dock";
 
@@ -94,7 +95,13 @@ const NAV: readonly { path: string; icon: string; key: string; exact: boolean }[
         </z-app-header>
       </div>
 
-      @if (sessions.status() === "offline") {
+      @if (restart.restarting()) {
+        <div class="z-container offline">
+          <z-alert status="info" icon="restart_alt" [title]="i18n.t('shell.restarting')">
+            {{ i18n.t("shell.restartingHint") }}
+          </z-alert>
+        </div>
+      } @else if (sessions.status() === "offline") {
         <div class="z-container offline">
           <z-alert status="warning" icon="cloud_off" [title]="i18n.t('shell.offline')">
             {{ i18n.t("shell.offlineHint") }}
@@ -162,6 +169,7 @@ const NAV: readonly { path: string; icon: string; key: string; exact: boolean }[
 export class App {
   protected readonly i18n = inject(I18n);
   protected readonly sessions = inject(SessionsStore);
+  protected readonly restart = inject(RestartStore);
   protected readonly theme = inject(ZTheme);
   private readonly doc = inject(DOCUMENT);
   private readonly router = inject(Router);

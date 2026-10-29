@@ -2264,6 +2264,18 @@
           }
         }
       },
+      "WsRestart": {
+        "description": "Core to client: the core restarts itself with a new binary (after a session announced it with a restart-service notice). It is sent to every connected client and to clients that connect while the restart is pending; the connection closes shortly after. Reconnect, reload GET /info and, when the version changed, the UI.",
+        "type": "object",
+        "required": ["type"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "restart"
+          }
+        }
+      },
       "WsGap": {
         "description": "Core to client: the requested fromSeq is older than the in-memory buffer. Streaming continues at firstSeq; the client reloads GET /sessions/{id}/log.",
         "type": "object",
@@ -2339,6 +2351,9 @@
           },
           {
             "$ref": "#/components/schemas/WsPlugins"
+          },
+          {
+            "$ref": "#/components/schemas/WsRestart"
           },
           {
             "$ref": "#/components/schemas/WsGap"

@@ -344,6 +344,7 @@ type recorder struct {
 	checks   []CheckSummary
 	settings [][]string
 	plugins  []recordedPlugins
+	restarts int
 }
 
 type recordedPlugins struct {
@@ -404,6 +405,18 @@ func (r *recorder) PluginsChanged(ids, repositories []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.plugins = append(r.plugins, recordedPlugins{ids, repositories})
+}
+
+func (r *recorder) RestartRequested() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.restarts++
+}
+
+func (r *recorder) restartCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.restarts
 }
 
 func jsonUnmarshal(data []byte, v any) error { return json.Unmarshal(data, v) }

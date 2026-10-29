@@ -59,6 +59,7 @@ env PATH=$WORK/bin:$ORIGPATH
 exec devbox run system.update --dry-run --set system.releaseUrl=$RELEASES --json
 stdout '"kind":"file","op":"update","summary":"replace 0.1.0 with 0.2.0","target":".*/bin/devbox","type":"change"'
 stdout '"summary":"DevBox would be updated to 0.2.0"'
+! stdout '"type":"notice"'
 cmp bin/devbox orig/devbox
 ! exists bin/devbox.previous
 
@@ -67,6 +68,7 @@ env PATH=$WORK/bin:$ORIGPATH
 exec devbox run system.update --set system.releaseUrl=$RELEASES --json
 stdout '"kind":"file","op":"update","summary":"replaced 0.1.0 with 0.2.0","target":".*/bin/devbox","type":"change"'
 stdout '"summary":"DevBox updated to 0.2.0"'
+stdout '"kind":"restart-service","text":"A running DevBox service restarts with the new version.","type":"notice"'
 exec sh -c './bin/devbox'
 stdout '^devbox 0.2.0$'
 exec sh -c 'ls -A bin'
@@ -83,6 +85,7 @@ env PATH=$WORK/again:$ORIGPATH
 exec devbox run system.update --set system.releaseUrl=$RELEASES --json
 stdout '"summary":"DevBox 0.2.0 is up to date"'
 ! stdout '"type":"change"'
+! stdout '"type":"notice"'
 cmp again/devbox orig/devbox
 ! exists again/devbox.previous
 
@@ -117,6 +120,7 @@ chmod 0755 bad/devbox
 env PATH=$WORK/bad:$ORIGPATH
 ! exec devbox run system.update --set system.releaseUrl=$RELEASES --json
 stdout 'does not match its checksum; the binary was not replaced'
+! stdout '"type":"notice"'
 cmp bad/devbox orig/devbox
 ! exists bad/devbox.previous
 exec sh -c 'ls -A bad'

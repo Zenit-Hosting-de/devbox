@@ -267,7 +267,8 @@ type Message interface{}
 
 // Notice shown after the run.
 type NoticeMessage struct {
-	// What the user has to do.
+	// What the user has to do, or what DevBox does itself: restart-service makes a
+	// running `devbox serve` restart with the new binary once all sessions ended.
 	Kind NoticeMessageKind `json:"kind"`
 
 	// Notice text.
@@ -281,12 +282,14 @@ type NoticeMessageKind string
 
 const NoticeMessageKindReboot NoticeMessageKind = "reboot"
 const NoticeMessageKindRelogin NoticeMessageKind = "relogin"
+const NoticeMessageKindRestartService NoticeMessageKind = "restart-service"
 const NoticeMessageKindRestartShell NoticeMessageKind = "restart-shell"
 
 var enumValues_NoticeMessageKind = []interface{}{
 	"relogin",
 	"reboot",
 	"restart-shell",
+	"restart-service",
 }
 
 // UnmarshalJSON implements json.Unmarshaler.

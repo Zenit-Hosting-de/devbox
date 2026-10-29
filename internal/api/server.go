@@ -45,6 +45,14 @@ type Options struct {
 	Broadcaster Broadcaster
 	// WebSocket tunes the WebSocket; the zero value is the production setting.
 	WebSocket WSOptions
+	// Restart replaces the process by the new binary. The server calls it once after a
+	// session ended successfully with a restart-service notice and all other sessions
+	// ended. It only returns on failure; the server then logs the error and keeps
+	// serving. Without it the notice is ignored.
+	Restart func() error
+	// RestartDelay is how long clients have to read the restart message before their
+	// connections are closed (default 500 ms).
+	RestartDelay time.Duration
 }
 
 // Server is the REST API.
@@ -73,6 +81,10 @@ type Server struct {
 
 	runMu   sync.Mutex
 	closing bool
+	// restartWanted is set when a session asked for a restart; restarting when the
+	// restart has begun, from then on no session is accepted.
+	restartWanted bool
+	restarting    bool
 }
 
 // New returns a server. Nothing runs until Serve (or the handlers) are used.
@@ -302,9 +314,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 // spawn runs f in the background until it ends or the server shuts down; it reports
 // false when the server is already shutting down.
-func (s *Server) spawn(f func()) bool {
+func (s *Server) spawn(f func()) bool { return s.spawnWork(f, false) }
+
+// spawnWork is spawn; with session set it also reports false while the service
+// restarts, so that no session starts between the last check and the exec.
+func (s *Server) spawnWork(f func(), session bool) bool {
 	s.runMu.Lock()
-	if s.closing {
+	if s.closing || (session && s.restarting) {
 		s.runMu.Unlock()
 		return false
 	}

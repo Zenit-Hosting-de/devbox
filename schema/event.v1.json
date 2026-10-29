@@ -192,8 +192,8 @@
           "description": "Message type."
         },
         "kind": {
-          "enum": ["relogin", "reboot", "restart-shell"],
-          "description": "What the user has to do."
+          "enum": ["relogin", "reboot", "restart-shell", "restart-service"],
+          "description": "What the user has to do, or what DevBox does itself: restart-service makes a running `devbox serve` restart with the new binary once all sessions ended."
         },
         "text": {
           "$ref": "#/$defs/text",

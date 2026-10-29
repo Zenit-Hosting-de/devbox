@@ -67,9 +67,9 @@ type wsEnv struct {
 	ts *httptest.Server
 }
 
-func newWSEnv(t *testing.T, ws WSOptions) *wsEnv {
+func newWSEnv(t *testing.T, ws WSOptions, mods ...func(*Options)) *wsEnv {
 	t.Helper()
-	e := newTestEnv(t, func(o *Options) { o.WebSocket = ws })
+	e := newTestEnv(t, append([]func(*Options){func(o *Options) { o.WebSocket = ws }}, mods...)...)
 	write(t, filepath.Join(e.plugins, "term", "plugin.json"), termManifest, 0o600)
 	write(t, filepath.Join(e.plugins, "term", "act.sh"), termActions, 0o700)
 	ts := httptest.NewServer(e.h)

@@ -536,7 +536,7 @@ Bei Abnehmern steht unter `credential` die Instanz mit Feldern, Optionen aus dem
 | `change` | `kind` (`file`, `package`, `service`, `env`, `link`, `other`), `op` (`create`, `update`, `delete`), `target`, `summary` | eine Änderung; im Probelauf eine geplante |
 | `log` | `level` (`info`, `warn`, `error`), `text` | Meldung, die im Verlauf hervorgehoben wird |
 | `setting` | `key`, `value` | eigene Einstellung dauerhaft setzen (nur Schlüssel des eigenen Plugins) |
-| `notice` | `kind` (`relogin`, `reboot`, `restart-shell`), `text` | Hinweis nach dem Lauf |
+| `notice` | `kind` (`relogin`, `reboot`, `restart-shell`, `restart-service`), `text` | Hinweis nach dem Lauf; `restart-service` lässt einen laufenden `devbox serve` nach erfolgreichem Lauf mit dem neuen Binary neu starten |
 | `result` | `summary`, `data` | Abschluss, genau einmal am Ende |
 
 Beispiel:
@@ -743,6 +743,7 @@ Die API ist der einzige Weg, wie Oberfläche, CLI und Terminal-Menü mit dem Ker
 | Kern → Client | `check` | `id`, `result` |
 | Kern → Client | `settings` | `keys` (geänderte Schlüssel) |
 | Kern → Client | `plugins` | `ids` (geänderte Plugins), `repositories` (geänderte Repositories) |
+| Kern → Client | `restart` | der Kern startet sich mit einem neuen Binary neu; danach neu verbinden, `/info` laden und bei geänderter Version die Oberfläche neu laden |
 | Kern → Client | `credential` | `name`, `state`, `expiresAt` |
 | beide | `ping`, `pong` | alle 30 Sekunden |
 
