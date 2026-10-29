@@ -109,4 +109,8 @@ DEVBOX_BIN=$self
 sdk emit change file update "$bin" "replaced ${current:-unknown} with $latest"
 sdk emit change file "$previous_op" "$bin.previous" "previous binary"
 sdk emit step replace "done" "Replace the binary"
+# A running `devbox serve` still has the old binary in memory; this makes it restart
+# with the new one. Not fatal: the binary is replaced, and a core that does not know
+# the notice yet (a plugin newer than the binary) only skips the restart.
+sdk emit notice restart-service "A running DevBox service restarts with the new version." || true
 sdk emit result "DevBox updated to $latest" "{\"version\":\"$latest\"}"

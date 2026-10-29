@@ -99,7 +99,7 @@ func (a *app) serve(ctx context.Context, f serveFlags) error {
 	srv, err := api.New(api.Options{
 		Build: a.build, Env: a.coreEnv(), Listen: ln.Addr().String(),
 		Origins: append(append([]string{}, sc.AllowedOrigins...), f.allowOrigins...),
-		Auth:    sc.Auth, Logger: logger,
+		Auth:    sc.Auth, Logger: logger, Restart: a.selfRestart(logger),
 	})
 	if err != nil {
 		return err
@@ -126,7 +126,8 @@ func (a *app) serve(ctx context.Context, f serveFlags) error {
 
 	url := "http://" + ln.Addr().String()
 	logger.Info("listening", "url", url)
-	if f.open {
+	// A restart after an update must not open a second window.
+	if f.open && a.io.Getenv(RestartedEnv) == "" {
 		if err := a.openBrowser(ctx, url); err != nil {
 			logger.Warn("cannot open the browser", "error", err)
 		}
@@ -136,6 +137,44 @@ func (a *app) serve(ctx context.Context, f serveFlags) error {
 	}
 	logger.Info("stopped")
 	return nil
+}
+
+// RestartedEnv is set (to 1) in the environment of a `devbox serve` that replaced a
+// previous one after an update; it keeps --open from opening a second browser window.
+const RestartedEnv = "DEVBOX_RESTARTED"
+
+// selfRestart returns the function that replaces the process by the binary at the path
+// it was started from, with the same arguments and environment plus RestartedEnv. The
+// path is resolved now: once an update replaced the binary, /proc/self/exe points to
+// the deleted file, while the path holds the new one. It returns nil (no restart) when
+// the path is unknown. The function returns only when the exec failed.
+func (a *app) selfRestart(logger *slog.Logger) func() error {
+	if a.io.Executable == nil || a.io.Exec == nil {
+		return nil
+	}
+	exe, err := a.io.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	if err != nil {
+		logger.Warn("the service cannot restart itself after an update: the binary path is unknown", "error", err)
+		return nil
+	}
+	argv := append([]string{exe}, a.args...)
+	return func() error {
+		env := make([]string, 0, len(a.io.Environ())+1)
+		for _, kv := range a.io.Environ() {
+			if !strings.HasPrefix(kv, RestartedEnv+"=") {
+				env = append(env, kv)
+			}
+		}
+		env = append(env, RestartedEnv+"=1")
+		logger.Info("exec", "path", exe)
+		if err := a.io.Exec(exe, argv, env); err != nil {
+			return fmt.Errorf("exec %s: %w", exe, err)
+		}
+		return nil // only a replacement of Exec in tests gets here
+	}
 }
 
 // listenSocket creates the socket (0600) and removes a stale socket of a process that

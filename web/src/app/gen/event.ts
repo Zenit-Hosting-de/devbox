@@ -173,9 +173,9 @@ export interface NoticeMessage {
    */
   type: "notice";
   /**
-   * What the user has to do.
+   * What the user has to do, or what DevBox does itself: restart-service makes a running `devbox serve` restart with the new binary once all sessions ended.
    */
-  kind: "relogin" | "reboot" | "restart-shell";
+  kind: "relogin" | "reboot" | "restart-shell" | "restart-service";
   /**
    * Notice text.
    */

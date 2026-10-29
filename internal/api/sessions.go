@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
@@ -124,10 +125,10 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) error {
 	spec.Input = live.input
 	snapshot := live.Session()
 	s.bc.SessionChanged(snapshot)
-	if !s.spawn(func() { s.runLive(ctx, cancel, st, rn, spec, live, ref, title, origin) }) {
+	if !s.spawnWork(func() { s.runLive(ctx, cancel, st, rn, spec, live, ref, title, origin) }, true) {
 		cancel()
 		s.live.remove(live.id)
-		return newError(http.StatusServiceUnavailable, codeInternal, "the service is shutting down")
+		return newError(http.StatusServiceUnavailable, codeInternal, "the service is shutting down or restarting")
 	}
 	w.Header().Set("Location", "/api/v1/sessions/"+live.id)
 	s.writeJSON(w, r, http.StatusCreated, snapshot)
@@ -150,6 +151,7 @@ func reasonText(rs []plugin.Reason) string {
 func (s *Server) runLive(ctx context.Context, cancel context.CancelFunc, st *core.State, rn *runner.Runner, spec runner.Spec, live *LiveSession, ref, title, origin string) {
 	defer cancel()
 	id := live.id
+	var wantsRestart atomic.Bool
 	sink := core.Sink{
 		Input:      live.input,
 		ConfigLock: &s.cfgMu,
@@ -178,6 +180,9 @@ func (s *Server) runLive(ctx context.Context, cancel context.CancelFunc, st *cor
 			s.bc.SessionOutput(id, seq, append([]byte(nil), data...))
 		},
 		Event: func(ev history.Event) {
+			if isRestartNotice(ev.Event) {
+				wantsRestart.Store(true)
+			}
 			changed := live.onEvent(ev)
 			s.bc.SessionEvent(id, ev)
 			if changed {
@@ -204,6 +209,10 @@ func (s *Server) runLive(ctx context.Context, cancel context.CancelFunc, st *cor
 	s.live.remove(id) // the history has the entry now
 	s.bc.SessionChanged(final)
 	s.refreshAfterSession(spec.PluginID, ref, spec.Lang)
+	if wantsRestart.Load() && final.State == runner.StateSuccess && !spec.DryRun {
+		s.requestRestart(ref)
+	}
+	s.maybeRestart() // also when another session ended that a restart was waiting for
 }
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) error {

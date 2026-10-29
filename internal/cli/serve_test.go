@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -286,4 +289,148 @@ func TestListenSocketDirectories(t *testing.T) {
 		_ = ln.Close()
 		listen(t, path)
 	})
+}
+
+func TestSelfRestartExecsTheStartPathWithMarker(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real", "devbox")
+	writeFile(t, target, "binary")
+	link := filepath.Join(dir, "bin", "devbox")
+	if err := os.MkdirAll(filepath.Dir(link), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	sys, _, _ := testIO(t, t.TempDir())
+	var gotPath string
+	var gotArgv, gotEnv []string
+	sys.Executable = func() (string, error) { return link, nil }
+	sys.Environ = func() []string { return []string{"HOME=/h", RestartedEnv + "=1", "TERM=dumb"} }
+	sys.Exec = func(path string, argv, env []string) error {
+		gotPath, gotArgv, gotEnv = path, argv, env
+		return errors.New("exec failed")
+	}
+	a := &app{io: sys, args: []string{"serve", "--listen", "127.0.0.1:0", "--open"}}
+
+	restart := a.selfRestart(slog.New(slog.NewJSONHandler(io.Discard, nil)))
+	if restart == nil {
+		t.Fatal("no restart function")
+	}
+	err := restart()
+	if err == nil || !strings.Contains(err.Error(), "exec failed") {
+		t.Errorf("error %v: a failed exec must be returned", err)
+	}
+	realTarget, _ := filepath.EvalSymlinks(target)
+	if gotPath != realTarget {
+		t.Errorf("path %q, want the resolved start path %q", gotPath, realTarget)
+	}
+	if want := []string{realTarget, "serve", "--listen", "127.0.0.1:0", "--open"}; !slices.Equal(gotArgv, want) {
+		t.Errorf("argv %q, want %q", gotArgv, want)
+	}
+	if want := []string{"HOME=/h", "TERM=dumb", RestartedEnv + "=1"}; !slices.Equal(gotEnv, want) {
+		t.Errorf("env %q, want %q (the marker exactly once)", gotEnv, want)
+	}
+}
+
+func TestSelfRestartNeedsAKnownBinary(t *testing.T) {
+	sys, _, _ := testIO(t, t.TempDir())
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	if (&app{io: sys}).selfRestart(logger) != nil {
+		t.Error("a restart without Executable and Exec must not exist")
+	}
+	sys.Exec = func(string, []string, []string) error { return nil }
+	sys.Executable = func() (string, error) { return "", errors.New("unknown") }
+	if (&app{io: sys}).selfRestart(logger) != nil {
+		t.Error("a restart without a binary path must not exist")
+	}
+	sys.Executable = func() (string, error) { return "/nonexistent/devbox (deleted)", nil }
+	if (&app{io: sys}).selfRestart(logger) != nil {
+		t.Error("a path that does not resolve must not give a restart")
+	}
+}
+
+// TestServeRestartsAfterNotice runs the whole way: an action emits restart-service,
+// the service announces it and calls Exec with the marker.
+func TestServeRestartsAfterNotice(t *testing.T) {
+	home := t.TempDir()
+	writeFile(t, filepath.Join(home, ".local", "share", "devbox", "plugins", "upd", "plugin.json"),
+		`{"id":"upd","version":"1.0.0","name":"Upd","actions":{"go":{"label":"Go","run":["act.sh"]}}}`)
+	script := filepath.Join(home, ".local", "share", "devbox", "plugins", "upd", "act.sh")
+	writeFile(t, script, "#!/usr/bin/env bash\nprintf '%s\\n' '{\"type\":\"notice\",\"kind\":\"restart-service\",\"text\":\"x\"}' >&3\nprintf '%s\\n' '{\"type\":\"result\",\"summary\":\"ok\"}' >&3\n")
+	if err := os.Chmod(script, 0o700); err != nil { //nolint:gosec // a plugin script must be executable
+		t.Fatal(err)
+	}
+	exe := filepath.Join(home, "bin", "devbox")
+	writeFile(t, exe, "binary")
+	sys, _, _ := testIO(t, home)
+	logs := &lockedBuffer{}
+	sys.Stderr = logs
+	baseEnv := sys.Getenv
+	sys.Getenv = func(k string) string { // the plugin script needs bash from the PATH
+		if k == "PATH" {
+			return os.Getenv("PATH")
+		}
+		return baseEnv(k)
+	}
+	sys.Executable = func() (string, error) { return exe, nil }
+	execd := make(chan []string, 1)
+	sys.Exec = func(path string, argv, env []string) error {
+		execd <- append(append([]string{path}, argv...), env...)
+		return errors.New("test: do not exec")
+	}
+	sys.Environ = func() []string { return []string{"A=b"} }
+	a := &app{io: sys, build: Build{Version: "1.0.0", Vendor: "zenit-hosting", Protocol: 1}, args: []string{"serve"}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- a.serve(ctx, serveFlags{listen: "127.0.0.1:0", socket: filepath.Join(t.TempDir(), "s")})
+	}()
+	var url string
+	deadline := time.Now().Add(20 * time.Second)
+	for url == "" && time.Now().Before(deadline) {
+		sc := bufio.NewScanner(strings.NewReader(logs.String()))
+		for sc.Scan() {
+			var line map[string]any
+			if json.Unmarshal(sc.Bytes(), &line) == nil && line["msg"] == "listening" && line["url"] != nil {
+				url, _ = line["url"].(string)
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if url == "" {
+		t.Fatalf("no listening line in the log:\n%s", logs)
+	}
+	// The plugin of the test home is the only one that matters; the bundled ones are ready too.
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url+"/api/v1/sessions", strings.NewReader(`{"action":"upd.go"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-DevBox-Request", "1")
+	req.Header.Set("Origin", url)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("session: %d %s", resp.StatusCode, body)
+	}
+	select {
+	case got := <-execd:
+		resolved, _ := filepath.EvalSymlinks(exe)
+		want := []string{resolved, resolved, "serve", "A=b", RestartedEnv + "=1"}
+		if !slices.Equal(got, want) {
+			t.Errorf("exec %q, want %q", got, want)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatalf("Exec was not called:\n%s", logs)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Errorf("serve: %v", err)
+	}
 }

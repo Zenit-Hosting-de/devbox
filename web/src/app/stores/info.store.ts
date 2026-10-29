@@ -21,6 +21,12 @@ export class InfoStore {
     return this.pending;
   }
 
+  /** Loads /info again (the core may have been replaced by a new version). */
+  reload(): Promise<Info | null> {
+    this.pending = null;
+    return this.load();
+  }
+
   /** The text with the home directory written as `~`. */
   shorten(text: string): string {
     return shortenHome(text, this.home());

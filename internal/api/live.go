@@ -26,6 +26,8 @@ type Broadcaster interface {
 	// repositories changed: ids are the plugins concerned, repositories the names of
 	// the repositories concerned (both may be empty).
 	PluginsChanged(ids, repositories []string)
+	// RestartRequested reports that the core restarts itself with a new binary.
+	RestartRequested()
 }
 
 // NopBroadcaster ignores everything; it is the default.
@@ -48,6 +50,9 @@ func (NopBroadcaster) SettingsChanged([]string) {}
 
 // PluginsChanged implements Broadcaster.
 func (NopBroadcaster) PluginsChanged([]string, []string) {}
+
+// RestartRequested implements Broadcaster.
+func (NopBroadcaster) RestartRequested() {}
 
 // Progress is the progress of a running session.
 type Progress struct {
@@ -343,6 +348,12 @@ func (r *registry) get(id string) (*LiveSession, bool) {
 	defer r.mu.Unlock()
 	l, ok := r.byID[id]
 	return l, ok
+}
+
+func (r *registry) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.byID)
 }
 
 func (r *registry) remove(id string) {

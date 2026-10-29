@@ -920,6 +920,11 @@ export interface components {
             type: "settings";
             keys: components["schemas"]["SettingKey"][];
         };
+        /** @description Core to client: the core restarts itself with a new binary (after a session announced it with a restart-service notice). It is sent to every connected client and to clients that connect while the restart is pending; the connection closes shortly after. Reconnect, reload GET /info and, when the version changed, the UI. */
+        WsRestart: {
+            /** @constant */
+            type: "restart";
+        };
         /** @description Core to client: the requested fromSeq is older than the in-memory buffer. Streaming continues at firstSeq; the client reloads GET /sessions/{id}/log. */
         WsGap: {
             /** @constant */
@@ -941,7 +946,7 @@ export interface components {
             topic?: string;
         };
         /** @description Every message the core may send. */
-        WsServerMessage: components["schemas"]["WsOutput"] | components["schemas"]["WsEvent"] | components["schemas"]["WsSession"] | components["schemas"]["WsCheck"] | components["schemas"]["WsSettings"] | components["schemas"]["WsPlugins"] | components["schemas"]["WsGap"] | components["schemas"]["WsError"] | components["schemas"]["WsPing"] | components["schemas"]["WsPong"];
+        WsServerMessage: components["schemas"]["WsOutput"] | components["schemas"]["WsEvent"] | components["schemas"]["WsSession"] | components["schemas"]["WsCheck"] | components["schemas"]["WsSettings"] | components["schemas"]["WsPlugins"] | components["schemas"]["WsRestart"] | components["schemas"]["WsGap"] | components["schemas"]["WsError"] | components["schemas"]["WsPing"] | components["schemas"]["WsPong"];
         /** @description Where a plugin was found: bundled with the binary, in a directory of plugins.paths, or in the active revision of a plugin repository. */
         PluginOrigin: {
             /**

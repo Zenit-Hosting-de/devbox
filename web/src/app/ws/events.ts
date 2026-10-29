@@ -21,7 +21,7 @@ export interface LogView {
 }
 
 export interface NoticeView {
-  kind: "relogin" | "reboot" | "restart-shell";
+  kind: "relogin" | "reboot" | "restart-shell" | "restart-service";
   text: string;
 }
 

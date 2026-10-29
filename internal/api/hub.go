@@ -129,11 +129,14 @@ func (b *sessionBuf) from(seq int) []bufEntry {
 type Hub struct {
 	opts hubOptions
 
-	mu       sync.Mutex
-	closed   bool
-	sessions map[string]*sessionBuf
-	clients  map[*client]struct{}
-	topics   map[string]map[*client]struct{} // checks, sessions, settings, plugins
+	mu     sync.Mutex
+	closed bool
+	// restarting is set while a restart is announced; clients that connect meanwhile
+	// get the announcement too.
+	restarting bool
+	sessions   map[string]*sessionBuf
+	clients    map[*client]struct{}
+	topics     map[string]map[*client]struct{} // checks, sessions, settings, plugins
 }
 
 func newHub(o hubOptions) *Hub {
@@ -208,6 +211,8 @@ func encode(v any) []byte {
 var (
 	msgPing = encode(wsPlain{Type: "ping"})
 	msgPong = encode(wsPlain{Type: "pong"})
+	// msgRestart announces a restart of the core (api/openapi.json, WsRestart).
+	msgRestart = encode(wsPlain{Type: "restart"})
 )
 
 func terminalState(state string) bool {
@@ -360,6 +365,39 @@ func (h *Hub) PluginsChanged(ids, repositories []string) {
 	h.publish(topicPlugins, encode(wsPlugins{Type: "plugins", IDs: ids, Repositories: repositories}))
 }
 
+// RestartRequested implements Broadcaster: every connected client, whatever it
+// subscribed to, and every client that connects before clearRestart gets the message.
+func (h *Hub) RestartRequested() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
+	h.restarting = true
+	for c := range h.clients {
+		c.send(msgRestart, true)
+	}
+}
+
+// clearRestart withdraws the announcement: the restart did not happen.
+func (h *Hub) clearRestart() {
+	h.mu.Lock()
+	h.restarting = false
+	h.mu.Unlock()
+}
+
+// goAway asks every connection to close with status 1012 (service restart); the
+// clients reconnect on their own. It does not wait.
+func (h *Hub) goAway() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for c := range h.clients {
+		if c.goAway != nil {
+			c.goAway()
+		}
+	}
+}
+
 func (h *Hub) publish(topic string, msg []byte) {
 	if msg == nil {
 		return
@@ -432,6 +470,9 @@ func (h *Hub) attach(c *client) bool {
 		return false
 	}
 	h.clients[c] = struct{}{}
+	if h.restarting {
+		c.send(msgRestart, true)
+	}
 	return true
 }
 
@@ -579,5 +620,12 @@ func (m multiBroadcaster) SettingsChanged(keys []string) {
 func (m multiBroadcaster) PluginsChanged(ids, repositories []string) {
 	for _, b := range m {
 		b.PluginsChanged(ids, repositories)
+	}
+}
+
+// RestartRequested implements Broadcaster.
+func (m multiBroadcaster) RestartRequested() {
+	for _, b := range m {
+		b.RestartRequested()
 	}
 }

@@ -461,6 +461,19 @@ short placeholder page for the UI; the API works either way.
 - On SIGINT or SIGTERM the service stops accepting requests, stops live sessions (they
   end as `stopped` and are recorded in the history) and waits for them.
 
+**Restart after an update.** An action can end with the notice `restart-service`
+(`sdk emit notice restart-service "…"`); `system.update` does so after it replaced the
+binary. When such a session ends successfully, `devbox serve` announces the restart with a
+`restart` message on the WebSocket, waits until all other sessions have ended (it never
+stops a running action; a session started in the last moment is refused with
+`503`), closes the WebSocket connections with status 1012 and then replaces itself by the
+binary at the path it was started from (`exec`: same arguments and environment, same
+process ID, and `DEVBOX_RESTARTED=1` so `--open` does not open a second browser window).
+The web UI shows "DevBox is restarting with the new version", reconnects and reloads the
+page when the version changed. If the binary cannot be started, the service logs the error
+and keeps serving with the old version; stop and start it by hand then. A supervisor that
+manages the service sees no restart, because the process ID stays.
+
 **Not available yet:** the PAM login (`/auth/*`), the login rate limit, TLS and
 non-loopback addresses; the command line client over the Unix socket; setting a
 credential secret over the API (`PUT /credentials/{name}/secret`); and the endpoints for
@@ -484,6 +497,7 @@ code `csrf`. Over the Unix socket no `Origin` is needed.
 | to client | `output`, `event`                        | Terminal output and protocol messages of a session. Both carry `seq`; output and events of a session share one counter.                    |
 | to client | `session`, `check`, `settings`           | A session was created or changed (progress at most 4 times per second), a check finished, settings were changed through the API.           |
 | to client | `plugins`                            | Plugins or plugin repositories changed: `ids` (plugin IDs), `repositories` (repository names). |
+| to client | `restart`                                | The core restarts with a new binary (see "Restart after an update"). The connection closes shortly after with status 1012; clients that connect while the restart is pending get the message too. |
 | to client | `gap`, `error`                           | The requested `fromSeq` is older than the buffer; a client message was refused (`validation`, `not-found`, `conflict`), the connection stays open. |
 | both      | `ping`, `pong`                           | The core sends a `ping` every 30 seconds and answers a `ping` with a `pong`. A connection that sent nothing for 75 seconds is closed.      |
 

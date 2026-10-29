@@ -43,6 +43,22 @@ describe("App shell (against the mock backend)", () => {
     expect(root.querySelector("z-app-header")?.textContent).toContain("DevBox");
   });
 
+  it("shows a banner instead of the offline notice while the core restarts", async () => {
+    const fixture = TestBed.createComponent(App);
+    await settle(fixture);
+    await vi.waitFor(() => {
+      expect(TestBed.inject(SessionsStore).status()).toBe("open");
+    });
+    expect(byText(fixture, "z-alert", "restarting")).toBeUndefined();
+
+    backend.announceRestart();
+    await settle(fixture, () => {
+      expect(byText(fixture, "z-alert", "DevBox is restarting with the new version")).toBeDefined();
+    });
+    expect(byText(fixture, "z-alert", "No connection to the core")).toBeUndefined();
+    expect(byText(fixture, "z-alert", "The connection is restored automatically")).toBeDefined();
+  });
+
   it("connects exactly one socket after bootstrap", async () => {
     const fixture = TestBed.createComponent(App);
     await settle(fixture);

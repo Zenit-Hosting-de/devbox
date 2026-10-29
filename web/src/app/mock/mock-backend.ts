@@ -156,6 +156,11 @@ export class MockBackend {
     }
   }
 
+  /** The mock core announces that it restarts with a new version (WebSocket message `restart`). */
+  announceRestart(): void {
+    this.broadcast({ type: "restart" });
+  }
+
   /** Output and events of a session from `fromSeq` on, for a resubscribing socket. */
   replay(id: string, fromSeq: number): WsServerMessage[] {
     const live = this.sessions.get(id);

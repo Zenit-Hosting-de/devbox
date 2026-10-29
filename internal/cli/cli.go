@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -39,16 +40,27 @@ type IO struct {
 	Stderr  io.Writer
 	Getenv  func(string) string
 	Environ func() []string
+	// Executable returns the path of the running binary and Exec replaces the process
+	// by a program (execve); `devbox serve` restarts itself with them. Without them
+	// the service cannot restart itself.
+	Executable func() (string, error)
+	Exec       func(path string, argv, env []string) error
 }
 
 // OSIO returns the IO of the current process.
 func OSIO() IO {
-	return IO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Getenv: os.Getenv, Environ: os.Environ}
+	return IO{
+		Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr, Getenv: os.Getenv, Environ: os.Environ,
+		Executable: os.Executable, Exec: syscall.Exec,
+	}
 }
 
 type app struct {
 	io    IO
 	build Build
+	// args are the command line arguments without the program name; a restart of
+	// `devbox serve` passes them on.
+	args []string
 
 	// global flags
 	jsonOut    bool
@@ -67,7 +79,7 @@ func (e *exitError) Unwrap() error { return e.err }
 
 // Main runs the CLI and returns the exit code.
 func Main(args []string, build Build, sys IO) int {
-	a := &app{io: sys, build: build}
+	a := &app{io: sys, build: build, args: args}
 	root := a.rootCommand()
 	root.SetArgs(args)
 	root.SetIn(sys.Stdin)

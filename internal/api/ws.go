@@ -78,6 +78,9 @@ func (o WSOptions) hub() hubOptions {
 type client struct {
 	limit  int
 	onSlow func()
+	// goAway closes the connection with status 1012 (restart); set before the client
+	// is attached.
+	goAway func()
 	notify chan struct{}
 
 	mu   sync.Mutex
@@ -215,6 +218,7 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	wc := &wsConn{s: s, conn: conn, opts: opts, ctx: ctx, cancel: cancel, terminated: make(chan struct{})}
 	wc.cl = newClient(opts.QueueLimit, func() { wc.terminate(websocket.StatusPolicyViolation, "slow consumer") })
+	wc.cl.goAway = func() { wc.terminate(websocket.StatusServiceRestart, "restarting") }
 	if !s.hub.attach(wc.cl) {
 		_ = conn.Close(websocket.StatusGoingAway, "server shutting down")
 		cancel()
