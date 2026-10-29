@@ -97,6 +97,21 @@ func (e DeleteRepositoryParamsXDevBoxRequest) Valid() bool {
 	}
 }
 
+// Defines values for PatchRepositoryParamsXDevBoxRequest.
+const (
+	PatchRepositoryParamsXDevBoxRequestN1 PatchRepositoryParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the PatchRepositoryParamsXDevBoxRequest enum.
+func (e PatchRepositoryParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case PatchRepositoryParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ApproveRepositoryParamsXDevBoxRequest.
 const (
 	ApproveRepositoryParamsXDevBoxRequestN1 ApproveRepositoryParamsXDevBoxRequest = "1"
@@ -519,6 +534,9 @@ type RepositoryActive struct {
 	// Revision Commit SHA (git), SHA-256 of the tarball (https) or tree digest (file).
 	Revision string `json:"revision"`
 
+	// SuggestedPaths Only set when the revision has no plugins: sub-directories of the snapshot (relative, slash form, sorted) that hold plugin folders, as a hint for the path.
+	SuggestedPaths *[]string `json:"suggestedPaths,omitempty"`
+
 	// SyncedAt When the revision was fetched.
 	SyncedAt time.Time `json:"syncedAt"`
 }
@@ -562,6 +580,21 @@ type RepositoryLastSync struct {
 // RepositoryList All repositories sorted by name.
 type RepositoryList = []Repository
 
+// RepositoryPatch Changes of a repository in the user configuration. Fields that are absent stay; null or an empty string removes ref and path.
+type RepositoryPatch struct {
+	// Path Relative sub-directory that holds the plugin folders; null or an empty string removes it (the root).
+	Path *string `json:"path,omitempty"`
+
+	// Ref Git branch, tag or commit; null or an empty string removes it (the HEAD of the remote).
+	Ref *string `json:"ref,omitempty"`
+
+	// Source New address, as in RepositoryCreate.
+	Source *string `json:"source,omitempty"`
+
+	// Trust As in RepositoryCreate.
+	Trust interface{} `json:"trust,omitempty"`
+}
+
 // RepositoryPending A fetched revision that waits for approval, compared with the active one.
 type RepositoryPending struct {
 	// FetchedAt When the revision was fetched.
@@ -575,6 +608,9 @@ type RepositoryPending struct {
 
 	// Revision Revision to pass to the approve endpoint.
 	Revision string `json:"revision"`
+
+	// SuggestedPaths Only set when the revision has no plugins: sub-directories of the snapshot (relative, slash form, sorted) that hold plugin folders, as a hint for the path.
+	SuggestedPaths *[]string `json:"suggestedPaths,omitempty"`
 }
 
 // RepositoryPermission A permission a plugin declares. new is true in a pending revision when the active revision does not declare it for the plugin (all permissions of an added plugin are new); it is false everywhere else.
@@ -887,6 +923,15 @@ type DeleteRepositoryParams struct {
 // DeleteRepositoryParamsXDevBoxRequest defines parameters for DeleteRepository.
 type DeleteRepositoryParamsXDevBoxRequest string
 
+// PatchRepositoryParams defines parameters for PatchRepository.
+type PatchRepositoryParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest PatchRepositoryParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// PatchRepositoryParamsXDevBoxRequest defines parameters for PatchRepository.
+type PatchRepositoryParamsXDevBoxRequest string
+
 // ApproveRepositoryParams defines parameters for ApproveRepository.
 type ApproveRepositoryParams struct {
 	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
@@ -967,6 +1012,9 @@ type PatchPluginJSONRequestBody = PluginPatch
 
 // CreateRepositoryJSONRequestBody defines body for CreateRepository for application/json ContentType.
 type CreateRepositoryJSONRequestBody = RepositoryCreate
+
+// PatchRepositoryJSONRequestBody defines body for PatchRepository for application/json ContentType.
+type PatchRepositoryJSONRequestBody = RepositoryPatch
 
 // ApproveRepositoryJSONRequestBody defines body for ApproveRepository for application/json ContentType.
 type ApproveRepositoryJSONRequestBody = RepositoryApprove

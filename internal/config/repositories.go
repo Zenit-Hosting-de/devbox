@@ -95,3 +95,29 @@ func SetPluginDisabled(v *schema.Validator, path, id string, disabled bool) (boo
 	})
 	return changed, err
 }
+
+// PatchRepository changes fields of the existing entry repositories.<name> of the user
+// configuration file: set writes or replaces fields, remove deletes them; all other
+// fields stay as they are. A missing entry is a not-found error.
+func PatchRepository(v *schema.Validator, path, name string, set [][2]any, remove []string) error {
+	return UpdateDocument(v, path, func(doc *jsonfile.Object) error {
+		raw, _ := doc.Get("repositories")
+		repos, _ := raw.(*jsonfile.Object)
+		var entry *jsonfile.Object
+		if repos != nil {
+			rawEntry, _ := repos.Get(name)
+			entry, _ = rawEntry.(*jsonfile.Object)
+		}
+		if entry == nil {
+			return &Error{Code: CodeNotFound, Key: name, Detail: "no such repository in the user configuration"}
+		}
+		for _, key := range remove {
+			entry.Delete(key)
+		}
+		for _, kv := range set {
+			key, _ := kv[0].(string)
+			entry.Set(key, kv[1])
+		}
+		return nil
+	})
+}

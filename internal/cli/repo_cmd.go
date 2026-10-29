@@ -31,6 +31,31 @@ func (a *app) repoCommand() *cobra.Command {
 	add.Flags().StringVar(&spec.Trust, "trust", "", "prompt (default) or pinned (git commit in --ref, no approval)")
 	_ = add.MarkFlagRequired("source")
 
+	var patch core.RepoPatch
+	var source, ref, path, trust string
+	set := &cobra.Command{
+		Use: "set NAME", Short: "change a repository of the user configuration and sync it", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// only the flags that are given change something; an empty value removes ref and path
+			for _, f := range []struct {
+				flag string
+				val  *string
+				dst  **string
+			}{{"source", &source, &patch.Source}, {"ref", &ref, &patch.Ref}, {"path", &path, &patch.Path}, {"trust", &trust, &patch.Trust}} {
+				*f.dst = nil
+				if cmd.Flags().Changed(f.flag) {
+					v := *f.val
+					*f.dst = &v
+				}
+			}
+			return a.repoSet(cmd, args[0], patch)
+		},
+	}
+	set.Flags().StringVar(&source, "source", "", "new address of the repository")
+	set.Flags().StringVar(&ref, "ref", "", "Git branch, tag or commit (empty: the HEAD of the remote)")
+	set.Flags().StringVar(&path, "path", "", "sub-directory that holds the plugin folders (empty: the root)")
+	set.Flags().StringVar(&trust, "trust", "", "prompt (empty: the default) or pinned")
+
 	var yes bool
 	approve := &cobra.Command{
 		Use: "approve NAME", Short: "make the pending revision active", Args: cobra.ExactArgs(1),
@@ -41,6 +66,7 @@ func (a *app) repoCommand() *cobra.Command {
 	cmd.AddCommand(
 		&cobra.Command{Use: "list", Short: "list the repositories", Args: cobra.NoArgs, RunE: a.repoList},
 		add,
+		set,
 		&cobra.Command{Use: "sync [NAME]", Short: "fetch new revisions and show what changed", Args: cobra.MaximumNArgs(1), RunE: a.repoSync},
 		approve,
 		&cobra.Command{Use: "discard NAME", Short: "drop the pending revision", Args: cobra.ExactArgs(1), RunE: a.repoDiscard},
@@ -62,7 +88,36 @@ func (a *app) repoList(_ *cobra.Command, _ []string) error {
 	for _, v := range views {
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", v.Name, v.State, v.Kind, v.Origin, v.Source, revisions(v))
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	for _, v := range views {
+		if hint := noPluginsHint(v); hint != "" {
+			_, _ = fmt.Fprintf(a.io.Stdout, "%s: %s\n", v.Name, hint)
+		}
+	}
+	return nil
+}
+
+// noPluginsHint tells what to do when the newest revision of a repository holds no
+// plugin although the snapshot has folders with plugins; empty otherwise.
+func noPluginsHint(v repo.View) string {
+	var suggested []string
+	switch {
+	case v.Pending != nil:
+		for _, p := range v.Pending.Plugins {
+			if p.Change != repo.ChangeRemoved {
+				return ""
+			}
+		}
+		suggested = v.Pending.SuggestedPaths
+	case v.Active != nil && len(v.Active.Plugins) == 0:
+		suggested = v.Active.SuggestedPaths
+	}
+	if len(suggested) == 0 {
+		return ""
+	}
+	return "no plugins found; plugins exist below: " + strings.Join(suggested, ", ") + " (set with --path)"
 }
 
 // revisions is the short text of the revisions of a repository.
@@ -94,6 +149,30 @@ func (a *app) repoAdd(cmd *cobra.Command, spec core.RepoSpec) error {
 	}
 	if syncErr != nil {
 		return fmt.Errorf("%s was added, the first sync failed: %w", spec.Name, syncErr)
+	}
+	return nil
+}
+
+func (a *app) repoSet(cmd *cobra.Command, name string, patch core.RepoPatch) error {
+	if patch.Empty() {
+		return &exitError{code: ExitInvalid, err: errors.New("nothing to change: give at least one of --source, --ref, --path, --trust")}
+	}
+	st, err := a.load(true)
+	if err != nil {
+		return err
+	}
+	if _, err := st.UpdateRepository(name, patch); err != nil {
+		return err
+	}
+	if st, err = a.load(true); err != nil {
+		return err
+	}
+	syncErr := st.SyncRepository(cmd.Context(), name)
+	if err := a.printRepo(st, name); err != nil {
+		return err
+	}
+	if syncErr != nil {
+		return fmt.Errorf("%s was changed, the sync failed: %w", name, syncErr)
 	}
 	return nil
 }
@@ -226,6 +305,7 @@ func writeReport(w io.Writer, v repo.View) {
 		for _, p := range v.Pending.Plugins {
 			writePlugin(w, p)
 		}
+		writeHint(w, v)
 		_, _ = fmt.Fprintf(w, "approve with: devbox repo approve %s\n", v.Name)
 	case repo.StateActive:
 		if v.LastSync != nil && v.LastSync.Changed {
@@ -233,13 +313,22 @@ func writeReport(w io.Writer, v repo.View) {
 			for _, p := range v.Active.Plugins {
 				writePlugin(w, p)
 			}
+			writeHint(w, v)
 			return
 		}
 		_, _ = fmt.Fprintf(w, "%s: up to date, revision %s is active (%d plugins)\n", v.Name, repo.ShortRevision(v.Active.Revision), len(v.Active.Plugins))
+		writeHint(w, v)
 	case repo.StateError:
 		_, _ = fmt.Fprintf(w, "%s: error: %s\n", v.Name, v.LastError)
 	default:
 		_, _ = fmt.Fprintf(w, "%s: %s\n", v.Name, v.State)
+	}
+}
+
+// writeHint prints the hint for a revision without plugins, if there is one.
+func writeHint(w io.Writer, v repo.View) {
+	if hint := noPluginsHint(v); hint != "" {
+		_, _ = fmt.Fprintf(w, "  %s\n", hint)
 	}
 }
 

@@ -62,6 +62,46 @@ func (s *Server) createRepository(w http.ResponseWriter, r *http.Request) error 
 	return s.respondRepository(w, r, http.StatusCreated, spec.Name)
 }
 
+// patchRepository changes the entry in the user file and syncs it. The entry stays
+// changed when the sync fails; the failure shows as state "error" with lastError.
+func (s *Server) patchRepository(w http.ResponseWriter, r *http.Request) error {
+	name := r.PathValue("name")
+	body, err := s.decodeBody(w, r, "RepositoryPatch", false)
+	if err != nil {
+		return err
+	}
+	// a missing key leaves the field alone, null removes it
+	field := func(key string) *string {
+		v, present := body[key]
+		if !present {
+			return nil
+		}
+		str, _ := v.(string)
+		return &str
+	}
+	patch := core.RepoPatch{Source: field("source"), Ref: field("ref"), Path: field("path"), Trust: field("trust")}
+	st, err := s.load()
+	if err != nil {
+		return err
+	}
+	s.cfgMu.Lock()
+	_, err = st.UpdateRepository(name, patch)
+	s.cfgMu.Unlock()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := s.opContext(r)
+	defer cancel()
+	if st, err = s.load(); err != nil {
+		return err
+	}
+	if err := st.SyncRepository(ctx, name); err != nil {
+		s.log.Info("sync of a changed repository failed", "repository", name, "error", repo.ErrorText(err))
+	}
+	s.announceRepository(st, name)
+	return s.respondRepository(w, r, http.StatusOK, name)
+}
+
 func (s *Server) syncRepository(w http.ResponseWriter, r *http.Request) error {
 	name := r.PathValue("name")
 	st, err := s.load()

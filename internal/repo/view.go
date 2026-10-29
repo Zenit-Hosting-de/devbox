@@ -46,6 +46,8 @@ type ActiveView struct {
 	Path     string       `json:"path,omitempty"`
 	SyncedAt string       `json:"syncedAt"`
 	Plugins  []PluginView `json:"plugins"`
+	// SuggestedPaths are folders that hold plugin folders; only set without plugins.
+	SuggestedPaths []string `json:"suggestedPaths,omitempty"`
 }
 
 // PendingView is the revision that waits for approval, with the plugins of both
@@ -55,6 +57,8 @@ type PendingView struct {
 	Path      string       `json:"path,omitempty"`
 	FetchedAt string       `json:"fetchedAt"`
 	Plugins   []PluginView `json:"plugins"`
+	// SuggestedPaths are folders that hold plugin folders; only set without plugins.
+	SuggestedPaths []string `json:"suggestedPaths,omitempty"`
 }
 
 // PluginView is a plugin of a revision.
@@ -135,7 +139,10 @@ func (m *Manager) Views(entries []Entry) []View {
 }
 
 func activeView(r *Revision) *ActiveView {
-	a := &ActiveView{Revision: r.Revision, Path: r.Path, SyncedAt: r.FetchedAt, Plugins: make([]PluginView, 0, len(r.Plugins))}
+	a := &ActiveView{
+		Revision: r.Revision, Path: r.Path, SyncedAt: r.FetchedAt, SuggestedPaths: r.SuggestedPaths,
+		Plugins: make([]PluginView, 0, len(r.Plugins)),
+	}
 	for _, p := range r.Plugins {
 		a.Plugins = append(a.Plugins, pluginView(p, "", nil))
 	}
@@ -167,7 +174,10 @@ func pendingView(active, pending *Revision) *PendingView {
 			byID[p.ID] = p
 		}
 	}
-	out := &PendingView{Revision: pending.Revision, Path: pending.Path, FetchedAt: pending.FetchedAt, Plugins: []PluginView{}}
+	out := &PendingView{
+		Revision: pending.Revision, Path: pending.Path, FetchedAt: pending.FetchedAt,
+		SuggestedPaths: pending.SuggestedPaths, Plugins: []PluginView{},
+	}
 	inPending := map[string]bool{}
 	for _, p := range pending.Plugins {
 		inPending[p.ID] = true

@@ -580,6 +580,60 @@
       }
     },
     "/repositories/{name}": {
+      "patch": {
+        "tags": ["repositories"],
+        "operationId": "patchRepository",
+        "summary": "Change a repository of the user configuration and sync it.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "description": "Name of the repository.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepositoryPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The repository after the change and the sync. When the sync failed, state is error and lastError says why; the change stays. A changed source, ref or path yields a pending revision (trust prompt) that needs approval.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Repository"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Writes the given fields into the entry of the user configuration, validates the result like a new entry and syncs the repository. Fields that are not in the body stay; null (or an empty string) removes ref and path. 409 conflict for an entry of the system configuration or a profile (the detail names the origin) and for a kind other than plugins, 422 validation for an invalid result."
+      },
       "delete": {
         "tags": ["repositories"],
         "operationId": "deleteRepository",
@@ -2517,6 +2571,13 @@
               "$ref": "#/components/schemas/RepositoryPlugin"
             },
             "description": "Plugins of the revision, sorted by folder name."
+          },
+          "suggestedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only set when the revision has no plugins: sub-directories of the snapshot (relative, slash form, sorted) that hold plugin folders, as a hint for the path."
           }
         }
       },
@@ -2545,6 +2606,13 @@
               "$ref": "#/components/schemas/RepositoryPlugin"
             },
             "description": "The plugins of the pending revision plus the plugins that only the active revision has (change removed), sorted by ID. Every entry has change."
+          },
+          "suggestedPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only set when the revision has no plugins: sub-directories of the snapshot (relative, slash form, sorted) that hold plugin folders, as a hint for the path."
           }
         }
       },
@@ -2655,6 +2723,31 @@
             "enum": ["prompt", "pinned"],
             "default": "prompt",
             "description": "pinned is only valid for a git source whose ref is a full 40-character commit; the synced revision is then active without approval."
+          }
+        }
+      },
+      "RepositoryPatch": {
+        "description": "Changes of a repository in the user configuration. Fields that are absent stay; null or an empty string removes ref and path.",
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "pattern": "^(file|https|git\\+https|git\\+ssh|git\\+file)://",
+            "description": "New address, as in RepositoryCreate."
+          },
+          "ref": {
+            "type": ["string", "null"],
+            "description": "Git branch, tag or commit; null or an empty string removes it (the HEAD of the remote)."
+          },
+          "path": {
+            "type": ["string", "null"],
+            "description": "Relative sub-directory that holds the plugin folders; null or an empty string removes it (the root)."
+          },
+          "trust": {
+            "enum": ["prompt", "pinned"],
+            "description": "As in RepositoryCreate."
           }
         }
       },

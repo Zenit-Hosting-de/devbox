@@ -56,9 +56,9 @@ describe("RepositoriesStore (against the mock backend)", () => {
   it("adds a source: busy while the call runs, the new entry waits for approval", async () => {
     await store.ensureLoaded();
     const pending = store.add({ name: "demo-src", source: "file:///tmp/demo", trust: "prompt" });
-    expect(store.adding()).toBe(true);
+    expect(store.saving()).toBe(true);
     const created = await pending;
-    expect(store.adding()).toBe(false);
+    expect(store.saving()).toBe(false);
     expect(created.state).toBe("pending");
     expect(created.pending?.plugins.map((p) => [p.id, p.change])).toEqual([["demo", "added"]]);
     expect(store.repository("demo-src")).toBeDefined();
@@ -85,7 +85,39 @@ describe("RepositoriesStore (against the mock backend)", () => {
       store.add({ name: "corp", source: "file:///tmp/x", trust: "prompt" }),
     );
     expect(duplicate.status).toBe(409);
-    expect(store.adding()).toBe(false);
+    expect(store.saving()).toBe(false);
+  });
+
+  it("updates a source: busy while the call runs, the entry is replaced", async () => {
+    await store.ensureLoaded();
+    const pending = store.update("experiments", { ref: null, path: "tools" });
+    expect(store.saving()).toBe(true);
+    const updated = await pending;
+    expect(store.saving()).toBe(false);
+    expect(updated.ref).toBeUndefined();
+    expect(updated.path).toBe("tools");
+    expect(updated.pending?.path).toBe("tools");
+    expect(store.repository("experiments")?.path).toBe("tools");
+  });
+
+  it("marks only the source busy when a path is set from the alert", async () => {
+    await store.ensureLoaded();
+    const done = store.patch("team-plugins", { path: "plugins" });
+    expect(store.busy().has("team-plugins")).toBe(true);
+    expect(store.saving()).toBe(false);
+    await done;
+    expect(store.busy().size).toBe(0);
+  });
+
+  it("rejects an update of a source from the system configuration", async () => {
+    await store.ensureLoaded();
+    const refused = await rejection(store.update("corp", { path: "x" }));
+    expect(refused.status).toBe(409);
+    const missing = await rejection(store.update("nope", { path: "x" }));
+    expect(missing.status).toBe(404);
+    const invalid = await rejection(store.update("experiments", { source: "nope" }));
+    expect(invalid.status).toBe(422);
+    expect(store.saving()).toBe(false);
   });
 
   it("approves only the pending revision and then loads the plugins", async () => {

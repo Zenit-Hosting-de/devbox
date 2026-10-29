@@ -174,6 +174,7 @@ func (s *Server) routes() {
 	s.route("GET /api/v1/credentials", s.listCredentials)
 	s.route("GET /api/v1/repositories", s.listRepositories)
 	s.route("POST /api/v1/repositories", s.createRepository)
+	s.route("PATCH /api/v1/repositories/{name}", s.patchRepository)
 	s.route("POST /api/v1/repositories/{name}/sync", s.syncRepository)
 	s.route("POST /api/v1/repositories/{name}/approve", s.approveRepository)
 	s.route("DELETE /api/v1/repositories/{name}/pending", s.discardRepository)

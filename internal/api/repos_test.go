@@ -830,3 +830,131 @@ func TestPatchPlugin(t *testing.T) {
 		e.wantProblem(e.request(http.MethodPatch, "/plugins/demo", `{`), http.StatusBadRequest, codeValidation)
 	})
 }
+
+// TestRepositorySuggestedPaths: a source without path over a repository that keeps its
+// plugins in a sub-folder shows no plugins and names the folder; PATCH fixes the entry.
+func TestRepositorySuggestedPaths(t *testing.T) {
+	e := newTestEnv(t)
+	src := repoSource(t)
+	created := e.mutate(http.MethodPost, "/repositories", map[string]any{"name": "team", "source": "file://" + src}, http.StatusCreated).json(t)
+	if created["state"] != "pending" || len(pluginViews(t, created, "pending")) != 0 {
+		t.Fatalf("created = %v", created)
+	}
+	if got := field(created, "pending", "suggestedPaths"); !reflect.DeepEqual(got, []any{"plugins"}) {
+		t.Errorf("suggestedPaths = %v", got)
+	}
+	// the list shows it, too
+	if got := field(e.repository("team"), "pending", "suggestedPaths"); !reflect.DeepEqual(got, []any{"plugins"}) {
+		t.Errorf("listed suggestedPaths = %v", got)
+	}
+
+	fixed := e.mutate(http.MethodPatch, "/repositories/team", map[string]any{"path": "plugins"}, http.StatusOK).json(t)
+	e.wantBroadcast([]string{"alpha", "beta"}, []string{"team"})
+	if fixed["state"] != "pending" || fixed["path"] != "plugins" || len(pluginViews(t, fixed, "pending")) != 2 {
+		t.Fatalf("fixed = %v", fixed)
+	}
+	if field(fixed, "pending", "suggestedPaths") != nil || field(fixed, "pending", "path") != "plugins" {
+		t.Errorf("pending = %v", fixed["pending"])
+	}
+	if entry := field(e.readUserConfig(), "repositories", "team"); !reflect.DeepEqual(entry, map[string]any{"kind": "plugins", "source": "file://" + src, "path": "plugins"}) {
+		t.Errorf("entry = %v", entry)
+	}
+	approved := e.mutate(http.MethodPost, "/repositories/team/approve", map[string]any{"revision": field(fixed, "pending", "revision")}, http.StatusOK).json(t)
+	if approved["state"] != "active" || len(pluginViews(t, approved, "active")) != 2 {
+		t.Errorf("approved = %v", approved)
+	}
+}
+
+func TestPatchRepository(t *testing.T) {
+	e := newTestEnv(t)
+	src := repoSource(t)
+	created := e.createRepo("team", src)
+	e.mutate(http.MethodPost, "/repositories/team/approve", map[string]any{"revision": field(created, "pending", "revision")}, http.StatusOK)
+	other := repoSource(t)
+	writeRepoPlugin(t, other, "gamma", "1.0.0")
+
+	t.Run("source and path, the trust prompt needs an approval", func(t *testing.T) {
+		got := e.mutate(http.MethodPatch, "/repositories/team", map[string]any{"source": "file://" + other, "path": nil}, http.StatusOK).json(t)
+		// path null removes the path: the root of other has no plugins
+		if _, has := got["path"]; has || got["source"] != "file://"+other || got["state"] != "pending" {
+			t.Fatalf("got = %v", got)
+		}
+		if field(got, "active", "path") != "plugins" || len(pluginViews(t, got, "active")) != 2 {
+			t.Errorf("the active revision stays: %v", got["active"])
+		}
+		if len(pluginViews(t, got, "pending")) != 2 { // both are "removed" entries of the active revision
+			t.Errorf("pending = %v", got["pending"])
+		}
+		if entry := field(e.readUserConfig(), "repositories", "team"); !reflect.DeepEqual(entry, map[string]any{"kind": "plugins", "source": "file://" + other}) {
+			t.Errorf("entry = %v", entry)
+		}
+		e.wantBroadcast([]string{"alpha", "beta"}, []string{"team"})
+	})
+
+	t.Run("back to the sub-folder", func(t *testing.T) {
+		got := e.mutate(http.MethodPatch, "/repositories/team", map[string]any{"path": "plugins"}, http.StatusOK).json(t)
+		plugins := pluginViews(t, got, "pending")
+		if got["path"] != "plugins" || plugins["gamma"]["change"] != "added" || plugins["alpha"]["change"] != "unchanged" {
+			t.Errorf("got = %v", got)
+		}
+	})
+
+	t.Run("an empty string removes the path, too", func(t *testing.T) {
+		got := e.mutate(http.MethodPatch, "/repositories/team", map[string]any{"path": ""}, http.StatusOK).json(t)
+		if _, has := got["path"]; has {
+			t.Errorf("got = %v", got)
+		}
+	})
+
+	t.Run("a change that breaks the sync keeps the entry and shows the error", func(t *testing.T) {
+		got := e.mutate(http.MethodPatch, "/repositories/team", map[string]any{"path": "missing"}, http.StatusOK).json(t)
+		// an older pending revision keeps the state "pending"; the failure is in lastError
+		if got["path"] != "missing" || !strings.Contains(got["lastError"].(string), "missing") {
+			t.Errorf("got = %v", got)
+		}
+		e.mutate(http.MethodPatch, "/repositories/team", map[string]any{"path": "plugins"}, http.StatusOK)
+	})
+
+	t.Run("refused", func(t *testing.T) {
+		e.writeSystemConfig(map[string]any{"repositories": map[string]any{
+			"corp": map[string]any{"kind": "plugins", "source": "file://" + src},
+		}})
+		before := e.readUserConfig()
+		_, broadcasts := e.lastBroadcast()
+		tests := []struct {
+			name   string
+			path   string
+			body   any
+			status int
+			code   string
+		}{
+			{"unknown", "nope", map[string]any{"path": "x"}, http.StatusNotFound, codeNotFound},
+			{"system entry", "corp", map[string]any{"path": "x"}, http.StatusConflict, codeConflict},
+			{"path outside", "team", map[string]any{"path": "../up"}, http.StatusUnprocessableEntity, codeValidation},
+			{"absolute path", "team", map[string]any{"path": "/etc"}, http.StatusUnprocessableEntity, codeValidation},
+			{"ref with file source", "team", map[string]any{"ref": "main"}, http.StatusUnprocessableEntity, codeValidation},
+			{"pinned without commit", "team", map[string]any{"trust": "pinned"}, http.StatusUnprocessableEntity, codeValidation},
+			{"bad source", "team", map[string]any{"source": "ftp://files.example.com/x"}, http.StatusUnprocessableEntity, codeValidation},
+			{"null source", "team", map[string]any{"source": nil}, http.StatusUnprocessableEntity, codeValidation},
+			{"unknown trust", "team", map[string]any{"trust": "always"}, http.StatusUnprocessableEntity, codeValidation},
+			{"unknown field", "team", map[string]any{"enabled": false}, http.StatusUnprocessableEntity, codeValidation},
+			{"empty body", "team", map[string]any{}, http.StatusUnprocessableEntity, codeValidation},
+			{"not an object", "team", `[1]`, http.StatusUnprocessableEntity, codeValidation},
+			{"not JSON", "team", `{`, http.StatusBadRequest, codeValidation},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				p := e.wantProblem(e.request(http.MethodPatch, "/repositories/"+tt.path, tt.body), tt.status, tt.code)
+				if tt.name == "system entry" && !strings.Contains(p.Detail, "system") {
+					t.Errorf("detail = %q", p.Detail)
+				}
+			})
+		}
+		if !reflect.DeepEqual(e.readUserConfig(), before) {
+			t.Errorf("a refused change wrote the user file: %v", e.readUserConfig())
+		}
+		if _, n := e.lastBroadcast(); n != broadcasts {
+			t.Errorf("%d broadcasts for refused requests", n-broadcasts)
+		}
+	})
+}

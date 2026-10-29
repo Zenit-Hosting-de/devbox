@@ -3,7 +3,9 @@ package repo
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
@@ -40,6 +42,50 @@ func ScanPlugins(v *schema.Validator, root string) ([]Plugin, error) {
 		out = append(out, p)
 	}
 	return out, nil
+}
+
+// Limits of the search for folders with plugins in a snapshot without plugins at the
+// configured path.
+const (
+	suggestDepth = 3
+	suggestMax   = 10
+)
+
+// SuggestPaths looks for folders below snapshot (at most suggestDepth levels deep,
+// hidden folders skipped) that hold plugin folders, that is sub-folders with a
+// plugin.json. The paths are relative to snapshot, in slash form and sorted; the root
+// of the snapshot and the folder skip (the one that was scanned) are left out, and at
+// most suggestMax paths are returned.
+func SuggestPaths(snapshot, skip string) []string {
+	var found []string
+	var walk func(rel string, depth int)
+	walk = func(rel string, depth int) {
+		entries, err := os.ReadDir(subDir(snapshot, rel))
+		if err != nil {
+			return
+		}
+		holds := false
+		for _, de := range entries {
+			if !de.IsDir() || strings.HasPrefix(de.Name(), ".") {
+				continue
+			}
+			child := path.Join(rel, de.Name())
+			if _, err := os.Stat(filepath.Join(subDir(snapshot, child), plugin.ManifestFile)); err == nil {
+				holds = true
+			} else if depth < suggestDepth {
+				walk(child, depth+1)
+			}
+		}
+		if holds && rel != "" && rel != skip {
+			found = append(found, rel)
+		}
+	}
+	walk("", 0)
+	sort.Strings(found)
+	if len(found) > suggestMax {
+		found = found[:suggestMax]
+	}
+	return found
 }
 
 func fill(p *Plugin, m *plugin.Manifest) {

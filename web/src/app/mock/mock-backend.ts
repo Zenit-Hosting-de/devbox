@@ -14,6 +14,7 @@ import type {
   ProblemError,
   Repository,
   RepositoryCreate,
+  RepositoryPatch,
   RepositoryPlugin,
   ServerMessageOf,
   Session,
@@ -463,6 +464,45 @@ export class MockBackend {
     return structuredClone(entry);
   }
 
+  /** Changes an entry of the user configuration and syncs it; null removes ref and path. */
+  patchRepository(name: string, body: RepositoryPatch): Repository {
+    const entry = this.findRepository(name);
+    if (entry.origin !== "user" || entry.locked) {
+      throw new MockProblem(
+        409,
+        "conflict",
+        `The repository comes from ${entry.origin} and can only be changed there.`,
+      );
+    }
+    const errors: ProblemError[] = [];
+    const source = body.source ?? entry.source ?? "";
+    if (!/^(git\+https|git\+ssh|git\+file|https|file):\/\/.+/.test(source)) {
+      errors.push({ pointer: "/source", code: "pattern", message: "unsupported source" });
+    }
+    const ref = body.ref === undefined ? entry.ref : (body.ref ?? "");
+    const trust = body.trust ?? entry.trust;
+    if (trust === "pinned" && !/^[0-9a-f]{40}$/.test(ref ?? "")) {
+      errors.push({ pointer: "/ref", code: "pinned-ref", message: "pinned needs a full commit" });
+    }
+    if (errors.length > 0) {
+      throw new MockProblem(422, "validation", "The repository is invalid.", errors);
+    }
+    const path = body.path === undefined ? entry.path : (body.path ?? "");
+    entry.source = source;
+    entry.trust = trust;
+    delete entry.ref;
+    delete entry.path;
+    if (ref) {
+      entry.ref = ref;
+    }
+    if (path) {
+      entry.path = path;
+    }
+    this.runSync(entry);
+    this.announcePlugins([], [name]);
+    return structuredClone(entry);
+  }
+
   syncRepository(name: string): Repository {
     const entry = this.findRepository(name);
     this.runSync(entry);
@@ -470,7 +510,11 @@ export class MockBackend {
     return structuredClone(entry);
   }
 
-  /** A source whose address contains "fail" cannot be fetched; every other one has one revision. */
+  /**
+   * A source whose address contains "fail" cannot be fetched. One that contains "subfolder"
+   * keeps its plugins in `plugins/`: with another path it holds none and names that folder.
+   * Every other one has one revision.
+   */
   private runSync(entry: Repository): void {
     const now = new Date().toISOString();
     if (entry.source?.includes("fail")) {
@@ -480,18 +524,29 @@ export class MockBackend {
     }
     delete entry.lastError;
     const revision = MockBackend.remoteRevision;
-    if (entry.active?.revision === revision || entry.pending?.revision === revision) {
+    const path = entry.path ?? "";
+    const isCurrent = (r?: { revision: string; path?: string }): boolean =>
+      r?.revision === revision && (r.path ?? "") === path;
+    if (isCurrent(entry.active) || isCurrent(entry.pending)) {
+      if (isCurrent(entry.active)) {
+        delete entry.pending;
+        entry.state = "active";
+      }
       entry.lastSync = { at: now, changed: false };
       return;
     }
-    const next = this.remotePlugins();
+    const misplaced = entry.source?.includes("subfolder") === true && path !== "plugins";
+    const next = misplaced ? [] : this.remotePlugins();
+    const suggestedPaths = misplaced ? { suggestedPaths: ["plugins"] } : {};
     if (entry.trust === "pinned") {
       entry.active = {
         revision,
         syncedAt: now,
         plugins: next,
+        ...suggestedPaths,
         ...(entry.path ? { path: entry.path } : {}),
       };
+      delete entry.pending;
       entry.state = "active";
       entry.lastSync = { at: now, changed: true };
       this.activate(entry);
@@ -527,6 +582,7 @@ export class MockBackend {
           ? { ...p, permissions: p.permissions.map((perm) => ({ ...perm, new: true })) }
           : p,
       ),
+      ...suggestedPaths,
       ...(entry.path ? { path: entry.path } : {}),
     };
     entry.state = "pending";

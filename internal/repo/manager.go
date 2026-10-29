@@ -82,7 +82,7 @@ func (m *Manager) Sync(ctx context.Context, e Entry) error {
 	if err != nil {
 		return fmt.Errorf("the state of %s cannot be read, remove the repository and add it again: %w", e.Name, err)
 	}
-	rev, plugins, err := m.fetchAndScan(ctx, e)
+	rev, plugins, suggested, err := m.fetchAndScan(ctx, e)
 	if err != nil {
 		if ctx.Err() == nil {
 			st.LastError = ErrorText(err)
@@ -94,13 +94,15 @@ func (m *Manager) Sync(ctx context.Context, e Entry) error {
 	}
 	ts := m.now()
 	sub := e.SubPath()
-	fetched := &Revision{Revision: rev, Path: sub, FetchedAt: ts, Plugins: plugins}
+	fetched := &Revision{Revision: rev, Path: sub, FetchedAt: ts, Plugins: plugins, SuggestedPaths: suggested}
 	changed := false
 	switch {
 	case sameRevision(st.Active, rev, sub):
 		changed = st.Pending != nil // the remote went back to the active revision
 		st.Pending = nil
+		st.Active.SuggestedPaths = suggested // states from before the hint have none
 	case sameRevision(st.Pending, rev, sub):
+		st.Pending.SuggestedPaths = suggested
 	case e.Trust == TrustPinned:
 		st.Active, st.Pending, changed = fetched, nil, true
 	default:
@@ -114,35 +116,40 @@ func (m *Manager) Sync(ctx context.Context, e Entry) error {
 }
 
 // fetchAndScan fetches into a temporary directory, moves it to the directory of its
-// revision (unless that exists) and lists the plugins.
-func (m *Manager) fetchAndScan(ctx context.Context, e Entry) (string, []Plugin, error) {
+// revision (unless that exists) and lists the plugins. When there are none, it also
+// returns the folders of the snapshot that hold plugin folders.
+func (m *Manager) fetchAndScan(ctx context.Context, e Entry) (string, []Plugin, []string, error) {
 	tmp, err := os.MkdirTemp(m.Store.Dir(e.Name), ".fetch-")
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 	rev, err := m.fetchInto(ctx, e, tmp)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	if _, err := listTree(tmp); err != nil { // links and special files from Git
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	final := m.Store.Snapshot(e.Name, ShortRevision(rev))
 	if _, err := os.Stat(final); err != nil {
 		if err := os.Rename(tmp, final); err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 	}
 	dir := subDir(final, e.SubPath())
 	if !dirExists(dir) {
-		return "", nil, invalidf("the path %q does not exist in revision %s", e.SubPath(), ShortRevision(rev))
+		return "", nil, nil, invalidf("the path %q does not exist in revision %s", e.SubPath(), ShortRevision(rev))
 	}
 	plugins, err := ScanPlugins(m.Validator, dir)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
-	return rev, plugins, nil
+	var suggested []string
+	if len(plugins) == 0 {
+		suggested = SuggestPaths(final, e.SubPath())
+	}
+	return rev, plugins, suggested, nil
 }
 
 // prune removes the revision directories that are neither active nor pending.

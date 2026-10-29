@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from "@angular/core";
 import { ApiClient } from "../api/api-client";
 import { ApiProblem, toApiProblem } from "../api/problem";
-import type { Repository, RepositoryCreate } from "../api/types";
+import type { Repository, RepositoryCreate, RepositoryPatch } from "../api/types";
 import { PluginsStore, type LoadState } from "./plugins.store";
 import { SessionsStore } from "./sessions.store";
 
@@ -14,8 +14,8 @@ export class RepositoriesStore {
   readonly repositories = signal<readonly Repository[]>([]);
   readonly state = signal<LoadState>("idle");
   readonly error = signal<ApiProblem | null>(null);
-  /** True while a new source is being added (the first sync runs inside the call). */
-  readonly adding = signal(false);
+  /** True while the form saves a source (the sync runs inside the call). */
+  readonly saving = signal(false);
   /** Names with a call in flight (sync, approve, discard, remove). */
   readonly busy = signal<ReadonlySet<string>>(new Set());
   /** Sources that wait for approval. */
@@ -67,7 +67,7 @@ export class RepositoriesStore {
    * error when the sync failed; rejects with an ApiProblem when the entry was not written.
    */
   async add(body: RepositoryCreate): Promise<Repository> {
-    this.adding.set(true);
+    this.saving.set(true);
     try {
       const created = await this.api.createRepository(body);
       this.upsert(created);
@@ -75,8 +75,31 @@ export class RepositoriesStore {
     } catch (error) {
       throw toApiProblem(error);
     } finally {
-      this.adding.set(false);
+      this.saving.set(false);
     }
+  }
+
+  /**
+   * Changes source, ref, path or trust of a source of the user configuration (null removes
+   * ref and path) and syncs it. Like `add`, the result can have the state error; a problem
+   * means nothing was written.
+   */
+  async update(name: string, body: RepositoryPatch): Promise<Repository> {
+    this.saving.set(true);
+    try {
+      const updated = await this.api.patchRepository(name, body);
+      this.upsert(updated);
+      return updated;
+    } catch (error) {
+      throw toApiProblem(error);
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  /** Like `update` for a single click outside the form: the source shows as busy instead of the form. */
+  patch(name: string, body: RepositoryPatch): Promise<Repository> {
+    return this.call(name, () => this.api.patchRepository(name, body));
   }
 
   sync(name: string): Promise<Repository> {

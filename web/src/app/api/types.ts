@@ -47,6 +47,7 @@ export type RepositoryPermission = Schemas["RepositoryPermission"];
 export type RepositoryPending = Schemas["RepositoryPending"];
 export type RepositoryActive = Schemas["RepositoryActive"];
 export type RepositoryCreate = Schemas["RepositoryCreate"];
+export type RepositoryPatch = Schemas["RepositoryPatch"];
 export type SettingLayer = Schemas["SettingLayer"];
 export type StatusReportBase = Schemas["StatusReport"];
 export type WsClientMessage = Schemas["WsClientMessage"];
