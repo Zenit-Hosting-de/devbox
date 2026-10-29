@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/Zenit-Hosting-de/devbox/compare/v0.3.0...v0.4.0) (2026-10-29)
+
+
+### Features
+
+* **serve:** restart the service after a self-update ([4e773e3](https://github.com/Zenit-Hosting-de/devbox/commit/4e773e3fdce6dcb00c95acbb550b094b2cb0eb2c))
+* **serve:** restart the service after a self-update ([48a8245](https://github.com/Zenit-Hosting-de/devbox/commit/48a82459d42421d072784efd4ae894f5a5d63b3d))
+
 ## [0.3.0](https://github.com/Zenit-Hosting-de/devbox/compare/v0.2.1...v0.3.0) (2026-10-29)
 
 
