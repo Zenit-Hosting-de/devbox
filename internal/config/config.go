@@ -33,6 +33,9 @@ const (
 	CodeValidation    = "validation"
 	CodeNotFound      = "not-found"
 	CodeSettingLocked = "setting-locked"
+	CodeConflict      = "conflict"
+	// CodePrerequisite is a missing precondition: a command, the network or a permission.
+	CodePrerequisite = "prerequisite"
 )
 
 // Error is a configuration error with a stable code.

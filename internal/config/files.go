@@ -190,6 +190,27 @@ func Unset(v *schema.Validator, path string, key string) error {
 }
 
 func update(v *schema.Validator, path string, change func(*jsonfile.Object)) error {
+	return UpdateDocument(v, path, func(doc *jsonfile.Object) error {
+		settings, ok := mustObject(doc, "settings")
+		if !ok {
+			return &Error{Code: CodeValidation, Detail: path + ": settings is not an object"}
+		}
+		change(settings)
+		if settings.Len() == 0 {
+			doc.Delete("settings")
+		}
+		return nil
+	})
+}
+
+// ErrUnchanged is returned by the change function of UpdateDocument when there is
+// nothing to write: the file is left as it is (and is not created).
+var ErrUnchanged = errors.New("nothing to change")
+
+// UpdateDocument reads the configuration file at path (a missing file is an empty
+// document), lets change edit it, validates the result against the config schema and
+// writes it atomically. The properties keep the order of the schema.
+func UpdateDocument(v *schema.Validator, path string, change func(doc *jsonfile.Object) error) error {
 	f, err := ReadFile(v, "config", path, true)
 	if err != nil {
 		return err
@@ -200,13 +221,11 @@ func update(v *schema.Validator, path string, change func(*jsonfile.Object)) err
 			doc.Set("$schema", id)
 		}
 	}
-	settings, ok := mustObject(doc, "settings")
-	if !ok {
-		return &Error{Code: CodeValidation, Detail: path + ": settings is not an object"}
-	}
-	change(settings)
-	if settings.Len() == 0 {
-		doc.Delete("settings")
+	if err := change(doc); err != nil {
+		if errors.Is(err, ErrUnchanged) {
+			return nil
+		}
+		return err
 	}
 	order, err := schema.PropertyOrder("config")
 	if err != nil {

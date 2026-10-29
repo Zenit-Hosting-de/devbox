@@ -22,6 +22,10 @@ type Broadcaster interface {
 	SessionChanged(s Session)
 	CheckChanged(c CheckSummary)
 	SettingsChanged(keys []string)
+	// PluginsChanged reports that plugins were switched on or off or that the plugins of
+	// repositories changed: ids are the plugins concerned, repositories the names of
+	// the repositories concerned (both may be empty).
+	PluginsChanged(ids, repositories []string)
 }
 
 // NopBroadcaster ignores everything; it is the default.
@@ -41,6 +45,9 @@ func (NopBroadcaster) CheckChanged(CheckSummary) {}
 
 // SettingsChanged implements Broadcaster.
 func (NopBroadcaster) SettingsChanged([]string) {}
+
+// PluginsChanged implements Broadcaster.
+func (NopBroadcaster) PluginsChanged([]string, []string) {}
 
 // Progress is the progress of a running session.
 type Progress struct {

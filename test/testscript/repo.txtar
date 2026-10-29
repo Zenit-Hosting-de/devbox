@@ -1,0 +1,131 @@
+# Plugin repositories: a local directory with two plugins is added, reviewed, approved,
+# updated (a new permission shows up as pending), discarded and removed. Plugins can be
+# switched off and on; core plugins and plugins that the system file switches off stay.
+
+# nothing yet
+exec devbox repo list
+! stdout .
+exec devbox repo list --json
+stdout '^\[\]$'
+
+# add: the first revision waits for approval and shows the permissions
+exec devbox repo add team --source file://$WORK/src --path plugins
+stdout 'team: revision [0-9a-f]{12} waits for approval$'
+stdout '\+ alpha 1.0.0$'
+stdout 'network +https://downloads.example.com  \(new\)'
+stdout 'files.write +\$\{env:HOME\}/.alpharc  \(new\)'
+stdout 'commands +tar'
+stdout '\+ beta 1.0.0$'
+stdout 'approve with: devbox repo approve team'
+exec devbox repo list
+stdout '^team +pending +plugins +user +file://.*/src +pending [0-9a-f]{12}$'
+
+# nothing is loaded before the approval
+exec devbox plugin list
+! stdout '^alpha'
+! exec devbox plugin info alpha
+
+# the name is taken, the source must be valid
+! exec devbox repo add team --source file://$WORK/src
+stderr 'conflict: team: a repository with this name exists \(user\)'
+! exec devbox repo add other --source ftp://x.example.com/p
+stderr 'validation'
+! exec devbox repo add pin --source https://repo.example.com/p.tgz --trust pinned
+stderr 'trust pinned needs a git source and a full 40-character commit in ref'
+
+# approving needs a terminal or --yes
+! exec devbox repo approve team
+stderr 'needs a terminal to ask'
+exec devbox repo approve team --yes
+stdout 'team: revision [0-9a-f]{12} is active \(2 plugins\)'
+exec devbox plugin list
+stdout '^alpha +1.0.0 +ready +repository:team@[0-9a-f]{12}'
+stdout '^beta +1.0.0 +ready +repository:team@[0-9a-f]{12}'
+stdout '^system +1.0.0 +ready +builtin'
+exec devbox plugin info alpha --json
+stdout '"kind": "repository",\n *"repository": "team",\n *"revision": "[0-9a-f]{12}"'
+! exec devbox repo approve team --yes
+stderr 'conflict: team: there is no pending revision to approve'
+
+# nothing changed: sync says so
+exec devbox repo sync team
+stdout 'team: up to date, revision [0-9a-f]{12} is active \(2 plugins\)'
+
+# alpha asks for more: the new revision is pending, the old one stays in use
+cp changed/alpha.json src/plugins/alpha/plugin.json
+exec devbox repo sync
+stdout 'team: revision [0-9a-f]{12} waits for approval \(active: [0-9a-f]{12}\)'
+stdout '~ alpha 1.1.0 \(was 1.0.0\) \[changed\]'
+stdout 'sudo +true  \(new\)'
+stdout 'files.write +\$\{env:HOME\}/.alpharc *$'
+! stdout 'https://downloads.example.com  \(new\)'
+stdout '= beta 1.0.0 \[unchanged\]'
+exec devbox repo sync team --json
+stdout '"state": "pending"'
+stdout '"change": "changed"'
+stdout '"previousVersion": "1.0.0"'
+exec devbox plugin info alpha --json
+stdout '"version": "1.0.0"'
+
+# discard: still the old one
+exec devbox repo discard team
+exec devbox repo list --json
+! stdout '"pending"'
+exec devbox plugin info alpha --json
+stdout '"version": "1.0.0"'
+! exec devbox repo discard team
+stderr 'not-found: team: there is no pending revision'
+
+# sync and approve again: the new version is in use
+exec devbox repo sync team
+exec devbox repo approve team --yes
+exec devbox plugin info alpha --json
+stdout '"version": "1.1.0"'
+
+# plugins off and on; twice changes nothing
+exec devbox plugin disable beta
+stdout '^beta: disabled$'
+exec devbox plugin disable beta
+exec devbox plugin list
+stdout '^beta +1.0.0 +disabled +repository:team@[0-9a-f]{12} +disabled: user$'
+grep -count=1 '"beta"' home/.config/devbox/config.json
+exec devbox plugin enable beta --json
+stdout '"state": "ready"'
+exec devbox plugin enable beta
+! grep '"disabled"' home/.config/devbox/config.json
+
+# core plugins stay on, a plugin that the system file switches off stays off, unknown IDs
+! exec devbox plugin disable system
+stderr 'conflict: system: core plugins cannot be switched off'
+! exec devbox plugin enable npm
+stderr 'conflict: npm: switched off by system; the user cannot switch it on'
+! exec devbox plugin disable nope
+stderr 'not-found: nope: no such plugin'
+
+# remove: the entry, the files and the plugins are gone
+exec devbox repo remove team
+! exists home/.local/share/devbox/repositories/team
+! grep 'repositories' home/.config/devbox/config.json
+exec devbox plugin list
+! stdout '^alpha'
+! exec devbox repo remove team
+stderr 'not-found: team'
+
+-- etc/devbox/config.json --
+{ "plugins": { "disabled": ["npm"] } }
+-- src/plugins/alpha/plugin.json --
+{
+  "id": "alpha", "version": "1.0.0", "name": "Alpha", "description": "First plugin", "category": "tool",
+  "requires": { "commands": ["tar"] },
+  "permissions": { "network": ["https://downloads.example.com"], "files": { "write": ["${env:HOME}/.alpharc"] } }
+}
+-- src/plugins/beta/plugin.json --
+{ "id": "beta", "version": "1.0.0", "name": "Beta", "category": "tool" }
+-- src/plugins/notes/readme.txt --
+no manifest, not a plugin
+-- changed/alpha.json --
+{
+  "id": "alpha", "version": "1.1.0", "name": "Alpha", "description": "First plugin", "category": "tool",
+  "requires": { "commands": ["tar"] },
+  "permissions": { "network": ["https://downloads.example.com"], "files": { "write": ["${env:HOME}/.alpharc"] }, "sudo": true }
+}

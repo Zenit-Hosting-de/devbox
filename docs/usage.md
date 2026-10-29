@@ -75,6 +75,7 @@ are:
 | System configuration      | `/etc/devbox/config.json` (other file: `DEVBOX_SYSTEM_CONFIG`)                        |
 | Own plugins               | `~/.local/share/devbox/plugins/<id>/` (default of `plugins.paths`)                    |
 | Bundled plugins           | embedded in the binary, unpacked to `~/.local/share/devbox/builtin/<version>-<hash>/` |
+| Plugin repositories       | `~/.local/share/devbox/repositories/<name>/<revision>/` and `state.json`              |
 | History                   | `~/.local/state/devbox/history/<YYYY-MM>.jsonl`, one line per finished session        |
 | Session output and events | `~/.local/state/devbox/sessions/<id>.log`, `<id>.events.jsonl`                        |
 | Backups                   | `~/.local/state/devbox/backups/<id>/<path>`, originals of every changed file          |
@@ -146,7 +147,7 @@ devbox logs s_01M60GM3KP7DPNSXCVR1B1BX54 # full output of one session
 ```
 
 `--json` works on every reading command (`plugin list`, `plugin info`, `status`,
-`history`, `logs`, `config get`, `config explain`, `version`) and prints exactly one JSON
+`history`, `logs`, `config get`, `config explain`, `repo list`, `version`) and prints exactly one JSON
 document. `devbox run --json` prints the session events as JSON Lines instead of the
 readable output.
 
@@ -262,7 +263,7 @@ or the command line; their output is masked. A consumer reads it with `devbox sd
 | 0    | success, also when there was nothing to do; `devbox status` always exits 0 |
 | 1    | error                                                                      |
 | 2    | invalid parameter, setting, configuration, or unknown plugin or action     |
-| 3    | a requirement is missing (plugin `blocked`, or the action reported it)     |
+| 3    | a requirement is missing (plugin `blocked`, the action reported it, or `git` or the network is missing for a repository) |
 | 4    | confirmation refused (or no terminal to ask and no `--yes`)                |
 | 130  | cancelled with Ctrl+C                                                      |
 
@@ -279,10 +280,130 @@ devbox run hello.apply --dry-run
 ```
 
 To load plugins from other directories, set `plugins.paths` in `config.json`; the list
-replaces the default. A plugin with the same ID as a bundled one replaces it, because
-bundled plugins are searched last. The protocol, the environment and the `devbox sdk`
+replaces the default. Plugins are searched in this order: `plugins.paths`, the active
+revisions of the enabled plugin repositories (by name, see
+[Plugin repositories](#plugin-repositories)), then the bundled ones. The first plugin
+with an ID wins, so a plugin with the same ID as a bundled one replaces it. The protocol, the environment and the `devbox sdk`
 helpers are described in [concept.md](concept.md#plugin-protokoll) (German) and in
 [templates/plugin/](../templates/plugin/).
+
+## Plugin repositories
+
+A plugin repository is a Git repository, a tar.gz archive or a local directory that holds
+one or more plugin folders (each with a `plugin.json`). Its plugins appear like the bundled
+ones, with the repository as their origin (`devbox plugin list` shows `builtin`, `path` or
+`repository`). Only repositories of kind `plugins` work so far; entries of the other kinds
+(`catalog`, `profile`, `templates`, `packages`) are listed with the state `unsupported`
+and otherwise ignored.
+
+Repositories are entries in `repositories` of `config.json` (user file), of a profile or
+of the system file. Add one with the CLI, or edit the file:
+
+```bash
+devbox config edit
+```
+
+```text
+{
+  "repositories": {
+    "team-plugins": {
+      "kind": "plugins",
+      "source": "git+https://git.example.com/platform/devbox-plugins.git",
+      "ref": "main",
+      "path": "plugins",
+      "trust": "prompt"
+    }
+  }
+}
+```
+
+| Field     | Meaning                                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `kind`    | `plugins`                                                                                                                |
+| `source`  | `git+https://`, `git+ssh://`, `git+file://` (local Git repository), `https://` (tar.gz, at most 100 MiB) or `file://` (local directory, `file:///absolute/path`) |
+| `ref`     | Branch, tag or commit; Git sources only. Default: the HEAD of the remote                                                 |
+| `path`    | Sub-directory that holds the plugin folders                                                                              |
+| `trust`   | `prompt` (default) or `pinned`, see below                                                                                |
+| `enabled` | `false` keeps the entry but ignores it                                                                                   |
+| `locked`  | In a profile or the system file: the user cannot replace the entry                                                       |
+
+The name of an entry (`^[a-z][a-z0-9-]{1,31}$`) is its ID in the CLI and the API. Entries
+with the same name in several layers: the later layer wins (system file, profiles, user
+file), unless the earlier entry is `locked`.
+
+### Commands
+
+```bash
+devbox repo list                        # name, state, kind, origin, source, revisions
+devbox repo add team-plugins --source git+https://git.example.com/platform/devbox-plugins.git \
+  --ref main --path plugins             # writes the entry to the user file and syncs it
+devbox repo sync                        # every enabled repository; or: devbox repo sync team-plugins
+devbox repo approve team-plugins        # make the pending revision active
+devbox repo discard team-plugins        # drop the pending revision
+devbox repo remove team-plugins         # remove the entry and its files
+```
+
+`repo add` takes `--source`, `--ref`, `--path` and `--trust prompt|pinned`. Plugins are
+the only kind so far, so there is no `--kind`.
+
+`repo sync` fetches the source and lists the plugins of the new revision as added (`+`),
+changed (`~`), removed (`-`) or unchanged (`=`), together with their declared permissions
+and the commands they require. Permissions that the active revision did not have are
+marked `(new)`:
+
+```text
+team-plugins: revision 3f9a1c0b2d44 waits for approval (active: 81c2e07a5f19)
+  ~ hello 1.1.0 (was 1.0.0) [changed]
+      network      https://api.example.com  (new)
+      files.write  ~/.config/hello
+      commands     curl, jq
+  + extra 0.1.0
+      network      https://downloads.example.com  (new)
+  = other 1.0.0 [unchanged]
+approve with: devbox repo approve team-plugins
+```
+
+### Trust: prompt and pinned
+
+- `prompt` (default): a synced revision is stored but not used. It is pending until it is
+  approved. `devbox repo approve NAME` shows the report above and asks on the terminal.
+  Without a terminal it needs `--yes`, otherwise it exits with code 2. The first revision
+  needs approval too. Until then the previous active revision (if any) stays in use.
+- `pinned`: only for Git sources whose `ref` is a full 40-character commit. The synced
+  revision becomes active without approval, because the commit is the approval.
+
+A `trust` object (Sigstore signature) and `credential` (access to private repositories)
+are not supported yet and are refused with an error; both follow later.
+
+### Where the files live
+
+Each revision is stored under `~/.local/share/devbox/repositories/<name>/<revision>/`
+(the first 12 characters of the revision). `state.json` next to them
+(`schema/repository-state.v1.json`) records the active and the pending revision, the last
+sync and the last error. Syncing again with the same revision changes nothing. Plugins
+are only read from the active revision; a pending one is not executed.
+
+### Web UI and API
+
+The REST API has `GET /repositories`, `POST /repositories`,
+`POST /repositories/{name}/sync`, `POST /repositories/{name}/approve`,
+`DELETE /repositories/{name}/pending` and `DELETE /repositories/{name}`. A missing `git` or
+network answers `424` with the problem code `prerequisite`. After a sync, an approval or a switch, the WebSocket topic `plugins` sends
+a `plugins` message with the changed plugin IDs and repositories.
+
+The web UI for repositories follows: the Plugins page does not have the "Installed" and
+"Sources" tabs yet. Until then use the CLI.
+
+### Switching plugins on and off
+
+```bash
+devbox plugin disable hello             # writes the ID to plugins.disabled in the user file
+devbox plugin enable hello
+```
+
+Plugins of the `core` category cannot be switched off. A plugin that the system file or a
+profile switched off cannot be switched on by the user. The API has `PATCH /plugins/{id}`
+with the body `{"enabled": true}` for the same.
 
 ## Web service (`devbox serve`)
 
@@ -356,12 +477,13 @@ code `csrf`. Over the Unix socket no `Origin` is needed.
 
 | Direction | Message                                  | Meaning                                                                                                                                    |
 | --------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| to core   | `subscribe` `topics`, optional `fromSeq` | Topics: `checks`, `sessions`, `settings`, `session:<id>`. `fromSeq` applies to the session topics of the message.                          |
+| to core   | `subscribe` `topics`, optional `fromSeq` | Topics: `checks`, `sessions`, `settings`, `plugins`, `session:<id>`. `fromSeq` applies to the session topics of the message.                          |
 | to core   | `unsubscribe` `topics`                   | Leave topics.                                                                                                                              |
 | to core   | `input` `session`, `data`                | Keyboard input for the PTY of a running session (at most 64 KiB decoded), for example a `sudo` password. It is never logged.               |
 | to core   | `resize` `session`, `cols`, `rows`       | New terminal size. Before the process has a terminal the size is kept and applied at the start.                                            |
 | to client | `output`, `event`                        | Terminal output and protocol messages of a session. Both carry `seq`; output and events of a session share one counter.                    |
 | to client | `session`, `check`, `settings`           | A session was created or changed (progress at most 4 times per second), a check finished, settings were changed through the API.           |
+| to client | `plugins`                            | Plugins or plugin repositories changed: `ids` (plugin IDs), `repositories` (repository names). |
 | to client | `gap`, `error`                           | The requested `fromSeq` is older than the buffer; a client message was refused (`validation`, `not-found`, `conflict`), the connection stays open. |
 | both      | `ping`, `pong`                           | The core sends a `ping` every 30 seconds and answers a `ping` with a `pong`. A connection that sent nothing for 75 seconds is closed.      |
 
@@ -397,6 +519,9 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
   `git-host`, `ssh-key`, `generic`; the event `credential.changed`
 - `devbox profile …`; profiles from HTTPS or Git sources (only `file://` works today)
 - `devbox plugin install|update|remove` and plugin catalogs
+- plugin repositories: the web UI (Plugins page with "Installed" and "Sources"), the kinds
+  `catalog`, `profile`, `templates` and `packages`, credentials and Sigstore signatures
+  (`credential`, `trust` object), `devbox repo init`
 - `devbox doctor`, `devbox schema print`, `devbox migrate`, `devbox completion`
 - global flags `--quiet`, `--no-color`, `--lang`, `--socket`
 - the remaining bundled plugins (`node`, `dotnet`, `python`, `docker`, `git`, `xrdp`,

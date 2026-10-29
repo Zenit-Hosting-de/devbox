@@ -11,15 +11,16 @@ stdout '"state": "incomplete",\n  *"reasons": \[\n *\{\n *"code": "setting-missi
 
 # once the setting has a value the plugin is ready
 exec devbox plugin list --set needs.token=abc
-stdout '^needs +1.0.0 +ready'
+stdout '^needs +1.0.0 +ready +path:.*/plugins +'
 
 # plain output, one plugin per line
 exec devbox plugin list
-stdout '^base +1.0.0 +ready +duplicate-id: '
-stdout '^off +1.0.0 +disabled +disabled: user$'
+stdout '^base +1.0.0 +ready +path:.*/plugins +duplicate-id: '
+stdout '^off +1.0.0 +disabled +path:.*/plugins +disabled: user$'
 
 exec devbox plugin info base --json
 stdout '"manifest": \{'
+stdout '"origin": \{\n *"kind": "path",\n *"path": ".*/plugins"'
 ! exec devbox plugin info nope
 stderr 'not-found: nope'
 

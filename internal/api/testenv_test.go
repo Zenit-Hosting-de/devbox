@@ -343,6 +343,11 @@ type recorder struct {
 	sessions []Session
 	checks   []CheckSummary
 	settings [][]string
+	plugins  []recordedPlugins
+}
+
+type recordedPlugins struct {
+	ids, repositories []string
 }
 
 type recordedOutput struct {
@@ -393,6 +398,12 @@ func (r *recorder) SettingsChanged(keys []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.settings = append(r.settings, keys)
+}
+
+func (r *recorder) PluginsChanged(ids, repositories []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.plugins = append(r.plugins, recordedPlugins{ids, repositories})
 }
 
 func jsonUnmarshal(data []byte, v any) error { return json.Unmarshal(data, v) }

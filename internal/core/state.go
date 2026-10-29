@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
+	"github.com/Zenit-Hosting-de/devbox/internal/repo"
 	bundled "github.com/Zenit-Hosting-de/devbox/plugins"
 )
 
@@ -31,6 +32,11 @@ type State struct {
 	Candidates []plugin.Candidate
 	// Profiles are the loaded profile files in layer order.
 	Profiles []*config.File
+	// Repositories are the merged entries of the repositories key of the system file,
+	// the profiles and the user file, sorted by name.
+	Repositories []repo.Entry
+	// Repos syncs the repositories and reads their state.
+	Repos *repo.Manager
 
 	layers []config.Layer // without env and call
 }
@@ -50,16 +56,33 @@ func Load(env Env, build Build, withCall bool) (*State, error) {
 		return nil, err
 	}
 
+	for _, f := range []*config.File{st.System, st.User} {
+		profiles, err := loadProfiles(b, f)
+		if err != nil {
+			return nil, err
+		}
+		st.Profiles = append(st.Profiles, profiles...)
+	}
+	st.Repositories = st.collectRepositories()
+	st.Repos = st.newRepoManager()
+
 	paths, err := pluginPaths(b.Ctx, st.System, st.User)
 	if err != nil {
 		return nil, err
 	}
+	roots := make([]plugin.Root, 0, len(paths))
+	for _, p := range paths {
+		roots = append(roots, plugin.Root{Dir: p, Origin: plugin.Origin{Kind: plugin.OriginPath, Path: p}})
+	}
+	// plugins from repositories come after plugins.paths and before the bundled ones
+	roots = append(roots, st.Repos.Roots(st.Repositories)...)
 	builtin, err := plugin.ExtractBuiltin(bundled.FS, filepath.Join(b.Ctx.XDG.Data, "devbox", "builtin"), build.Version)
 	if err != nil {
 		return nil, err
 	}
-	paths = append(paths, builtin) // bundled plugins come last, so others can replace them
-	cands, err := plugin.Search(b.Validator, paths)
+	// bundled plugins come last, so others can replace them
+	roots = append(roots, plugin.Root{Dir: builtin, Origin: plugin.Origin{Kind: plugin.OriginBuiltin}})
+	cands, err := plugin.SearchRoots(b.Validator, roots)
 	if err != nil {
 		return nil, err
 	}
@@ -73,15 +96,8 @@ func Load(env Env, build Build, withCall bool) (*State, error) {
 	}
 
 	st.layers = append(st.layers, config.SettingsLayer(config.LayerSystem, st.System))
-	for _, f := range []*config.File{st.System, st.User} {
-		profiles, err := loadProfiles(b, f)
-		if err != nil {
-			return nil, err
-		}
-		for _, pf := range profiles {
-			st.Profiles = append(st.Profiles, pf)
-			st.layers = append(st.layers, config.ProfileLayer(pf))
-		}
+	for _, pf := range st.Profiles {
+		st.layers = append(st.layers, config.ProfileLayer(pf))
 	}
 	st.layers = append(st.layers, config.SettingsLayer(config.LayerUser, st.User))
 
@@ -155,7 +171,7 @@ func (st *State) Evaluate() []*plugin.Plugin {
 		LookPath: func(name string) (string, error) {
 			return LookPath(name, st.Env.Getenv("PATH"))
 		},
-		Disabled: st.disabledSources(),
+		Disabled: st.disabledSources(true),
 		MissingSettings: func(m *plugin.Manifest) []string {
 			var missing []string
 			for key, field := range m.Settings() {
@@ -175,7 +191,8 @@ func (st *State) Evaluate() []*plugin.Plugin {
 
 // disabledSources merges plugins.disabled of the system file, plugins.disable and
 // plugins.enable of the profiles and plugins.disabled of the user file, in layer order.
-func (st *State) disabledSources() func(string) string {
+// Without the user file it tells what keeps a plugin off apart from the user's choice.
+func (st *State) disabledSources(withUser bool) func(string) string {
 	src := map[string]string{}
 	fromConfig := func(f *config.File, name string) {
 		plugins, _ := f.Plain()["plugins"].(map[string]any)
@@ -198,7 +215,9 @@ func (st *State) disabledSources() func(string) string {
 			delete(src, id)
 		}
 	}
-	fromConfig(st.User, config.LayerUser)
+	if withUser {
+		fromConfig(st.User, config.LayerUser)
+	}
 	return func(id string) string { return src[id] }
 }
 

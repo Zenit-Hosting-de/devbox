@@ -26,7 +26,7 @@ var (
 // wantSchemas is the list of schemas required by AP-02 (docs/concept.md, "Dateien und Formate").
 var wantSchemas = []string{
 	"catalog", "check-result", "config", "credentials", "event", "history-entry", "lock",
-	"messages", "plugin", "profile", "request", "template", "vault",
+	"messages", "plugin", "profile", "repository-state", "request", "template", "vault",
 }
 
 const minInvalidCases = 3

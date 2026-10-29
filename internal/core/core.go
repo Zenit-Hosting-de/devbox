@@ -5,6 +5,7 @@
 package core
 
 import (
+	"net/http"
 	"path/filepath"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
@@ -39,6 +40,9 @@ type Env struct {
 	// Validator is reused when set (the server loads the state for every request);
 	// otherwise each call creates one.
 	Validator *schema.Validator
+	// HTTPClient downloads plugin repositories (tarballs); nil uses the proxy of the
+	// environment. Tests set it to reach a local server.
+	HTTPClient *http.Client
 }
 
 // Base is what every command needs before plugins are loaded: the validator, the

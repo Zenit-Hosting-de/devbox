@@ -1,0 +1,8 @@
+{
+  "unknown-property.json": { "pointer": "/active", "keyword": "additionalProperties" },
+  "revision-pattern.json": { "pointer": "/pending/revision", "keyword": "pattern" },
+  "missing-plugins.json": { "pointer": "/active", "keyword": "required" },
+  "permission-kind.json": { "pointer": "/active/plugins/0/permissions/0/kind", "keyword": "enum" },
+  "digest-pattern.json": { "pointer": "/active/plugins/0/digest", "keyword": "pattern" },
+  "last-sync-changed.json": { "pointer": "/lastSync", "keyword": "required" }
+}
