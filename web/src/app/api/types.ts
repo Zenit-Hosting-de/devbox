@@ -37,6 +37,16 @@ export interface CredentialList {
   instances: CredentialInstance[];
 }
 export type Messages = Schemas["Messages"];
+export type PluginOrigin = Schemas["PluginOrigin"];
+export type Repository = Schemas["Repository"];
+export type RepositoryList = Schemas["RepositoryList"];
+export type RepositoryState = Schemas["RepositoryState"];
+export type RepositoryTrust = Schemas["RepositoryTrust"];
+export type RepositoryPlugin = Schemas["RepositoryPlugin"];
+export type RepositoryPermission = Schemas["RepositoryPermission"];
+export type RepositoryPending = Schemas["RepositoryPending"];
+export type RepositoryActive = Schemas["RepositoryActive"];
+export type RepositoryCreate = Schemas["RepositoryCreate"];
 export type SettingLayer = Schemas["SettingLayer"];
 export type StatusReportBase = Schemas["StatusReport"];
 export type WsClientMessage = Schemas["WsClientMessage"];

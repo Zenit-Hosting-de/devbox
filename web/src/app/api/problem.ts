@@ -48,6 +48,7 @@ const problemCodes: ReadonlySet<string> = new Set<ProblemCode>([
   "unauthenticated",
   "csrf",
   "conflict",
+  "prerequisite",
   "internal",
 ]);
 

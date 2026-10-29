@@ -12,6 +12,9 @@ import type {
   PluginDetail,
   ProblemCode,
   ProblemError,
+  Repository,
+  RepositoryCreate,
+  RepositoryPlugin,
   ServerMessageOf,
   Session,
   SessionCreate,
@@ -34,6 +37,8 @@ import {
   infoFixture,
   messagesFixture,
   pluginsFixture,
+  repositoriesFixture,
+  repositoryPlugin,
   sessionIdFor,
   settingSeeds,
 } from "./fixtures";
@@ -107,6 +112,9 @@ export class MockBackend {
       .filter((s) => s.userValue !== undefined)
       .map((s) => [`${s.plugin}.${s.name}`, s.userValue]),
   );
+  private readonly repositories: Repository[] = structuredClone(repositoriesFixture);
+  /** Plugins that are switched off: ID -> layer (user, system, profile:<id>). */
+  private readonly off = new Map<string, string>();
   private readonly sessions = new Map<string, Live>();
   private readonly listeners = new Set<MockListener>();
   private counter = 5000;
@@ -179,6 +187,11 @@ export class MockBackend {
   pluginList(manifest: boolean): PluginDetail[] {
     return this.plugins.map((p) => {
       const copy = structuredClone(p);
+      const layer = this.off.get(p.id);
+      if (layer) {
+        copy.state = "disabled";
+        copy.reasons = [{ code: "disabled", detail: layer }];
+      }
       if (!manifest) {
         delete copy.manifest;
         delete copy.resolvedDefaults;
@@ -343,6 +356,284 @@ export class MockBackend {
     const keys = Object.keys(patch);
     setTimeout(() => {
       this.broadcast({ type: "settings", keys });
+    }, 50);
+  }
+
+  // ---- plugins on/off and repositories ---------------------------------------
+
+  /** Marks a plugin as switched off by a layer other than the user, e.g. `profile:example-team`. */
+  switchOffBy(id: string, layer: string): void {
+    this.off.set(id, layer);
+  }
+
+  patchPlugin(id: string, enabled: boolean): PluginDetail {
+    const plugin = this.plugins.find((p) => p.id === id);
+    if (!plugin) {
+      throw new MockProblem(404, "not-found", `No plugin ${id}.`);
+    }
+    if (!enabled && plugin.category === "core") {
+      throw new MockProblem(409, "conflict", "core plugins cannot be switched off");
+    }
+    const layer = this.off.get(id);
+    if (enabled && layer && layer !== "user") {
+      throw new MockProblem(
+        409,
+        "conflict",
+        `switched off by ${layer}; the user cannot switch it on`,
+      );
+    }
+    if (enabled) {
+      this.off.delete(id);
+    } else {
+      this.off.set(id, "user");
+    }
+    this.announcePlugins([id], []);
+    const found = this.pluginList(false).find((p) => p.id === id);
+    if (!found) {
+      throw new MockProblem(404, "not-found", `No plugin ${id}.`);
+    }
+    return found;
+  }
+
+  repositoryList(): Repository[] {
+    return structuredClone(this.repositories).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** The revision every mock sync finds. */
+  static readonly remoteRevision = "9a8b7c6d5e4f";
+
+  private remotePlugins(): RepositoryPlugin[] {
+    return [
+      repositoryPlugin("demo", "1.0.0", {
+        description: "Example plugin from the mock source.",
+        permissions: [
+          { kind: "network", value: "api.example.com", new: false },
+          { kind: "sudo", value: "true", new: false },
+        ],
+        requiresCommands: ["curl"],
+      }),
+    ];
+  }
+
+  private findRepository(name: string): Repository {
+    const found = this.repositories.find((r) => r.name === name);
+    if (!found) {
+      throw new MockProblem(404, "not-found", `No repository ${name}.`);
+    }
+    return found;
+  }
+
+  createRepository(body: RepositoryCreate): Repository {
+    const errors: ProblemError[] = [];
+    if (!/^[a-z][a-z0-9-]{1,31}$/.test(body.name)) {
+      errors.push({ pointer: "/name", code: "pattern", message: "invalid name" });
+    }
+    if (!/^(git\+https|git\+ssh|git\+file|https|file):\/\/.+/.test(body.source)) {
+      errors.push({ pointer: "/source", code: "pattern", message: "unsupported source" });
+    }
+    if (body.trust === "pinned" && !/^[0-9a-f]{40}$/.test(body.ref ?? "")) {
+      errors.push({ pointer: "/ref", code: "pinned-ref", message: "pinned needs a full commit" });
+    }
+    if (errors.length > 0) {
+      throw new MockProblem(422, "validation", "The repository is invalid.", errors);
+    }
+    if (this.repositories.some((r) => r.name === body.name)) {
+      throw new MockProblem(409, "conflict", `A repository named ${body.name} exists.`);
+    }
+    const entry: Repository = {
+      name: body.name,
+      kind: "plugins",
+      source: body.source,
+      ...(body.ref ? { ref: body.ref } : {}),
+      ...(body.path ? { path: body.path } : {}),
+      trust: body.trust ?? "prompt",
+      enabled: true,
+      origin: "user",
+      locked: false,
+      state: "new",
+    };
+    this.repositories.push(entry);
+    this.runSync(entry);
+    this.announcePlugins([], [entry.name]);
+    return structuredClone(entry);
+  }
+
+  syncRepository(name: string): Repository {
+    const entry = this.findRepository(name);
+    this.runSync(entry);
+    this.announcePlugins([], [name]);
+    return structuredClone(entry);
+  }
+
+  /** A source whose address contains "fail" cannot be fetched; every other one has one revision. */
+  private runSync(entry: Repository): void {
+    const now = new Date().toISOString();
+    if (entry.source?.includes("fail")) {
+      entry.state = "error";
+      entry.lastError = "git clone failed: repository not found";
+      return;
+    }
+    delete entry.lastError;
+    const revision = MockBackend.remoteRevision;
+    if (entry.active?.revision === revision || entry.pending?.revision === revision) {
+      entry.lastSync = { at: now, changed: false };
+      return;
+    }
+    const next = this.remotePlugins();
+    if (entry.trust === "pinned") {
+      entry.active = {
+        revision,
+        syncedAt: now,
+        plugins: next,
+        ...(entry.path ? { path: entry.path } : {}),
+      };
+      entry.state = "active";
+      entry.lastSync = { at: now, changed: true };
+      this.activate(entry);
+      return;
+    }
+    const known = new Map((entry.active?.plugins ?? []).map((p) => [p.id, p]));
+    const plugins: RepositoryPlugin[] = next.map((p) => {
+      const before = known.get(p.id);
+      known.delete(p.id);
+      if (!before) {
+        return { ...p, change: "added" };
+      }
+      return before.digest === p.digest
+        ? { ...p, change: "unchanged" }
+        : {
+            ...p,
+            change: "changed",
+            ...(before.version ? { previousVersion: before.version } : {}),
+            permissions: p.permissions.map((perm) => ({
+              ...perm,
+              new: !before.permissions.some((b) => b.kind === perm.kind && b.value === perm.value),
+            })),
+          };
+    });
+    for (const gone of known.values()) {
+      plugins.push({ ...gone, change: "removed" });
+    }
+    entry.pending = {
+      revision,
+      fetchedAt: now,
+      plugins: plugins.map((p) =>
+        p.change === "added"
+          ? { ...p, permissions: p.permissions.map((perm) => ({ ...perm, new: true })) }
+          : p,
+      ),
+      ...(entry.path ? { path: entry.path } : {}),
+    };
+    entry.state = "pending";
+    entry.lastSync = { at: now, changed: true };
+  }
+
+  approveRepository(name: string, revision: string): Repository {
+    const entry = this.findRepository(name);
+    if (!entry.pending) {
+      throw new MockProblem(409, "conflict", "No revision waits for approval.");
+    }
+    if (entry.pending.revision !== revision) {
+      throw new MockProblem(
+        409,
+        "conflict",
+        `The pending revision is ${entry.pending.revision}, not ${revision}.`,
+      );
+    }
+    const pending = entry.pending;
+    entry.active = {
+      revision: pending.revision,
+      syncedAt: pending.fetchedAt,
+      plugins: pending.plugins
+        .filter((p) => p.change !== "removed")
+        .map((p) => {
+          const active = {
+            ...p,
+            permissions: p.permissions.map((perm) => ({ ...perm, new: false })),
+          };
+          // The diff fields exist in a pending revision only.
+          delete active.change;
+          delete active.previousVersion;
+          return active;
+        }),
+      ...(pending.path ? { path: pending.path } : {}),
+    };
+    delete entry.pending;
+    entry.state = "active";
+    this.activate(entry);
+    this.announcePlugins(
+      entry.active.plugins.map((p) => p.id),
+      [name],
+    );
+    return structuredClone(entry);
+  }
+
+  discardRepository(name: string): Repository {
+    const entry = this.findRepository(name);
+    delete entry.pending;
+    entry.state = entry.active ? "active" : "new";
+    this.announcePlugins([], [name]);
+    return structuredClone(entry);
+  }
+
+  deleteRepository(name: string): void {
+    const entry = this.findRepository(name);
+    if (entry.origin !== "user") {
+      throw new MockProblem(
+        409,
+        "conflict",
+        `${name} comes from the ${entry.origin} configuration and cannot be removed here.`,
+      );
+    }
+    this.repositories.splice(this.repositories.indexOf(entry), 1);
+    this.dropPlugins(name);
+    this.announcePlugins([], [name]);
+  }
+
+  private dropPlugins(repository: string): void {
+    for (let i = this.plugins.length - 1; i >= 0; i--) {
+      const origin = this.plugins[i]?.origin;
+      if (origin?.kind === "repository" && origin.repository === repository) {
+        this.plugins.splice(i, 1);
+      }
+    }
+  }
+
+  /** Makes the plugins of the active revision appear in the plugin list. */
+  private activate(entry: Repository): void {
+    this.dropPlugins(entry.name);
+    for (const p of entry.active?.plugins ?? []) {
+      if (this.plugins.some((other) => other.id === p.id)) {
+        continue;
+      }
+      this.plugins.push({
+        id: p.id,
+        ...(p.name ? { name: p.name } : {}),
+        ...(p.version ? { version: p.version } : {}),
+        category: "tool",
+        state: "ready",
+        reasons: [],
+        path: `/home/dev/.local/share/devbox/repositories/${entry.name}/${entry.active?.revision ?? ""}/${p.id}`,
+        origin: {
+          kind: "repository",
+          repository: entry.name,
+          revision: entry.active?.revision ?? "",
+        },
+        manifest: {
+          id: p.id,
+          version: p.version ?? "0.0.0",
+          name: p.name ?? p.id,
+          ...(p.description ? { description: p.description } : {}),
+          category: "tool",
+        },
+      });
+    }
+    this.plugins.sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  private announcePlugins(ids: string[], repositories: string[]): void {
+    setTimeout(() => {
+      this.broadcast({ type: "plugins", ids, repositories });
     }, 50);
   }
 

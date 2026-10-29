@@ -16,15 +16,17 @@ import {
   ZSkeleton,
 } from "zenit-ui";
 import type { PluginDetail } from "../api/types";
-import { pluginBadge, problemText } from "../core/status";
+import { originBadge, pluginBadge, problemText, reasonDetail } from "../core/status";
 import { I18n } from "../i18n/i18n";
 import { PluginText } from "../i18n/plugin-text";
 import { PluginsStore } from "../stores/plugins.store";
+import { PluginTabs } from "./plugin-tabs";
 
 @Component({
   selector: "dbx-plugins-page",
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    PluginTabs,
     RouterLink,
     ZAlert,
     ZAlertAction,
@@ -45,6 +47,7 @@ import { PluginsStore } from "../stores/plugins.store";
       [title]="i18n.t('nav.plugins')"
       [sub]="i18n.t('plugins.count', { count: plugins.plugins().length })"
     />
+    <dbx-plugin-tabs active="installed" />
     @if (error()) {
       <z-alert status="danger" icon="error" [title]="i18n.t('common.loadFailed')">
         {{ error() }}
@@ -65,10 +68,13 @@ import { PluginsStore } from "../stores/plugins.store";
             i18n.t("plugins.emptyHint")
           }}</z-empty-state>
         } @else {
-          <z-rows columns="minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) var(--icon)">
+          <z-rows
+            columns="minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) var(--icon)"
+          >
             <z-rows-head>
               <span>{{ i18n.t("plugins.name") }}</span>
               <span>{{ i18n.t("plugins.version") }}</span>
+              <span>{{ i18n.t("plugins.origin") }}</span>
               <span>{{ i18n.t("plugins.state") }}</span>
               <span>{{ i18n.t("plugins.reasons") }}</span>
               <span></span>
@@ -77,6 +83,9 @@ import { PluginsStore } from "../stores/plugins.store";
               <a zRow [routerLink]="['/plugins', row.plugin.id]">
                 <z-row-main [title]="row.name" [meta]="row.description" />
                 <span class="z-mono">{{ row.plugin.version }}</span>
+                <span>
+                  <z-badge>{{ row.origin }}</z-badge>
+                </span>
                 <span>
                   <z-badge [status]="pluginBadge(row.plugin.state)" dot>
                     {{ i18n.t("plugin.state." + row.plugin.state) }}
@@ -116,10 +125,11 @@ export class PluginsPage {
         plugin,
         name: this.text.pluginName(plugin),
         description: this.text.pluginDescription(plugin) ?? "",
+        origin: originBadge(this.i18n, plugin.origin),
         reasons: plugin.reasons
           .map((r) =>
             r.detail
-              ? `${this.i18n.t(`reason.${r.code}`)} (${r.detail})`
+              ? `${this.i18n.t(`reason.${r.code}`)} (${reasonDetail(this.i18n, r)})`
               : this.i18n.t(`reason.${r.code}`),
           )
           .join(", "),

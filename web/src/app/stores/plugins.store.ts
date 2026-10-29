@@ -16,9 +16,14 @@ export class PluginsStore {
   readonly error = signal<ApiProblem | null>(null);
   readonly byId = computed(() => new Map(this.plugins().map((p) => [p.id, p])));
   private pending: Promise<void> | null = null;
+  private again = false;
 
   constructor() {
-    inject(SessionsStore).onReconnect(() => this.reload());
+    const sessions = inject(SessionsStore);
+    sessions.on("plugins", () => {
+      void this.reload();
+    });
+    sessions.onReconnect(() => this.reload());
   }
 
   /** Loads the plugins unless they are loaded or loading. */
@@ -29,11 +34,33 @@ export class PluginsStore {
     return this.reload();
   }
 
+  /** Reloads the list; a reload asked for while one runs triggers exactly one more. */
   reload(): Promise<void> {
-    this.pending ??= this.fetch().finally(() => {
+    if (this.pending) {
+      this.again = true;
+      return this.pending;
+    }
+    this.pending = this.fetch().finally(() => {
       this.pending = null;
+      if (this.again) {
+        this.again = false;
+        void this.reload();
+      }
     });
     return this.pending;
+  }
+
+  /**
+   * Switches a plugin on or off for the user. Rejects with an ApiProblem (409 for core
+   * plugins and for plugins that the system configuration or a profile switches off).
+   */
+  async setEnabled(id: string, enabled: boolean): Promise<void> {
+    try {
+      await this.api.patchPlugin(id, enabled);
+    } catch (error) {
+      throw toApiProblem(error);
+    }
+    await this.reload();
   }
 
   plugin(id: string): PluginDetail | undefined {

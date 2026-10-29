@@ -27,15 +27,23 @@ function dialogButton(text: string): HTMLButtonElement | undefined {
   );
 }
 
-async function open(): Promise<ComponentFixture<Host>> {
+async function open(id = "java"): Promise<ComponentFixture<Host>> {
   // The shell connects the socket after bootstrap; the test does it itself.
   TestBed.inject(SessionsStore).connect();
   const fixture = TestBed.createComponent(Host);
+  fixture.componentInstance.id = id;
   await settle(fixture, () => {
     expect(fixture.nativeElement.querySelector("article.check")).not.toBeNull();
     expect(fixture.nativeElement.querySelector("dbx-settings-group")).not.toBeNull();
   });
   return fixture;
+}
+
+function pluginSwitch(fixture: ComponentFixture<Host>): HTMLInputElement | null {
+  return query<HTMLInputElement>(
+    fixture,
+    'input[role="switch"][aria-labelledby="plugin-enabled-title"]',
+  );
 }
 
 describe("PluginDetailPage (against the mock backend)", () => {
@@ -244,5 +252,58 @@ describe("PluginDetailPage (against the mock backend)", () => {
       "Actions are only available for ready plugins.",
     );
     expect(byText(fixture, "button", "Install Docker")).toBeUndefined();
+  });
+  describe("origin and on/off switch", () => {
+    it("shows where the plugin comes from", async () => {
+      const fixture = await open();
+      expect(query(fixture, ".origin")?.textContent).toContain("Origin: Bundled with DevBox");
+    });
+
+    it("switches the plugin off and on again through the core", async () => {
+      const fixture = await open();
+      const patch = vi.spyOn(backend, "patchPlugin");
+      expect(pluginSwitch(fixture)?.checked).toBe(true);
+
+      pluginSwitch(fixture)?.click();
+      await settle(fixture, () => {
+        expect(patch).toHaveBeenCalledWith("java", false);
+        expect(fixture.nativeElement.textContent).toContain("Version 1.0.0 · Disabled");
+      });
+      expect(pluginSwitch(fixture)?.checked).toBe(false);
+
+      pluginSwitch(fixture)?.click();
+      await settle(fixture, () => {
+        expect(patch).toHaveBeenLastCalledWith("java", true);
+        expect(fixture.nativeElement.textContent).toContain("Version 1.0.0 · Ready");
+      });
+      expect(pluginSwitch(fixture)?.checked).toBe(true);
+    });
+
+    it("has no switch for a core plugin", async () => {
+      const fixture = await open("system");
+      expect(fixture.nativeElement.textContent).toContain("System");
+      expect(pluginSwitch(fixture)).toBeNull();
+    });
+
+    it("shows the problem and puts the switch back when the core refuses", async () => {
+      const fixture = await open();
+      vi.spyOn(backend, "patchPlugin").mockImplementation(() => {
+        throw new MockProblem(409, "conflict", "core plugins cannot be switched off");
+      });
+      pluginSwitch(fixture)?.click();
+      await settle(fixture, () => {
+        expect(fixture.nativeElement.textContent).toContain("core plugins cannot be switched off");
+      });
+      expect(fixture.nativeElement.textContent).toContain("The plugin could not be switched.");
+      expect(pluginSwitch(fixture)?.checked).toBe(true);
+    });
+
+    it("locks the switch and names the profile when a profile keeps the plugin off", async () => {
+      backend.switchOffBy("java", "profile:example-team");
+      const fixture = await open();
+      expect(pluginSwitch(fixture)?.checked).toBe(false);
+      expect(pluginSwitch(fixture)?.disabled).toBe(true);
+      expect(fixture.nativeElement.textContent).toContain("Switched off by Profile example-team.");
+    });
   });
 });

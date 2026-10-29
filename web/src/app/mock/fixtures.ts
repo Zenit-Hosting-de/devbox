@@ -8,6 +8,8 @@ import type {
   Manifest,
   Messages,
   PluginDetail,
+  Repository,
+  RepositoryPlugin,
   Session,
 } from "../api/types";
 
@@ -540,3 +542,129 @@ export function buildHistory(): Session[] {
   }
   return sessions;
 }
+
+// ---- plugin repositories ---------------------------------------------------
+
+const digest = (n: number): string => n.toString(16).padStart(64, "0");
+
+/** Plugin entry of a revision; the mock never fetches anything. */
+export function repositoryPlugin(
+  id: string,
+  version: string,
+  extra: Partial<RepositoryPlugin> = {},
+): RepositoryPlugin {
+  return {
+    id,
+    name: id.charAt(0).toUpperCase() + id.slice(1),
+    version,
+    description: `Example plugin ${id}.`,
+    digest: digest(id.length * 4099 + version.length),
+    permissions: [],
+    requiresCommands: [],
+    ...extra,
+  };
+}
+
+const syncedAt = "2026-03-01T09:00:00Z";
+
+/** Four sources: active, waiting for approval, failed and one from the system configuration. */
+export const repositoriesFixture: Repository[] = [
+  {
+    name: "broken",
+    kind: "plugins",
+    source: "git+https://example.com/team/missing.git",
+    trust: "prompt",
+    enabled: true,
+    origin: "user",
+    locked: false,
+    state: "error",
+    lastError: "git clone failed: repository not found",
+  },
+  {
+    name: "corp",
+    kind: "plugins",
+    source: "https://example.com/corp/plugins.tar.gz",
+    trust: "prompt",
+    enabled: true,
+    origin: "system",
+    locked: true,
+    state: "active",
+    active: {
+      revision: "0f9e8d7c6b5a",
+      syncedAt,
+      plugins: [repositoryPlugin("corp-vpn", "2.1.0")],
+    },
+    lastSync: { at: syncedAt, changed: false },
+  },
+  {
+    name: "experiments",
+    kind: "plugins",
+    source: "git+https://example.com/team/devbox-plugins.git",
+    ref: "main",
+    path: "plugins",
+    trust: "prompt",
+    enabled: true,
+    origin: "user",
+    locked: false,
+    state: "pending",
+    active: {
+      revision: "a1b2c3d4e5f6",
+      path: "plugins",
+      syncedAt,
+      plugins: [
+        repositoryPlugin("lint", "1.0.0", {
+          permissions: [{ kind: "files.read", value: "~/.config/lint", new: false }],
+          requiresCommands: ["shellcheck"],
+        }),
+        repositoryPlugin("retired", "0.3.0"),
+        repositoryPlugin("steady", "1.2.0"),
+      ],
+    },
+    pending: {
+      revision: "123456abcdef",
+      path: "plugins",
+      fetchedAt: "2026-03-02T10:00:00Z",
+      plugins: [
+        repositoryPlugin("deploy", "0.1.0", {
+          change: "added",
+          description: "Deploys the current project.",
+          permissions: [
+            { kind: "network", value: "deploy.example.com", new: true },
+            { kind: "sudo", value: "true", new: true },
+            { kind: "credentials", value: "token", new: true },
+          ],
+          requiresCommands: ["rsync", "ssh"],
+        }),
+        repositoryPlugin("lint", "1.1.0", {
+          change: "changed",
+          previousVersion: "1.0.0",
+          permissions: [
+            { kind: "files.read", value: "~/.config/lint", new: false },
+            { kind: "network", value: "rules.example.com", new: true },
+          ],
+          requiresCommands: ["shellcheck"],
+        }),
+        repositoryPlugin("retired", "0.3.0", { change: "removed" }),
+        repositoryPlugin("steady", "1.2.0", { change: "unchanged" }),
+      ],
+    },
+    lastSync: { at: "2026-03-02T10:00:00Z", changed: true },
+  },
+  {
+    name: "team-plugins",
+    kind: "plugins",
+    source: "git+https://example.com/team/plugins.git",
+    ref: "ffeeddccbbaa0011223344556677889900aabbcc",
+    trust: "pinned",
+    enabled: true,
+    origin: "user",
+    locked: false,
+    state: "active",
+    active: {
+      revision: "ffeeddccbbaa",
+      syncedAt,
+      plugins: [repositoryPlugin("greeter", "1.0.0")],
+    },
+    lastSync: { at: syncedAt, changed: false },
+  },
+];

@@ -21,7 +21,7 @@ export type ConnectionStatus = "idle" | "connecting" | "open" | "offline";
 export const BACKOFF_START_MS = 1000;
 export const BACKOFF_MAX_MS = 30_000;
 
-const TOPICS = ["checks", "sessions", "settings"] as const;
+const TOPICS = ["checks", "sessions", "settings", "plugins"] as const;
 
 type MessageType = WsServerMessage["type"];
 type Handler<T extends MessageType> = (message: ServerMessageOf<T>) => void;
