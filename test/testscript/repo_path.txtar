@@ -1,0 +1,73 @@
+# A source without the right path: the plugins live in a sub-folder. The sync finds
+# no plugins and names the folder; `repo set` fixes the entry and the new revision is
+# approved. Other fields can be changed, too; entries of other layers cannot.
+
+# add without path: a pending revision without plugins and a hint
+exec devbox repo add team --source file://$WORK/src
+stdout 'team: revision [0-9a-f]{12} waits for approval$'
+stdout 'no plugins found; plugins exist below: other/tools, plugins \(set with --path\)'
+! stdout '\+ alpha'
+exec devbox repo list
+stdout '^team +pending +plugins +user +file://.*/src +pending [0-9a-f]{12}$'
+stdout '^team: no plugins found; plugins exist below: other/tools, plugins \(set with --path\)$'
+exec devbox repo list --json
+stdout '"suggestedPaths": \['
+stdout '"other/tools"'
+
+# nothing to set
+! exec devbox repo set team
+stderr 'nothing to change'
+# invalid values change nothing
+! exec devbox repo set team --path ../up
+stderr 'validation'
+! exec devbox repo set team --ref main
+stderr 'validation: ref is only supported for git sources'
+! exec devbox repo set team --source ftp://x.example.com/p
+stderr 'validation'
+! exec devbox repo set nope --path plugins
+stderr 'not-found: nope'
+! grep '"path"' home/.config/devbox/config.json
+
+# set the path: the new revision waits, with the plugins
+exec devbox repo set team --path plugins
+stdout 'team: revision [0-9a-f]{12} waits for approval$'
+stdout '\+ alpha 1.0.0$'
+stdout '\+ beta 1.0.0$'
+! stdout 'no plugins found'
+grep '"path": "plugins"' home/.config/devbox/config.json
+exec devbox repo list
+stdout '^team +pending +plugins +user'
+! stdout 'no plugins found'
+
+# approve
+exec devbox repo approve team --yes
+stdout 'team: revision [0-9a-f]{12} is active \(2 plugins\)'
+exec devbox plugin list
+stdout '^alpha +1.0.0 +ready +repository:team@'
+
+# an empty value removes the path again: the root holds no plugins, the active revision stays
+exec devbox repo set team --path ''
+! grep '"path"' home/.config/devbox/config.json
+stdout 'no plugins found'
+exec devbox plugin list
+stdout '^alpha +1.0.0 +ready'
+# going back to the active path drops the pending revision
+exec devbox repo set team --path plugins
+stdout 'team: revision [0-9a-f]{12} is active \(2 plugins\)'
+exec devbox repo list --json
+! stdout '"pending"'
+
+# entries of the system file cannot be changed here
+! exec devbox repo set corp --path plugins
+stderr 'conflict: corp: the repository comes from system and can only be changed there'
+
+-- etc/devbox/config.json --
+{ "repositories": { "corp": { "kind": "plugins", "source": "file:///srv/corp" } } }
+-- src/plugins/alpha/plugin.json --
+{ "id": "alpha", "version": "1.0.0", "name": "Alpha", "category": "tool" }
+-- src/plugins/beta/plugin.json --
+{ "id": "beta", "version": "1.0.0", "name": "Beta", "category": "tool" }
+-- src/other/tools/gamma/plugin.json --
+{ "id": "gamma", "version": "1.0.0", "name": "Gamma", "category": "tool" }
+-- src/docs/readme.txt --
+no plugins here

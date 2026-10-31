@@ -2,8 +2,10 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -188,5 +190,88 @@ func TestSetPluginEnabled(t *testing.T) {
 	data, _ := os.ReadFile(cfg)
 	if strings.Contains(string(data), `"plugins"`) {
 		t.Errorf("config = %s", data)
+	}
+}
+
+func strp(s string) *string { return &s }
+
+func TestUpdateRepository(t *testing.T) {
+	home := t.TempDir()
+	write(t, filepath.Join(home, "system.json"), `{"repositories":{"from-system":{"kind":"plugins","source":"file:///srv/a"}}}`, 0o600)
+	cfg := filepath.Join(home, ".config", "devbox", "config.json")
+	write(t, cfg, `{
+  "repositories": {
+    "mine": { "kind": "plugins", "source": "git+https://git.example.com/team/plugins.git", "ref": "main", "path": "old" },
+    "templ": { "kind": "templates", "source": "file:///srv/t" }
+  }
+}`, 0o600)
+	entry := func() map[string]any {
+		data, err := os.ReadFile(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc struct {
+			Repositories map[string]map[string]any `json:"repositories"`
+		}
+		if err := json.Unmarshal(data, &doc); err != nil {
+			t.Fatal(err)
+		}
+		return doc.Repositories["mine"]
+	}
+
+	// path set, ref removed; kind stays
+	changed, err := loadAt(t, home).UpdateRepository("mine", RepoPatch{Path: strp("plugins"), Ref: strp("")})
+	if err != nil || !changed {
+		t.Fatalf("changed = %v, %v", changed, err)
+	}
+	want := map[string]any{"kind": "plugins", "source": "git+https://git.example.com/team/plugins.git", "path": "plugins"}
+	if got := entry(); !reflect.DeepEqual(got, want) {
+		t.Errorf("entry = %v", got)
+	}
+	// the same again changes nothing; fields that are not given stay
+	if changed, err := loadAt(t, home).UpdateRepository("mine", RepoPatch{Path: strp("plugins"), Ref: strp("")}); err != nil || changed {
+		t.Errorf("again: changed = %v, %v", changed, err)
+	}
+	// source and trust
+	commit := strings.Repeat("a", 40)
+	if _, err := loadAt(t, home).UpdateRepository("mine", RepoPatch{Ref: strp(commit), Trust: strp("pinned"), Source: strp("git+https://git.example.com/other.git")}); err != nil {
+		t.Fatal(err)
+	}
+	got := entry()
+	if got["source"] != "git+https://git.example.com/other.git" || got["ref"] != commit || got["trust"] != "pinned" {
+		t.Errorf("entry = %v", got)
+	}
+	if _, err := loadAt(t, home).UpdateRepository("mine", RepoPatch{Trust: strp("")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := entry()["trust"]; ok {
+		t.Errorf("trust stays: %v", entry())
+	}
+
+	before, _ := os.ReadFile(cfg)
+	tests := []struct {
+		name  string
+		repo  string
+		patch RepoPatch
+		code  string
+	}{
+		{"unknown", "nope", RepoPatch{Path: strp("x")}, config.CodeNotFound},
+		{"system entry", "from-system", RepoPatch{Path: strp("x")}, config.CodeConflict},
+		{"other kind", "templ", RepoPatch{Path: strp("x")}, config.CodeConflict},
+		{"path outside", "mine", RepoPatch{Path: strp("../up")}, config.CodeValidation},
+		{"empty source", "mine", RepoPatch{Source: strp("")}, config.CodeValidation},
+		{"bad scheme", "mine", RepoPatch{Source: strp("ftp://files.example.com/x")}, config.CodeValidation},
+		{"pinned without commit", "mine", RepoPatch{Trust: strp("pinned"), Ref: strp("main")}, config.CodeValidation},
+		{"ref for a file source", "mine", RepoPatch{Source: strp("file:///srv/x")}, config.CodeValidation},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := loadAt(t, home).UpdateRepository(tt.repo, tt.patch); !config.IsCode(err, tt.code) {
+				t.Errorf("error = %v, want code %s", err, tt.code)
+			}
+		})
+	}
+	if after, _ := os.ReadFile(cfg); string(after) != string(before) {
+		t.Errorf("a refused change wrote the file:\n%s", after)
 	}
 }

@@ -41,6 +41,9 @@ type Revision struct {
 	Path      string   `json:"path,omitempty"`
 	FetchedAt string   `json:"fetchedAt"`
 	Plugins   []Plugin `json:"plugins"`
+	// SuggestedPaths is only set when Plugins is empty: the folders of the snapshot
+	// that hold plugin folders.
+	SuggestedPaths []string `json:"suggestedPaths,omitempty"`
 }
 
 // Plugin is a plugin folder of a revision.

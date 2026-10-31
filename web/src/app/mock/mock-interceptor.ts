@@ -9,7 +9,7 @@ import {
 import { inject } from "@angular/core";
 import { Observable, delay } from "rxjs";
 import { environment } from "../../environments/environment";
-import type { RepositoryCreate, SessionCreate, SessionsQuery } from "../api/types";
+import type { RepositoryCreate, RepositoryPatch, SessionCreate, SessionsQuery } from "../api/types";
 import { MockBackend, MockProblem } from "./mock-backend";
 
 type Answer = { status: number; body: unknown; headers?: Record<string, string> };
@@ -44,6 +44,9 @@ function route(req: HttpRequest<unknown>, backend: MockBackend, path: string): A
     }
     if (method === "POST" && !id) {
       return { status: 201, body: backend.createRepository(req.body as RepositoryCreate) };
+    }
+    if (method === "PATCH" && id && !third) {
+      return ok(backend.patchRepository(id, req.body as RepositoryPatch));
     }
     if (method === "POST" && id && third === "sync") {
       return ok(backend.syncRepository(id));

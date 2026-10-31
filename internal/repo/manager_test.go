@@ -466,3 +466,97 @@ func TestSyncGit(t *testing.T) {
 		t.Errorf("without git: %v", err)
 	}
 }
+
+func TestSuggestPaths(t *testing.T) {
+	root := t.TempDir()
+	plugin := manifest("p", "1.0.0", "")
+	writeTree(t, root, map[string]string{
+		"plugins/alpha/plugin.json":           plugin,
+		"plugins/beta/plugin.json":            plugin,
+		"tools/x/y/gamma/plugin.json":         plugin, // depth 3
+		"a/b/c/d/deep/plugin.json":            plugin, // depth 4: too deep
+		".hidden/zed/plugin.json":             plugin, // hidden
+		"docs/readme.txt":                     "no plugins",
+		"docs/guide/notes.txt":                "still none",
+		"wrapper/plugins/delta/plugin.json":   plugin,
+		"plugins/alpha/sub/inner/plugin.json": plugin, // inside a plugin: not searched
+	})
+	tests := []struct {
+		name string
+		skip string
+		want []string
+	}{
+		{"all", "", []string{"plugins", "tools/x/y", "wrapper/plugins"}},
+		{"skips the scanned folder", "plugins", []string{"tools/x/y", "wrapper/plugins"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SuggestPaths(root, tt.skip)
+			if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+				t.Errorf("paths = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	// a plugin folder directly in the root has no folder to suggest
+	flat := t.TempDir()
+	writeTree(t, flat, map[string]string{"alpha/plugin.json": plugin})
+	if got := SuggestPaths(flat, ""); len(got) != 0 {
+		t.Errorf("flat = %v", got)
+	}
+
+	// the list is capped
+	many := t.TempDir()
+	files := map[string]string{}
+	for i := range 15 {
+		files[filepath.Join("dir"+string(rune('a'+i)), "p", "plugin.json")] = plugin
+	}
+	writeTree(t, many, files)
+	if got := SuggestPaths(many, ""); len(got) != suggestMax {
+		t.Errorf("%d paths, want %d", len(got), suggestMax)
+	}
+}
+
+// TestSyncSuggestsPaths: a source whose configured folder holds no plugin records the
+// folders that do, and the hint follows the path.
+func TestSyncSuggestsPaths(t *testing.T) {
+	ctx := context.Background()
+	m := testManager(t)
+	src := t.TempDir()
+	writeTree(t, src, map[string]string{
+		"plugins/alpha/plugin.json": manifest("alpha", "1.0.0", ""),
+		"docs/readme.txt":           "x",
+	})
+	e := entryFor(t, "team", map[string]any{"kind": "plugins", "source": "file://" + src})
+	if err := m.Sync(ctx, e); err != nil {
+		t.Fatal(err)
+	}
+	v := viewOf(t, m, e)
+	if v.State != StatePending || v.Pending == nil || len(v.Pending.Plugins) != 0 {
+		t.Fatalf("view = %+v", v)
+	}
+	if got := v.Pending.SuggestedPaths; len(got) != 1 || got[0] != "plugins" {
+		t.Errorf("suggested = %v", got)
+	}
+	// approving the empty revision keeps the hint on the active revision
+	if err := m.Approve(ctx, e, v.Pending.Revision); err != nil {
+		t.Fatal(err)
+	}
+	v = viewOf(t, m, e)
+	if v.Active == nil || len(v.Active.Plugins) != 0 || len(v.Active.SuggestedPaths) != 1 {
+		t.Errorf("active = %+v", v.Active)
+	}
+
+	// the right path: a pending revision with plugins and no hint
+	e = entryFor(t, "team", map[string]any{"kind": "plugins", "source": "file://" + src, "path": "plugins"})
+	if err := m.Sync(ctx, e); err != nil {
+		t.Fatal(err)
+	}
+	v = viewOf(t, m, e)
+	if v.Pending == nil || len(v.Pending.Plugins) == 0 || v.Pending.Path != "plugins" || v.Pending.SuggestedPaths != nil {
+		t.Errorf("pending = %+v", v.Pending)
+	}
+	if v.Active == nil || len(v.Active.SuggestedPaths) != 1 {
+		t.Errorf("the active revision keeps its hint: %+v", v.Active)
+	}
+}

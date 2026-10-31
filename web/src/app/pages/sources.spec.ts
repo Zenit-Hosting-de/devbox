@@ -390,6 +390,200 @@ describe("SourcesPage (against the mock backend)", () => {
     });
   });
 
+  describe("a source without plugins in its folder", () => {
+    async function addMisplaced(fixture: ComponentFixture<SourcesPage>): Promise<void> {
+      await openForm(fixture);
+      fillForm(fixture, { name: "wrong-path", source: "git+https://example.com/subfolder.git" });
+      fixture.nativeElement.querySelector("form")?.dispatchEvent(new Event("submit"));
+      await settle(fixture, () => {
+        expect(source(fixture, "wrong-path")).toBeDefined();
+      });
+    }
+
+    it("warns and offers the folders that hold plugins", async () => {
+      const fixture = await open();
+      await addMisplaced(fixture);
+      const panel = source(fixture, "wrong-path");
+      expect(panel.textContent).toContain("Waiting for approval");
+      const alert = panel.querySelector(".z-alert--warning");
+      expect(alert?.textContent).toContain("No plugins found in this folder");
+      expect(queryAll(alert as HTMLElement, "button").map((b) => b.textContent?.trim())).toEqual([
+        "Use path plugins",
+      ]);
+      // sources with plugins do not warn
+      expect(source(fixture, "experiments").querySelector(".z-alert--warning")).toBeNull();
+      expect(source(fixture, "team-plugins").querySelector(".z-alert--warning")).toBeNull();
+    });
+
+    it("sets the folder, syncs and lists the plugins for review", async () => {
+      const fixture = await open();
+      await addMisplaced(fixture);
+      const patch = vi.spyOn(backend, "patchRepository");
+      byText(source(fixture, "wrong-path"), "button", "Use path plugins")?.click();
+      await settle(fixture, () => {
+        expect(patch).toHaveBeenCalledWith("wrong-path", { path: "plugins" });
+        expect(source(fixture, "wrong-path").querySelector(".z-alert--warning")).toBeNull();
+      });
+      const panel = source(fixture, "wrong-path");
+      expect(panel.textContent).toContain("plugins");
+      expect(panel.textContent).toContain("Waiting for approval");
+      expect(byText(panel, "button", "Review changes")).toBeDefined();
+    });
+
+    it("warns without buttons when no folder is known", async () => {
+      const fixture = await open();
+      vi.spyOn(backend, "repositoryList").mockReturnValue([
+        {
+          name: "bare",
+          kind: "plugins",
+          source: "file:///tmp/bare",
+          trust: "prompt",
+          enabled: true,
+          origin: "user",
+          locked: false,
+          state: "active",
+          active: { revision: "aabbccddeeff", syncedAt: "2026-03-01T09:00:00Z", plugins: [] },
+        },
+      ]);
+      await TestBed.inject(RepositoriesStore).reload();
+      await settle(fixture, () => {
+        expect(source(fixture, "bare").querySelector(".z-alert--warning")).not.toBeNull();
+      });
+      const alert = source(fixture, "bare").querySelector(".z-alert--warning") as HTMLElement;
+      expect(alert.textContent).toContain("No plugins found in this folder");
+      expect(queryAll(alert, "button")).toHaveLength(0);
+    });
+  });
+
+  describe("edit source", () => {
+    function edit(fixture: ComponentFixture<SourcesPage>, name: string): void {
+      byText(source(fixture, name), "button", "Edit")?.click();
+    }
+
+    it("offers Edit for sources of the user configuration only", async () => {
+      const fixture = await open();
+      expect(byText(source(fixture, "experiments"), "button", "Edit")).toBeDefined();
+      expect(byText(source(fixture, "team-plugins"), "button", "Edit")).toBeDefined();
+      expect(byText(source(fixture, "corp"), "button", "Edit")).toBeUndefined();
+    });
+
+    it("opens the form with the values; the name cannot be changed", async () => {
+      const fixture = await open();
+      edit(fixture, "experiments");
+      await settle(fixture, () => {
+        expect(input(fixture, "src-name").value).toBe("experiments");
+      });
+      expect(input(fixture, "src-name").readOnly).toBe(true);
+      expect(input(fixture, "src-source").value).toBe(
+        "git+https://example.com/team/devbox-plugins.git",
+      );
+      expect(input(fixture, "src-ref").value).toBe("main");
+      expect(input(fixture, "src-path").value).toBe("plugins");
+      const text = fixture.nativeElement.textContent as string;
+      expect(text).toContain("Edit source experiments");
+      expect(byText(fixture, "button", "Save and sync")).toBeDefined();
+      expect(byText(fixture, "button", "Add and sync")).toBeUndefined();
+    });
+
+    it("sends the changed fields, null for the ones that were emptied", async () => {
+      const fixture = await open();
+      const patch = vi.spyOn(backend, "patchRepository");
+      edit(fixture, "experiments");
+      await settle(fixture, () => {
+        expect(input(fixture, "src-ref").value).toBe("main");
+      });
+      fillForm(fixture, { ref: "", path: "tools" });
+      byText(fixture, "button", "Save and sync")?.click();
+      await settle(fixture, () => {
+        expect(fixture.nativeElement.querySelector("#src-name")).toBeNull();
+      });
+      expect(patch).toHaveBeenCalledWith("experiments", {
+        source: "git+https://example.com/team/devbox-plugins.git",
+        ref: null,
+        path: "tools",
+      });
+      const panel = source(fixture, "experiments");
+      expect(panel.textContent).toContain("tools");
+      expect(panel.textContent).not.toContain("main");
+    });
+
+    it("sends the trust when it was changed", async () => {
+      const fixture = await open();
+      const patch = vi.spyOn(backend, "patchRepository");
+      edit(fixture, "experiments");
+      await settle(fixture, () => {
+        expect(input(fixture, "src-ref").value).toBe("main");
+      });
+      fillForm(fixture, { ref: "a".repeat(40) });
+      byText(fixture, "label.z-option", "Pinned commit")?.querySelector("input")?.click();
+      byText(fixture, "button", "Save and sync")?.click();
+      await settle(fixture, () => {
+        expect(patch).toHaveBeenCalledWith(
+          "experiments",
+          expect.objectContaining({ ref: "a".repeat(40), trust: "pinned" }),
+        );
+      });
+    });
+
+    it("checks the input like the add form", async () => {
+      const fixture = await open();
+      const patch = vi.spyOn(backend, "patchRepository");
+      edit(fixture, "experiments");
+      await settle(fixture, () => {
+        expect(input(fixture, "src-ref").value).toBe("main");
+      });
+      fillForm(fixture, { source: "ftp://example.com/x" });
+      byText(fixture, "button", "Save and sync")?.click();
+      await settle(fixture, () => {
+        expect(fixture.nativeElement.textContent).toContain("The address must start with");
+      });
+      expect(patch).not.toHaveBeenCalled();
+    });
+
+    it("shows a refusal of the core and keeps the form", async () => {
+      const fixture = await open();
+      edit(fixture, "experiments");
+      await settle(fixture, () => {
+        expect(input(fixture, "src-ref").value).toBe("main");
+      });
+      vi.spyOn(backend, "patchRepository").mockImplementation(() => {
+        throw new MockProblem(409, "conflict", "The repository comes from system.");
+      });
+      byText(fixture, "button", "Save and sync")?.click();
+      await settle(fixture, () => {
+        expect(fixture.nativeElement.textContent).toContain("The repository comes from system.");
+      });
+      expect(input(fixture, "src-name").value).toBe("experiments");
+    });
+
+    it("switches back to adding when Add source is pressed during an edit", async () => {
+      const fixture = await open();
+      edit(fixture, "experiments");
+      await settle(fixture, () => {
+        expect(input(fixture, "src-name").readOnly).toBe(true);
+      });
+      byText(fixture, "button", "Add source")?.click();
+      await settle(fixture, () => {
+        expect(input(fixture, "src-name").readOnly).toBe(false);
+      });
+      expect(input(fixture, "src-name").value).toBe("");
+      expect(byText(fixture, "button", "Add and sync")).toBeDefined();
+    });
+  });
+
+  describe("help in the form", () => {
+    it("explains revision and subfolder", async () => {
+      const fixture = await open();
+      await openForm(fixture);
+      const text = fixture.nativeElement.textContent as string;
+      expect(text).toContain("Branch, tag or commit (optional)");
+      expect(text).toContain("Empty uses the default branch");
+      expect(text).toContain("Subfolder with the plugin folders (optional)");
+      expect(text).toContain("whose subfolders are the plugins");
+      expect(input(fixture, "src-path").placeholder).toBe("plugins");
+    });
+  });
+
   describe("remove", () => {
     it("asks first and removes the source", async () => {
       const fixture = await open();

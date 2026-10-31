@@ -147,6 +147,10 @@ type Revision struct {
 	// Commit SHA of a Git source, SHA-256 of the tarball of an HTTPS source, SHA-256
 	// tree digest of a local directory.
 	Revision string `json:"revision"`
+
+	// Only set when plugins is empty: sub-directories of the snapshot (slash form,
+	// relative, sorted) that hold plugin folders, to hint at a wrong path.
+	SuggestedPaths []string `json:"suggestedPaths,omitempty,omitzero"`
 }
 
 // One plugin folder of a revision.

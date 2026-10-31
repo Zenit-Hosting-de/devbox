@@ -69,6 +69,11 @@
           "type": "array",
           "description": "The plugin folders found below path, sorted by folder name.",
           "items": { "$ref": "#/$defs/revisionPlugin" }
+        },
+        "suggestedPaths": {
+          "type": "array",
+          "description": "Only set when plugins is empty: sub-directories of the snapshot (slash form, relative, sorted) that hold plugin folders, to hint at a wrong path.",
+          "items": { "type": "string", "minLength": 1 }
         }
       }
     },

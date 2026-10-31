@@ -22,7 +22,7 @@ import {
   type ZSpecItem,
 } from "zenit-ui";
 import { ApiProblem } from "../api/problem";
-import type { Repository, RepositoryCreate, RepositoryState } from "../api/types";
+import type { Repository, RepositoryCreate, RepositoryPatch, RepositoryState } from "../api/types";
 import { fieldErrorText, layerName, problemText } from "../core/status";
 import { I18n } from "../i18n/i18n";
 import { RepositoriesStore } from "../stores/repositories.store";
@@ -83,10 +83,22 @@ interface RepositoryView {
   facts: ZSpecItem[];
   busy: boolean;
   removable: boolean;
+  editable: boolean;
   syncable: boolean;
+  /** Set when the newest revision holds no plugins: the folders that do (possibly none). */
+  emptyPaths: string[] | null;
 }
 
-/** The sources of plugins: list, sync, review of a pending revision, add and remove. */
+/** The newest revision (pending before active) without plugins; null when it has some. */
+function emptyRevisionPaths(repository: Repository): string[] | null {
+  const newest = repository.pending ?? repository.active;
+  if (!newest || newest.plugins.some((p) => p.change !== "removed")) {
+    return null;
+  }
+  return newest.suggestedPaths ?? [];
+}
+
+/** The sources of plugins: list, sync, review of a pending revision, add, edit and remove. */
 @Component({
   selector: "dbx-sources-page",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -116,7 +128,7 @@ interface RepositoryView {
         zBtn="primary"
         type="button"
         [attr.aria-expanded]="formOpen()"
-        aria-controls="add-source"
+        aria-controls="source-form"
         (click)="toggleForm()"
       >
         <z-icon name="add" />{{ i18n.t("sources.add") }}
@@ -127,16 +139,18 @@ interface RepositoryView {
     <div class="z-stack">
       @if (formOpen()) {
         <z-panel
-          id="add-source"
-          [title]="i18n.t('sources.addTitle')"
+          id="source-form"
+          [title]="
+            editing() ? i18n.t('sources.editTitle', { name: name() }) : i18n.t('sources.addTitle')
+          "
           headingLevel="2"
-          [busy]="store.adding()"
+          [busy]="store.saving()"
         >
           <form class="z-stack" novalidate (submit)="submit($event)">
             <z-field
               [label]="i18n.t('sources.field.name')"
               for="src-name"
-              [hint]="i18n.t('sources.field.nameHint')"
+              [hint]="i18n.t(editing() ? 'sources.field.nameFixed' : 'sources.field.nameHint')"
               [error]="errors().name ?? ''"
             >
               <input
@@ -147,7 +161,8 @@ interface RepositoryView {
                 spellcheck="false"
                 [invalid]="!!errors().name"
                 [value]="name()"
-                [disabled]="store.adding()"
+                [readonly]="editing()"
+                [disabled]="store.saving()"
                 (input)="name.set(text($event))"
               />
             </z-field>
@@ -166,7 +181,7 @@ interface RepositoryView {
                 placeholder="git+https://example.com/team/plugins.git"
                 [invalid]="!!errors().source"
                 [value]="source()"
-                [disabled]="store.adding()"
+                [disabled]="store.saving()"
                 (input)="source.set(text($event))"
               />
             </z-field>
@@ -182,9 +197,10 @@ interface RepositoryView {
                 id="src-ref"
                 autocomplete="off"
                 spellcheck="false"
+                [placeholder]="i18n.t('sources.field.refExample')"
                 [invalid]="!!errors().ref"
                 [value]="ref()"
-                [disabled]="store.adding()"
+                [disabled]="store.saving()"
                 (input)="ref.set(text($event))"
               />
             </z-field>
@@ -200,9 +216,10 @@ interface RepositoryView {
                 id="src-path"
                 autocomplete="off"
                 spellcheck="false"
+                [placeholder]="i18n.t('sources.field.pathExample')"
                 [invalid]="!!errors().path"
                 [value]="path()"
-                [disabled]="store.adding()"
+                [disabled]="store.saving()"
                 (input)="path.set(text($event))"
               />
             </z-field>
@@ -211,7 +228,7 @@ interface RepositoryView {
                 [legend]="i18n.t('sources.field.trust')"
                 [options]="trustOptions()"
                 [(value)]="trust"
-                [disabled]="store.adding()"
+                [disabled]="store.saving()"
               />
               @if (errors().trust) {
                 <span class="z-field__error" role="alert">{{ errors().trust }}</span>
@@ -220,14 +237,14 @@ interface RepositoryView {
             @if (generalError()) {
               <z-alert status="danger" icon="error">{{ generalError() }}</z-alert>
             }
-            @if (store.adding()) {
+            @if (store.saving()) {
               <p class="z-muted" role="status">{{ i18n.t("sources.adding") }}</p>
             }
             <div class="z-cluster">
-              <button zBtn="primary" type="submit" [loading]="store.adding()">
-                {{ i18n.t("sources.submit") }}
+              <button zBtn="primary" type="submit" [loading]="store.saving()">
+                {{ i18n.t(editing() ? "sources.save" : "sources.submit") }}
               </button>
-              <button zBtn="ghost" type="button" [disabled]="store.adding()" (click)="closeForm()">
+              <button zBtn="ghost" type="button" [disabled]="store.saving()" (click)="closeForm()">
                 {{ i18n.t("common.cancel") }}
               </button>
             </div>
@@ -293,6 +310,17 @@ interface RepositoryView {
                   <z-icon name="sync" />{{ i18n.t("sources.sync") }}
                 </button>
               }
+              @if (view.editable) {
+                <button
+                  zBtn="ghost"
+                  size="sm"
+                  type="button"
+                  [disabled]="view.busy"
+                  (click)="edit(view.repository)"
+                >
+                  <z-icon name="edit" />{{ i18n.t("sources.edit") }}
+                </button>
+              }
               @if (view.removable) {
                 <button
                   zBtn="ghost"
@@ -317,6 +345,34 @@ interface RepositoryView {
               @if (view.repository.lastError) {
                 <z-alert status="danger" icon="error" [title]="i18n.t('sources.errorTitle')">
                   <span class="z-mono error-text">{{ view.repository.lastError }}</span>
+                </z-alert>
+              }
+              @if (view.emptyPaths; as paths) {
+                <z-alert status="warning" icon="warning" [title]="i18n.t('sources.noPlugins')">
+                  <div class="z-stack">
+                    <span>
+                      {{
+                        paths.length > 0 && view.editable
+                          ? i18n.t("sources.noPluginsSuggest")
+                          : i18n.t("sources.noPluginsHint")
+                      }}
+                    </span>
+                    @if (view.editable) {
+                      <div class="z-cluster">
+                        @for (suggested of paths; track suggested) {
+                          <button
+                            zBtn="secondary"
+                            size="sm"
+                            type="button"
+                            [disabled]="view.busy"
+                            (click)="usePath(view.repository, suggested)"
+                          >
+                            {{ i18n.t("sources.usePath", { path: suggested }) }}
+                          </button>
+                        }
+                      </div>
+                    }
+                  </div>
                 </z-alert>
               }
               <z-spec-list [items]="view.facts" />
@@ -347,6 +403,10 @@ export class SourcesPage {
   private readonly toast = inject(ZToast);
 
   protected readonly formOpen = signal(false);
+  /** Name of the source the form edits; null while it adds one. */
+  protected readonly editing = signal<string | null>(null);
+  /** The values the edit started with; only what differs is sent for trust. */
+  private original: Repository | null = null;
   protected readonly name = signal("");
   protected readonly source = signal("");
   protected readonly ref = signal("");
@@ -397,15 +457,36 @@ export class SourcesPage {
   }
 
   protected toggleForm(): void {
-    if (this.formOpen()) {
+    if (this.formOpen() && this.editing() === null) {
       this.closeForm();
     } else {
+      this.reset();
+      this.clearErrors();
       this.formOpen.set(true);
     }
   }
 
+  /** Opens the form with the values of the source; the name stays as it is. */
+  protected edit(repository: Repository): void {
+    this.reset();
+    this.clearErrors();
+    this.original = repository;
+    this.editing.set(repository.name);
+    this.name.set(repository.name);
+    this.source.set(repository.source ?? "");
+    this.ref.set(repository.ref ?? "");
+    this.path.set(repository.path ?? "");
+    this.trust.set(repository.trust === "pinned" ? "pinned" : "prompt");
+    this.formOpen.set(true);
+  }
+
   protected closeForm(): void {
+    this.reset();
+    this.clearErrors();
     this.formOpen.set(false);
+  }
+
+  private clearErrors(): void {
     this.submitted.set(false);
     this.serverErrors.set({});
     this.generalError.set("");
@@ -413,7 +494,7 @@ export class SourcesPage {
 
   protected async submit(event: Event): Promise<void> {
     event.preventDefault();
-    if (this.store.adding()) {
+    if (this.store.saving()) {
       return;
     }
     this.submitted.set(true);
@@ -423,21 +504,23 @@ export class SourcesPage {
       return;
     }
     const values = this.values();
-    const body: RepositoryCreate = {
-      name: values.name,
-      source: values.source,
-      trust: values.trust,
-      ...(values.ref ? { ref: values.ref } : {}),
-      ...(values.path ? { path: values.path } : {}),
-    };
+    const editing = this.editing();
     try {
-      const created = await this.store.add(body);
-      this.reset();
-      this.closeForm();
-      if (created.state === "error") {
-        this.toast.warning(this.i18n.t("sources.addedFailed", { name: created.name }));
+      if (editing !== null) {
+        const updated = await this.store.update(editing, this.patchOf(values));
+        this.closeForm();
+        this.toastResult(updated, "updated");
       } else {
-        this.toast.success(this.i18n.t("sources.added", { name: created.name }));
+        const body: RepositoryCreate = {
+          name: values.name,
+          source: values.source,
+          trust: values.trust,
+          ...(values.ref ? { ref: values.ref } : {}),
+          ...(values.path ? { path: values.path } : {}),
+        };
+        const created = await this.store.add(body);
+        this.closeForm();
+        this.toastResult(created, "added");
       }
     } catch (error) {
       if (error instanceof ApiProblem) {
@@ -445,6 +528,45 @@ export class SourcesPage {
       } else {
         throw error;
       }
+    }
+  }
+
+  /** Source, ref and path are always sent (null removes); trust only when it changed. */
+  private patchOf(values: {
+    source: string;
+    ref: string;
+    path: string;
+    trust: Trust;
+  }): RepositoryPatch {
+    const before = this.original?.trust === "pinned" ? "pinned" : "prompt";
+    return {
+      source: values.source,
+      ref: values.ref || null,
+      path: values.path || null,
+      ...(values.trust !== before || this.original?.trust === "signature"
+        ? { trust: values.trust }
+        : {}),
+    };
+  }
+
+  private toastResult(repository: Repository, kind: "added" | "updated"): void {
+    const params = { name: repository.name };
+    if (repository.state === "error") {
+      this.toast.warning(this.i18n.t(`sources.${kind}Failed`, params));
+    } else if (repository.state === "pending" && kind === "updated") {
+      this.toast.info(this.i18n.t("sources.syncedPending", params));
+    } else {
+      this.toast.success(this.i18n.t(`sources.${kind}`, params));
+    }
+  }
+
+  /** The button of the "no plugins" alert: sets the folder, syncs and shows the result. */
+  protected async usePath(repository: Repository, path: string): Promise<void> {
+    try {
+      const updated = await this.store.patch(repository.name, { path });
+      this.toastResult(updated, "updated");
+    } catch (error) {
+      this.fail(error);
     }
   }
 
@@ -507,6 +629,8 @@ export class SourcesPage {
   }
 
   private reset(): void {
+    this.editing.set(null);
+    this.original = null;
     this.name.set("");
     this.source.set("");
     this.ref.set("");
@@ -586,7 +710,9 @@ export class SourcesPage {
       facts,
       busy: this.store.busy().has(repository.name),
       removable: repository.origin === "user" && !repository.locked,
+      editable: repository.origin === "user" && !repository.locked && repository.kind === "plugins",
       syncable: live,
+      emptyPaths: live ? emptyRevisionPaths(repository) : null,
     };
   }
 }

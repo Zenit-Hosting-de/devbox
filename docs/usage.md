@@ -337,6 +337,7 @@ file), unless the earlier entry is `locked`.
 devbox repo list                        # name, state, kind, origin, source, revisions
 devbox repo add team-plugins --source git+https://git.example.com/platform/devbox-plugins.git \
   --ref main --path plugins             # writes the entry to the user file and syncs it
+devbox repo set team-plugins --path plugins   # changes the entry (user file only) and syncs it
 devbox repo sync                        # every enabled repository; or: devbox repo sync team-plugins
 devbox repo approve team-plugins        # make the pending revision active
 devbox repo discard team-plugins        # drop the pending revision
@@ -345,6 +346,27 @@ devbox repo remove team-plugins         # remove the entry and its files
 
 `repo add` takes `--source`, `--ref`, `--path` and `--trust prompt|pinned`. Plugins are
 the only kind so far, so there is no `--kind`.
+
+`repo set NAME` changes an existing entry of the user file with the same flags, all
+optional; only the flags that are given change something, and an empty value removes
+`--ref` or `--path` (`--path ''`). The result is validated like a new entry, then the
+repository is synced: a changed `ref` or `path` yields a pending revision that needs
+approval (trust `prompt`). Entries of the system file and of profiles are refused
+(`conflict`).
+
+The plugin folders must be direct sub-folders of `path`. When the folder holds no plugin
+(a typical mistake is an empty `path` while the plugins live in `plugins/`), the sync
+searches the revision (three levels deep, hidden folders skipped) for folders that do and
+says so:
+
+```text
+team-plugins: revision 3f9a1c0b2d44 waits for approval
+  no plugins found; plugins exist below: plugins (set with --path)
+approve with: devbox repo approve team-plugins
+```
+
+`devbox repo set team-plugins --path plugins` fixes it. The folders are recorded as
+`suggestedPaths` on the revision in `state.json` and in the API.
 
 `repo sync` fetches the source and lists the plugins of the new revision as added (`+`),
 changed (`~`), removed (`-`) or unchanged (`=`), together with their declared permissions
@@ -385,14 +407,18 @@ are only read from the active revision; a pending one is not executed.
 
 ### Web UI and API
 
-The REST API has `GET /repositories`, `POST /repositories`,
+The REST API has `GET /repositories`, `POST /repositories`, `PATCH /repositories/{name}`
+(any of `source`, `ref`, `path`, `trust`; `null` removes `ref` and `path`; answers with the
+synced repository, `409` for an entry of the system file or a profile),
 `POST /repositories/{name}/sync`, `POST /repositories/{name}/approve`,
 `DELETE /repositories/{name}/pending` and `DELETE /repositories/{name}`. A missing `git` or
 network answers `424` with the problem code `prerequisite`. After a sync, an approval or a switch, the WebSocket topic `plugins` sends
 a `plugins` message with the changed plugin IDs and repositories.
 
-The web UI for repositories follows: the Plugins page does not have the "Installed" and
-"Sources" tabs yet. Until then use the CLI.
+In the web UI the "Sources" tab of the Plugins page lists the repositories. "Add source"
+and "Edit" (sources of the user file) open the same form; the name cannot be changed. When
+the newest revision of a source holds no plugins, a warning offers one button "Use path
+<folder>" per suggested folder, which sets the path and syncs.
 
 ### Switching plugins on and off
 

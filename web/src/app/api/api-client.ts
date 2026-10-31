@@ -13,6 +13,7 @@ import type {
   Repository,
   RepositoryCreate,
   RepositoryList,
+  RepositoryPatch,
   Session,
   SessionCreate,
   SessionEventList,
@@ -96,6 +97,13 @@ export class ApiClient {
   /** Writes the entry to the user configuration and syncs it once; this can take long. */
   createRepository(body: RepositoryCreate): Promise<Repository> {
     return firstValueFrom(this.http.post<Repository>(`${this.base}/repositories`, body));
+  }
+
+  /** Changes the entry in the user configuration and syncs it; null removes ref and path. */
+  patchRepository(name: string, body: RepositoryPatch): Promise<Repository> {
+    return firstValueFrom(
+      this.http.patch<Repository>(`${this.base}/repositories/${encodeURIComponent(name)}`, body),
+    );
   }
 
   syncRepository(name: string): Promise<Repository> {

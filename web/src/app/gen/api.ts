@@ -249,7 +249,11 @@ export interface paths {
         delete: operations["deleteRepository"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change a repository of the user configuration and sync it.
+         * @description Writes the given fields into the entry of the user configuration, validates the result like a new entry and syncs the repository. Fields that are not in the body stay; null (or an empty string) removes ref and path. 409 conflict for an entry of the system configuration or a profile (the detail names the origin) and for a kind other than plugins, 422 validation for an invalid result.
+         */
+        patch: operations["patchRepository"];
         trace?: never;
     };
     "/repositories/{name}/sync": {
@@ -1032,6 +1036,8 @@ export interface components {
             syncedAt: string;
             /** @description Plugins of the revision, sorted by folder name. */
             plugins: components["schemas"]["RepositoryPlugin"][];
+            /** @description Only set when the revision has no plugins: sub-directories of the snapshot (relative, slash form, sorted) that hold plugin folders, as a hint for the path. */
+            suggestedPaths?: string[];
         };
         /** @description A fetched revision that waits for approval, compared with the active one. */
         RepositoryPending: {
@@ -1046,6 +1052,8 @@ export interface components {
             fetchedAt: string;
             /** @description The plugins of the pending revision plus the plugins that only the active revision has (change removed), sorted by ID. Every entry has change. */
             plugins: components["schemas"]["RepositoryPlugin"][];
+            /** @description Only set when the revision has no plugins: sub-directories of the snapshot (relative, slash form, sorted) that hold plugin folders, as a hint for the path. */
+            suggestedPaths?: string[];
         };
         /** @description Result of the last successful sync. */
         RepositoryLastSync: {
@@ -1098,6 +1106,20 @@ export interface components {
              * @enum {unknown}
              */
             trust: "prompt" | "pinned";
+        };
+        /** @description Changes of a repository in the user configuration. Fields that are absent stay; null or an empty string removes ref and path. */
+        RepositoryPatch: {
+            /** @description New address, as in RepositoryCreate. */
+            source?: string;
+            /** @description Git branch, tag or commit; null or an empty string removes it (the HEAD of the remote). */
+            ref?: string | null;
+            /** @description Relative sub-directory that holds the plugin folders; null or an empty string removes it (the root). */
+            path?: string | null;
+            /**
+             * @description As in RepositoryCreate.
+             * @enum {unknown}
+             */
+            trust?: "prompt" | "pinned";
         };
         /** @description Approval of the pending revision. */
         RepositoryApprove: {
@@ -1543,6 +1565,40 @@ export interface operations {
             };
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    patchRepository: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every modifying request (CSRF protection), together with a matching Origin. */
+                "X-DevBox-Request": components["parameters"]["DevBoxRequest"];
+            };
+            path: {
+                /** @description Name of the repository. */
+                name: components["schemas"]["Name"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepositoryPatch"];
+            };
+        };
+        responses: {
+            /** @description The repository after the change and the sync. When the sync failed, state is error and lastError says why; the change stays. A changed source, ref or path yields a pending revision (trust prompt) that needs approval. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Repository"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

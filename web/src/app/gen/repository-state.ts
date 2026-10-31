@@ -55,6 +55,10 @@ export interface Revision {
    * The plugin folders found below path, sorted by folder name.
    */
   plugins: RevisionPlugin[];
+  /**
+   * Only set when plugins is empty: sub-directories of the snapshot (slash form, relative, sorted) that hold plugin folders, to hint at a wrong path.
+   */
+  suggestedPaths?: string[];
 }
 /**
  * One plugin folder of a revision.
@@ -132,6 +136,10 @@ export interface Revision1 {
    * The plugin folders found below path, sorted by folder name.
    */
   plugins: RevisionPlugin[];
+  /**
+   * Only set when plugins is empty: sub-directories of the snapshot (slash form, relative, sorted) that hold plugin folders, to hint at a wrong path.
+   */
+  suggestedPaths?: string[];
 }
 /**
  * A fetched revision of the repository.
@@ -156,4 +164,8 @@ export interface Revision2 {
    * The plugin folders found below path, sorted by folder name.
    */
   plugins: RevisionPlugin[];
+  /**
+   * Only set when plugins is empty: sub-directories of the snapshot (slash form, relative, sorted) that hold plugin folders, to hint at a wrong path.
+   */
+  suggestedPaths?: string[];
 }
