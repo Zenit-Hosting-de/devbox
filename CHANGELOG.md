@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/Zenit-Hosting-de/devbox/compare/v0.4.0...v0.5.0) (2026-10-31)
+
+
+### Features
+
+* **repo:** edit sources and suggest the plugin folder ([563c291](https://github.com/Zenit-Hosting-de/devbox/commit/563c291cc8674f01e5d8c0fe5a7e19d73cf5af4e))
+
 ## [0.4.0](https://github.com/Zenit-Hosting-de/devbox/compare/v0.3.0...v0.4.0) (2026-10-29)
 
 
