@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -53,6 +54,9 @@ type Options struct {
 	// RestartDelay is how long clients have to read the restart message before their
 	// connections are closed (default 500 ms).
 	RestartDelay time.Duration
+	// UI holds the web interface (index.html at its root). Without it the build
+	// embedded into the binary is served.
+	UI fs.FS
 }
 
 // Server is the REST API.
@@ -120,7 +124,7 @@ func New(opts Options) (*Server, error) {
 		locks:     runner.NewLocks(),
 		live:      newRegistry(),
 		checks:    newCheckCache(),
-		ui:        newUIFiles(),
+		ui:        newUIFiles(opts.UI),
 		mux:       http.NewServeMux(),
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())

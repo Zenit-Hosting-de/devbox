@@ -78,7 +78,7 @@ exec sh -c 'test -x bin/devbox'
 
 # second update from the new version: nothing to do
 mkdir again
-cp orig/devbox again/devbox
+exec cp orig/devbox again/devbox
 chmod 0755 again/devbox
 env DEVBOX_TEST_VERSION=0.2.0
 env PATH=$WORK/again:$ORIGPATH
@@ -91,7 +91,7 @@ cmp again/devbox orig/devbox
 
 # pre-release channel
 mkdir pre
-cp orig/devbox pre/devbox
+exec cp orig/devbox pre/devbox
 chmod 0755 pre/devbox
 env PATH=$WORK/pre:$ORIGPATH
 exec devbox run system.update --set system.releaseUrl=$RELEASES --set system.updateChannel=prerelease
@@ -101,7 +101,7 @@ stdout '^devbox 0.3.0-rc.1$'
 # a binary folder that is not writable (package install): blocked, exit code 3, nothing changed
 env DEVBOX_TEST_VERSION=0.1.0
 mkdir ro
-cp orig/devbox ro/devbox
+exec cp orig/devbox ro/devbox
 chmod 0755 ro/devbox
 chmod 0555 ro
 env PATH=$WORK/ro:$ORIGPATH
@@ -115,7 +115,7 @@ chmod 0755 ro
 releases add 0.2.1 corrupt
 env DEVBOX_TEST_VERSION=0.2.0
 mkdir bad
-cp orig/devbox bad/devbox
+exec cp orig/devbox bad/devbox
 chmod 0755 bad/devbox
 env PATH=$WORK/bad:$ORIGPATH
 ! exec devbox run system.update --set system.releaseUrl=$RELEASES --json
