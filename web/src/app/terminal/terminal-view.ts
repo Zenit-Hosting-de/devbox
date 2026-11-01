@@ -11,6 +11,7 @@ import {
   output,
   signal,
   viewChild,
+  ViewEncapsulation,
 } from "@angular/core";
 import { ZTheme } from "zenit-ui";
 import type { SessionChannel } from "../ws/session-channel";
@@ -32,13 +33,17 @@ export const RESIZE_DEBOUNCE_MS = 150;
   selector: "dbx-terminal",
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<div #host class="term" role="group" [attr.aria-label]="label()"></div>`,
+  // Unencapsulated: xterm.js creates its own elements, which the xterm styles must reach. They
+  // are part of this lazy chunk and so stay out of the initial bundle.
+  encapsulation: ViewEncapsulation.None,
   styles: `
-    :host {
+    @import "@xterm/xterm/css/xterm.css";
+    dbx-terminal {
       display: block;
       min-height: 0;
       min-width: 0;
     }
-    .term {
+    dbx-terminal .term {
       block-size: 100%;
       padding: var(--space-2);
       background: var(--bg);

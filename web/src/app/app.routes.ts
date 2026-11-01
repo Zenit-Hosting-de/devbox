@@ -1,9 +1,13 @@
 import type { Routes } from "@angular/router";
-import { OverviewPage } from "./pages/overview";
 
 /** `data.title` is a message key; the shell sets the document title from it. */
 export const routes: Routes = [
-  { path: "", pathMatch: "full", component: OverviewPage, data: { title: "nav.overview" } },
+  {
+    path: "",
+    pathMatch: "full",
+    loadComponent: () => import("./pages/overview").then((m) => m.OverviewPage),
+    data: { title: "nav.overview" },
+  },
   {
     path: "plugins",
     loadComponent: () => import("./pages/plugins").then((m) => m.PluginsPage),
