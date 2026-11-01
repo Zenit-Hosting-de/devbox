@@ -51,7 +51,11 @@ type uiFiles struct {
 	fsys fs.FS
 }
 
-func newUIFiles() *uiFiles {
+// newUIFiles serves custom when given, else the embedded build.
+func newUIFiles(custom fs.FS) *uiFiles {
+	if custom != nil {
+		return &uiFiles{fsys: custom}
+	}
 	sub, err := fs.Sub(dist, uiRoot)
 	if err != nil {
 		return &uiFiles{}
