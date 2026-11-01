@@ -73,7 +73,7 @@ describe("I18n", () => {
     expect(resolveMessage(bundles, "de", "a.englishOnly")).toBe("English only");
     expect(resolveMessage(bundles, "de", "a.germanOnly")).toBe("Nur Deutsch");
     expect(resolveMessage(bundles, "en", "a.germanOnly")).toBeUndefined();
-    expect(resolveMessage({}, "de", "nav.overview")).toBe("Overview");
+    expect(resolveMessage({}, "de", "nav.overview")).toBeUndefined();
   });
 
   it("formats parameters and plurals", () => {

@@ -1,6 +1,5 @@
 import { DOCUMENT } from "@angular/common";
-import { Injectable, computed, effect, inject, signal } from "@angular/core";
-import en from "../../i18n/en.json";
+import { InjectionToken, Injectable, computed, effect, inject, signal } from "@angular/core";
 import { STORAGE_KEYS, readStored, writeStored } from "../core/storage";
 import { formatMessage, type MessageParams } from "./icu";
 
@@ -27,13 +26,20 @@ export function messagesOf(file: Readonly<Record<string, unknown>>): Bundle {
   return out;
 }
 
-/** English is the last fallback and always present; other languages load on demand. */
-const ENGLISH: Bundle = messagesOf(en);
-
+/**
+ * Every language is its own lazy chunk, so none of them counts towards the initial bundle. The
+ * app initializer loads the active language and English (the last fallback) before the first
+ * render.
+ */
 const LOADERS: Readonly<Record<Language, () => Promise<Bundle>>> = {
-  en: () => Promise.resolve(ENGLISH),
+  en: () => import("../../i18n/en.json").then((m) => messagesOf(m.default)),
   de: () => import("../../i18n/de.json").then((m) => messagesOf(m.default)),
 };
+
+/** Texts that are available from the start (tests); everything else loads on demand. */
+export const PRELOADED_BUNDLES = new InjectionToken<Readonly<Partial<Record<Language, Bundle>>>>(
+  "dbx.i18n.preloaded",
+);
 
 /**
  * The message for a key: the language, then English, then undefined (the caller shows the key,
@@ -44,7 +50,7 @@ export function resolveMessage(
   language: Language,
   key: string,
 ): string | undefined {
-  return bundles[language]?.[key] ?? bundles[FALLBACK_LANGUAGE]?.[key] ?? ENGLISH[key];
+  return bundles[language]?.[key] ?? bundles[FALLBACK_LANGUAGE]?.[key];
 }
 
 export function isLanguage(value: unknown): value is Language {
@@ -68,7 +74,10 @@ export class I18n {
   readonly language = signal<Language>(this.initialLanguage());
   readonly locale = computed(() => this.language());
 
-  private readonly bundles = signal<Partial<Record<Language, Bundle>>>({ en: ENGLISH });
+  private readonly bundles = signal<Partial<Record<Language, Bundle>>>({
+    ...inject(PRELOADED_BUNDLES, { optional: true }),
+  });
+  private readonly pending = new Map<Language, Promise<void>>();
 
   /** True once the viewer picked a language (stored in the browser). */
   private chosen = readStored(STORAGE_KEYS.language) !== null;
@@ -93,13 +102,32 @@ export class I18n {
     return resolveMessage(this.bundles(), this.language(), key) !== undefined;
   }
 
-  /** Loads the texts of a language (once). */
+  /**
+   * Loads the texts of a language (once), and English as the fallback. A failing fallback is not
+   * fatal: missing texts then show their key.
+   */
   async ensureLoaded(language: Language): Promise<void> {
+    const fallback = this.load(FALLBACK_LANGUAGE).catch(() => undefined);
+    await this.load(language);
+    await fallback;
+  }
+
+  private load(language: Language): Promise<void> {
     if (this.bundles()[language]) {
-      return;
+      return Promise.resolve();
     }
-    const bundle = await LOADERS[language]();
-    this.bundles.update((all) => ({ ...all, [language]: bundle }));
+    let loading = this.pending.get(language);
+    if (!loading) {
+      loading = LOADERS[language]()
+        .then((bundle) => {
+          this.bundles.update((all) => ({ ...all, [language]: bundle }));
+        })
+        .finally(() => {
+          this.pending.delete(language);
+        });
+      this.pending.set(language, loading);
+    }
+    return loading;
   }
 
   /** Switches the language for this viewer and remembers it. No reload; texts update at once. */
