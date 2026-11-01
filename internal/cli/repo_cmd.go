@@ -29,10 +29,11 @@ func (a *app) repoCommand() *cobra.Command {
 	add.Flags().StringVar(&spec.Ref, "ref", "", "Git branch, tag or commit (default: the HEAD of the remote)")
 	add.Flags().StringVar(&spec.Path, "path", "", "sub-directory that holds the plugin folders")
 	add.Flags().StringVar(&spec.Trust, "trust", "", "prompt (default) or pinned (git commit in --ref, no approval)")
+	add.Flags().StringVar(&spec.Credential, "credential", "", "credential instance (git-host or registry) for a private repository (https and git+https)")
 	_ = add.MarkFlagRequired("source")
 
 	var patch core.RepoPatch
-	var source, ref, path, trust string
+	var source, ref, path, trust, credential string
 	set := &cobra.Command{
 		Use: "set NAME", Short: "change a repository of the user configuration and sync it", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -41,7 +42,7 @@ func (a *app) repoCommand() *cobra.Command {
 				flag string
 				val  *string
 				dst  **string
-			}{{"source", &source, &patch.Source}, {"ref", &ref, &patch.Ref}, {"path", &path, &patch.Path}, {"trust", &trust, &patch.Trust}} {
+			}{{"source", &source, &patch.Source}, {"ref", &ref, &patch.Ref}, {"path", &path, &patch.Path}, {"trust", &trust, &patch.Trust}, {"credential", &credential, &patch.Credential}} {
 				*f.dst = nil
 				if cmd.Flags().Changed(f.flag) {
 					v := *f.val
@@ -55,6 +56,7 @@ func (a *app) repoCommand() *cobra.Command {
 	set.Flags().StringVar(&ref, "ref", "", "Git branch, tag or commit (empty: the HEAD of the remote)")
 	set.Flags().StringVar(&path, "path", "", "sub-directory that holds the plugin folders (empty: the root)")
 	set.Flags().StringVar(&trust, "trust", "", "prompt (empty: the default) or pinned")
+	set.Flags().StringVar(&credential, "credential", "", "credential instance for a private repository (empty: none)")
 
 	var yes bool
 	approve := &cobra.Command{
@@ -63,7 +65,18 @@ func (a *app) repoCommand() *cobra.Command {
 	}
 	approve.Flags().BoolVar(&yes, "yes", false, "approve without asking")
 
+	var helperHost string
+	helper := &cobra.Command{
+		Use: "git-credential OPERATION", Hidden: true, Args: cobra.ExactArgs(1),
+		Short: "Git credential helper for private repositories (called by Git, not by users)",
+		RunE: func(_ *cobra.Command, args []string) error {
+			return repo.RunGitCredential(a.io.Stdin, a.io.Stdout, args[0], helperHost, a.io.Getenv(repo.GitCredentialEnv))
+		},
+	}
+	helper.Flags().StringVar(&helperHost, "host", "", "host (and port) the secret may go to")
+
 	cmd.AddCommand(
+		helper,
 		&cobra.Command{Use: "list", Short: "list the repositories", Args: cobra.NoArgs, RunE: a.repoList},
 		add,
 		set,
@@ -155,7 +168,7 @@ func (a *app) repoAdd(cmd *cobra.Command, spec core.RepoSpec) error {
 
 func (a *app) repoSet(cmd *cobra.Command, name string, patch core.RepoPatch) error {
 	if patch.Empty() {
-		return &exitError{code: ExitInvalid, err: errors.New("nothing to change: give at least one of --source, --ref, --path, --trust")}
+		return &exitError{code: ExitInvalid, err: errors.New("nothing to change: give at least one of --source, --ref, --path, --trust, --credential")}
 	}
 	st, err := a.load(true)
 	if err != nil {

@@ -39,7 +39,7 @@ func (s *Server) createRepository(w http.ResponseWriter, r *http.Request) error 
 		v, _ := body[key].(string)
 		return v
 	}
-	spec := core.RepoSpec{Name: str("name"), Source: str("source"), Ref: str("ref"), Path: str("path"), Trust: str("trust")}
+	spec := core.RepoSpec{Name: str("name"), Source: str("source"), Ref: str("ref"), Path: str("path"), Trust: str("trust"), Credential: str("credential")}
 	st, err := s.load()
 	if err != nil {
 		return err
@@ -79,7 +79,7 @@ func (s *Server) patchRepository(w http.ResponseWriter, r *http.Request) error {
 		str, _ := v.(string)
 		return &str
 	}
-	patch := core.RepoPatch{Source: field("source"), Ref: field("ref"), Path: field("path"), Trust: field("trust")}
+	patch := core.RepoPatch{Source: field("source"), Ref: field("ref"), Path: field("path"), Trust: field("trust"), Credential: field("credential")}
 	st, err := s.load()
 	if err != nil {
 		return err

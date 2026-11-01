@@ -210,7 +210,7 @@ file from `network` are passed to every plugin.
 
 ## Credentials
 
-A credential instance has a type (defined by a plugin, e.g. `registry`), fields, a secret
+A credential instance has a type (defined by a plugin: `registry` and `git-host` are bundled), fields, a secret
 and consumers: plugins that write it into the configuration of their tool. Profiles can
 prepare instances (fields preset or locked, consumers listed), so only the secret is
 missing. The metadata lives in `~/.local/share/devbox/credentials.json` (mode 0600, no
@@ -323,6 +323,7 @@ devbox config edit
 | `source`  | `git+https://`, `git+ssh://`, `git+file://` (local Git repository), `https://` (tar.gz, at most 100 MiB) or `file://` (local directory, `file:///absolute/path`) |
 | `ref`     | Branch, tag or commit; Git sources only. Default: the HEAD of the remote                                                 |
 | `path`    | Sub-directory that holds the plugin folders                                                                              |
+| `credential` | Name of a credential instance of type `git-host` or `registry` for a private repository, see below                    |
 | `trust`   | `prompt` (default) or `pinned`, see below                                                                                |
 | `enabled` | `false` keeps the entry but ignores it                                                                                   |
 | `locked`  | In a profile or the system file: the user cannot replace the entry                                                       |
@@ -344,12 +345,12 @@ devbox repo discard team-plugins        # drop the pending revision
 devbox repo remove team-plugins         # remove the entry and its files
 ```
 
-`repo add` takes `--source`, `--ref`, `--path` and `--trust prompt|pinned`. Plugins are
-the only kind so far, so there is no `--kind`.
+`repo add` takes `--source`, `--ref`, `--path`, `--credential NAME` and
+`--trust prompt|pinned`. Plugins are the only kind so far, so there is no `--kind`.
 
 `repo set NAME` changes an existing entry of the user file with the same flags, all
 optional; only the flags that are given change something, and an empty value removes
-`--ref` or `--path` (`--path ''`). The result is validated like a new entry, then the
+`--ref`, `--path` or `--credential` (`--path ''`). The result is validated like a new entry, then the
 repository is synced: a changed `ref` or `path` yields a pending revision that needs
 approval (trust `prompt`). Entries of the system file and of profiles are refused
 (`conflict`).
@@ -394,8 +395,48 @@ approve with: devbox repo approve team-plugins
 - `pinned`: only for Git sources whose `ref` is a full 40-character commit. The synced
   revision becomes active without approval, because the commit is the approval.
 
-A `trust` object (Sigstore signature) and `credential` (access to private repositories)
-are not supported yet and are refused with an error; both follow later.
+A `trust` object (Sigstore signature) is not supported yet and is refused with an error; it
+follows later.
+
+### Private sources
+
+`credential` names a credential instance (see "Credentials") of type `git-host` or
+`registry` for a source that needs a login: a private Git repository over `git+https://` or
+a tar.gz behind a login over `https://`.
+
+```bash
+devbox cred add company-git --type git-host --field url=https://git.example.com --field flavor=gitlab
+devbox cred set company-git                       # hidden input; verifies the token
+devbox repo add team-plugins --source git+https://git.example.com/platform/devbox-plugins.git \
+  --path plugins --credential company-git
+devbox repo set team-plugins --credential ''      # back to a public source
+```
+
+- The instance must exist and be of type `git-host` or `registry` when the entry is written;
+  its secret is read from the vault at each sync. A missing secret or vault entry is an
+  error in the state of the source, as is a vault that asks for a passphrase when the sync
+  runs in the web service (`devbox serve` cannot ask; run `devbox repo sync` in a terminal).
+- Only `git+https://` and `https://` sources take a credential. `git+ssh://` is refused
+  (SSH keys are a separate credential type that follows later), as are `git+file://` and
+  `file://`. An address must not contain a password; a user name next to a credential is
+  refused as well.
+- The secret goes only to the host of the instance (its field `url`) or a subdomain of it
+  (`api.github.com` for `github.com`), only over https, and never to plugins. If the host
+  of the source differs, nothing is sent and the sync fails with an error that names both
+  hosts. A redirect to another host does not carry the secret.
+- Downloads (`https://`) send the secret as the type defines it (`httpAuth` in
+  `plugin.json`): `Authorization: Bearer`, `token` or `Basic`, or `PRIVATE-TOKEN` (GitLab).
+  For a `registry` this follows the layout and the user name, for a `git-host` the flavor.
+- Git (`git+https://`) gets the secret from a credential helper that is the `devbox` binary
+  itself (`devbox repo git-credential`, hidden). DevBox writes the user name and the secret
+  into a file (mode 0600) in a private directory (0700, below `XDG_RUNTIME_DIR` when there
+  is one), starts Git with `-c credential.helper=` (which resets the helpers of the user,
+  so none of them interferes) and the helper, and removes the directory after the sync.
+  The environment of Git names the file (`DEVBOX_GIT_CREDENTIAL_FILE`), the secret is in no
+  argument and no environment variable, and the helper answers only for the host of the
+  instance. The user name is the field `username` of the instance (default `oauth2`).
+- The secret is also removed from every error text (Git echoes addresses), so it is in no
+  log, no `state.json`, no API answer and no event.
 
 ### Where the files live
 
@@ -408,7 +449,7 @@ are only read from the active revision; a pending one is not executed.
 ### Web UI and API
 
 The REST API has `GET /repositories`, `POST /repositories`, `PATCH /repositories/{name}`
-(any of `source`, `ref`, `path`, `trust`; `null` removes `ref` and `path`; answers with the
+(any of `source`, `ref`, `path`, `credential`, `trust`; `null` removes `ref`, `path` and `credential`; answers with the
 synced repository, `409` for an entry of the system file or a profile),
 `POST /repositories/{name}/sync`, `POST /repositories/{name}/approve`,
 `DELETE /repositories/{name}/pending` and `DELETE /repositories/{name}`. A missing `git` or
@@ -416,7 +457,9 @@ network answers `424` with the problem code `prerequisite`. After a sync, an app
 a `plugins` message with the changed plugin IDs and repositories.
 
 In the web UI the "Sources" tab of the Plugins page lists the repositories. "Add source"
-and "Edit" (sources of the user file) open the same form; the name cannot be changed. When
+and "Edit" (sources of the user file) open the same form; the name cannot be changed. The
+optional "Access" select lists the credential instances of type `git-host` and `registry`
+(from `GET /credentials`). When
 the newest revision of a source holds no plugins, a warning offers one button "Use path
 <folder>" per suggested folder, which sets the path and syncs.
 
@@ -555,13 +598,14 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
 - web UI (the placeholder page only), `devbox service …`, terminal menu (`devbox` without arguments)
 - `devbox setup`, `devbox group run` (for example `update-all`), `devbox check`,
   `devbox actions`, `devbox status --strict` (exit codes 5 and 6)
-- the registry consumers `npm`, `maven`, `nuget`, `pip`, `docker` and the credential types
-  `git-host`, `ssh-key`, `generic`; the event `credential.changed`
+- the registry consumers `nuget`, `pip`, `docker`, the consumer of `git-host` (Git credential
+  helper for the user, SSH key upload) and the credential types `ssh-key`, `generic`; the
+  event `credential.changed`
 - `devbox profile …`; profiles from HTTPS or Git sources (only `file://` works today)
 - `devbox plugin install|update|remove` and plugin catalogs
 - plugin repositories: the web UI (Plugins page with "Installed" and "Sources"), the kinds
-  `catalog`, `profile`, `templates` and `packages`, credentials and Sigstore signatures
-  (`credential`, `trust` object), `devbox repo init`
+  `catalog`, `profile`, `templates` and `packages`, SSH keys for `git+ssh://` sources and
+  Sigstore signatures (`trust` object), `devbox repo init`
 - `devbox doctor`, `devbox schema print`, `devbox migrate`, `devbox completion`
 - global flags `--quiet`, `--no-color`, `--lang`, `--socket`
 - the remaining bundled plugins (`node`, `dotnet`, `python`, `docker`, `git`, `xrdp`,

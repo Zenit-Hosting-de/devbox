@@ -151,7 +151,10 @@ func (a *app) printJSON(v any) error {
 }
 
 func (a *app) coreEnv() core.Env {
-	return core.Env{Getenv: a.io.Getenv, Environ: a.io.Environ, ConfigPath: a.configPath, Sets: a.sets}
+	return core.Env{
+		Getenv: a.io.Getenv, Environ: a.io.Environ, ConfigPath: a.configPath, Sets: a.sets,
+		VaultPassphrase: func() (string, error) { return a.readPassphrase("Vault passphrase: ") },
+	}
 }
 
 // env returns the directories and paths without loading the plugins.

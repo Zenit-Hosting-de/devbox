@@ -1,0 +1,18 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "Git-Server",
+  "plugin.description": "Zugangstyp für Git-Server (GitHub, GitLab, Gitea, Bitbucket) mit Prüfung gegen die API des Servers",
+  "settings.verifyUrls.label": "Prüfadresse je Art des Servers",
+  "settings.verifyUrls.help": "Adresse, die die Prüfung abfragt, je Art; {url} steht für die Adresse der Instanz. Leer: nur prüfen, ob der Server antwortet.",
+  "settings.publicApis.label": "Prüfadresse öffentlicher Dienste",
+  "settings.publicApis.help": "Dienste, deren API woanders liegt: der Host-Name der Instanz, dann die Adresse, die die Prüfung abfragt.",
+  "settings.timeout.label": "Zeitgrenze der Prüfung in Sekunden",
+  "credentialTypes.git-host.label": "Git-Server",
+  "credentialTypes.git-host.fields.url.label": "Adresse",
+  "credentialTypes.git-host.fields.url.help": "Adresse des Servers, z. B. ein GitLab-Server der Firma.",
+  "credentialTypes.git-host.fields.flavor.label": "Art des Servers",
+  "credentialTypes.git-host.fields.username.label": "Benutzername",
+  "credentialTypes.git-host.fields.username.help": "Wird mit dem Token an Git übergeben. Die meisten Server nehmen jeden nicht leeren Namen; Bitbucket braucht den Kontonamen (App-Passwort) oder x-token-auth (Zugriffstoken).",
+  "credentialTypes.git-host.secret.label": "Persönliches Zugriffstoken",
+  "actions.verify.label": "Zugangsdaten prüfen"
+}
