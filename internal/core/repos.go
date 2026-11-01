@@ -23,7 +23,9 @@ func (st *State) newRepoManager() *repo.Manager {
 		LookPath: func(name string) (string, error) {
 			return LookPath(name, st.Env.Getenv("PATH"))
 		},
-		Client: st.Env.HTTPClient,
+		Client:     st.Env.HTTPClient,
+		Credential: st.repositoryCredential,
+		Helper:     func() (string, error) { return SelfPath(st.Env.Getenv("PATH")) },
 	}
 }
 
@@ -81,6 +83,9 @@ func (st *State) RepositoryView(name string) (repo.View, error) {
 // RepoSpec is a new plugin repository.
 type RepoSpec struct {
 	Name, Source, Ref, Path, Trust string
+	// Credential is the name of a credential instance (git-host or registry) for a
+	// private repository; empty for none.
+	Credential string
 }
 
 // AddRepository writes a repository of kind plugins into the user file. The name must
@@ -91,11 +96,16 @@ func (st *State) AddRepository(spec RepoSpec) error {
 			return &config.Error{Code: config.CodeConflict, Key: spec.Name, Detail: "a repository with this name exists (" + e.Origin + ")"}
 		}
 	}
-	if err := repo.ValidateNew(spec.Name, spec.Source, spec.Ref, spec.Path, spec.Trust); err != nil {
+	if err := repo.ValidateNew(spec.Name, spec.Source, spec.Ref, spec.Path, spec.Trust, spec.Credential); err != nil {
 		return err
 	}
+	if spec.Credential != "" {
+		if err := st.CheckRepositoryCredential(spec.Credential); err != nil {
+			return err
+		}
+	}
 	fields := [][2]any{{"kind", repo.KindPlugins}, {"source", spec.Source}}
-	for _, kv := range [][2]string{{"ref", spec.Ref}, {"path", spec.Path}, {"trust", spec.Trust}} {
+	for _, kv := range [][2]string{{"ref", spec.Ref}, {"path", spec.Path}, {"credential", spec.Credential}, {"trust", spec.Trust}} {
 		if kv[1] != "" {
 			fields = append(fields, [2]any{kv[0], kv[1]})
 		}
@@ -104,15 +114,15 @@ func (st *State) AddRepository(spec RepoSpec) error {
 }
 
 // RepoPatch changes fields of a repository of the user file. A nil field stays as it
-// is; an empty Ref or Path removes the field (and an empty Trust returns to the
-// default, prompt).
+// is; an empty Ref, Path or Credential removes the field (and an empty Trust returns
+// to the default, prompt).
 type RepoPatch struct {
-	Source, Ref, Path, Trust *string
+	Source, Ref, Path, Trust, Credential *string
 }
 
 // Empty reports whether the patch names no field.
 func (p RepoPatch) Empty() bool {
-	return p.Source == nil && p.Ref == nil && p.Path == nil && p.Trust == nil
+	return p.Source == nil && p.Ref == nil && p.Path == nil && p.Trust == nil && p.Credential == nil
 }
 
 // UpdateRepository changes fields of a repository of kind plugins in the user file. The
@@ -129,7 +139,7 @@ func (st *State) UpdateRepository(name string, p RepoPatch) (bool, error) {
 	if !e.Supported() {
 		return false, &config.Error{Code: config.CodeConflict, Key: name, Detail: "repositories of the kind " + e.Kind + " are not supported yet"}
 	}
-	next := map[string]string{"source": e.Source, "ref": e.Ref, "path": e.Path}
+	next := map[string]string{"source": e.Source, "ref": e.Ref, "path": e.Path, "credential": e.Credential}
 	if e.Trust != repo.TrustSignature {
 		next["trust"] = e.Trust
 	}
@@ -138,7 +148,7 @@ func (st *State) UpdateRepository(name string, p RepoPatch) (bool, error) {
 	for _, f := range []struct {
 		key string
 		val *string
-	}{{"source", p.Source}, {"ref", p.Ref}, {"path", p.Path}, {"trust", p.Trust}} {
+	}{{"source", p.Source}, {"ref", p.Ref}, {"path", p.Path}, {"credential", p.Credential}, {"trust", p.Trust}} {
 		if f.val == nil || *f.val == next[f.key] || (f.key == "trust" && *f.val == "" && next[f.key] == repo.TrustPrompt) {
 			continue
 		}
@@ -152,8 +162,13 @@ func (st *State) UpdateRepository(name string, p RepoPatch) (bool, error) {
 	if next["trust"] == "" {
 		next["trust"] = repo.TrustPrompt
 	}
-	if err := repo.ValidateNew(name, next["source"], next["ref"], next["path"], next["trust"]); err != nil {
+	if err := repo.ValidateNew(name, next["source"], next["ref"], next["path"], next["trust"], next["credential"]); err != nil {
 		return false, err
+	}
+	if p.Credential != nil && next["credential"] != "" && next["credential"] != e.Credential {
+		if err := st.CheckRepositoryCredential(next["credential"]); err != nil {
+			return false, err
+		}
 	}
 	if len(set) == 0 && len(remove) == 0 {
 		return false, nil

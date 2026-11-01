@@ -26,6 +26,13 @@ export type Command1 = [string, ...string[]];
  */
 export type Text = string;
 /**
+ * Authorization: Bearer <secret>, Authorization: Basic <user:secret>, Authorization: token <secret>, or the header PRIVATE-TOKEN: <secret>.
+ *
+ * This interface was referenced by `DevBoxPluginManifest`'s JSON-Schema
+ * via the `definition` "httpScheme".
+ */
+export type HttpScheme = "bearer" | "basic" | "token" | "private-token";
+/**
  * Command that writes the credential into the tool configuration.
  *
  * @minItems 1
@@ -862,6 +869,29 @@ export interface CredentialType {
    * Action that verifies an instance.
    */
   verify?: string;
+  /**
+   * How DevBox sends the secret of an instance to its host when it downloads a private repository (an https tarball): in the Authorization header as bearer or token, as basic authentication with the user name, or as PRIVATE-TOKEN header. Only credential types of repositories need it.
+   */
+  httpAuth?: {
+    /**
+     * Scheme used when nothing below applies.
+     */
+    scheme: "bearer" | "basic" | "token" | "private-token";
+    /**
+     * Field whose value selects the scheme from schemes.
+     */
+    by?: string;
+    /**
+     * Scheme per value of the field named in by.
+     */
+    schemes?: {
+      [k: string]: HttpScheme;
+    };
+    /**
+     * Field that holds a user name; when an instance sets it, the scheme is basic (unless it is private-token).
+     */
+    userField?: string;
+  };
 }
 /**
  * Consumer: writes credentials of one type into a tool's configuration and removes them again.

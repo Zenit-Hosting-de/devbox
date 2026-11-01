@@ -37,6 +37,9 @@ const (
 	sourceFile  = "file"
 )
 
+// credentialName matches the name of a credential instance (schema/credentials.v1.json).
+var credentialName = regexp.MustCompile(`^[a-z][a-z0-9-]{1,31}$`)
+
 var fullCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // ValidName matches the name of a repository (schema/config.v1.json, repositories).
@@ -191,8 +194,8 @@ func (e Entry) Problem() error {
 	if e.Trust == TrustSignature {
 		return invalid("signature trust arrives with the catalog (AP-23)")
 	}
-	if e.Credential != "" {
-		return invalid("credentials for repositories are not supported yet")
+	if e.Credential != "" && !credentialName.MatchString(e.Credential) {
+		return invalid("credential %q is not the name of a credential instance", e.Credential)
 	}
 	if e.source == "" {
 		return invalid("source is required")
@@ -200,6 +203,9 @@ func (e Entry) Problem() error {
 	kind, _, err := splitSource(e.source)
 	if err != nil {
 		return invalid("%v", err)
+	}
+	if err := e.checkAccess(kind); err != nil {
+		return err
 	}
 	if e.Ref != "" {
 		if kind != sourceGit {
@@ -218,16 +224,43 @@ func (e Entry) Problem() error {
 	return nil
 }
 
+// checkAccess checks source and credential against each other: a credential belongs
+// to an https address (a tarball or Git over https), and an address carries no
+// password, which would end up in the configuration.
+func (e Entry) checkAccess(kind string) error {
+	invalid := func(format string, a ...any) error {
+		return &config.Error{Code: config.CodeValidation, Detail: fmt.Sprintf(format, a...)}
+	}
+	https := strings.HasPrefix(e.source, "https://") || strings.HasPrefix(e.source, "git+https://")
+	if https {
+		if u, err := url.Parse(e.source); err == nil && u.User != nil {
+			if _, hasPassword := u.User.Password(); hasPassword || e.Credential != "" {
+				return invalid("source must not contain a user name or password; use credential for private repositories")
+			}
+		}
+	}
+	switch {
+	case e.Credential == "" || https:
+		return nil
+	case strings.HasPrefix(e.source, "git+ssh://"):
+		return invalid("credential is not supported for git+ssh sources (SSH keys are a separate credential type)")
+	case kind == sourceFile || strings.HasPrefix(e.source, "git+file://"):
+		return invalid("credential is only used with https and git+https sources")
+	}
+	return nil
+}
+
 func validSubPath(p string) bool {
 	return !strings.Contains(p, `\`) && !strings.ContainsRune(p, 0) && filepath.IsLocal(p)
 }
 
 // ValidateNew checks the fields of an entry that is about to be written. It returns
-// the same errors as Problem, for an entry of kind plugins.
-func ValidateNew(name, source, ref, subPath, trust string) error {
+// the same errors as Problem, for an entry of kind plugins. Whether the credential
+// instance exists is not part of it (the core checks that).
+func ValidateNew(name, source, ref, subPath, trust, credential string) error {
 	e := Entry{
 		Name: name, Kind: KindPlugins, Source: source, Ref: ref, Path: subPath, Trust: trust,
-		Enabled: true, Origin: OriginUser, source: source, path: subPath,
+		Credential: credential, Enabled: true, Origin: OriginUser, source: source, path: subPath,
 	}
 	if e.Trust == "" {
 		e.Trust = TrustPrompt

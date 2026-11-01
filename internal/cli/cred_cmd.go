@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -464,41 +463,7 @@ func mayAccess(p *plugin.Plugin, typ string) bool {
 
 // openVault opens the vault backend (empty: vault.backend of the configuration).
 func (a *app) openVault(st *core.State, backend string) (vault.Backend, error) {
-	passphrase := false
-	configured := ""
-	for _, f := range []*config.File{st.System, st.User} {
-		v, _ := f.Plain()["vault"].(map[string]any)
-		if b, ok := v["backend"].(string); ok {
-			configured = b
-		}
-		if p, ok := v["passphrase"].(bool); ok {
-			passphrase = p
-		}
-	}
-	if backend == "" {
-		backend = configured
-	}
-	opts := vault.Options{
-		Backend: backend, DataDir: filepath.Join(st.Ctx.XDG.Data, "devbox"),
-		Keyring: vault.SystemKeyring{}, Validator: st.Validator,
-	}
-	if passphrase {
-		switch strings.ToLower(backend) {
-		case vault.BackendKeyring:
-			passphrase = false
-		case "", vault.BackendAuto:
-			// the Secret Service wins when there is one; the passphrase then has no use
-			passphrase = !vault.NewKeyring(opts.Keyring).Available()
-		}
-	}
-	if passphrase {
-		p, err := a.readPassphrase("Vault passphrase: ")
-		if err != nil {
-			return nil, err
-		}
-		opts.Passphrase = p
-	}
-	return vault.Open(opts)
+	return st.OpenVault(backend)
 }
 
 // readHidden reads a line from the terminal on stdin without echo.

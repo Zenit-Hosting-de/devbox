@@ -317,6 +317,112 @@ describe("SourcesPage (against the mock backend)", () => {
       expect(byText(source(fixture, "demo-src"), "button", "Review changes")).toBeDefined();
     });
 
+    function chooseAccess(fixture: ComponentFixture<SourcesPage>, value: string): void {
+      const select = (fixture.nativeElement as HTMLElement).querySelector<HTMLSelectElement>(
+        "#src-credential",
+      );
+      if (!select) {
+        throw new Error("access select not found");
+      }
+      select.value = value;
+      select.dispatchEvent(new Event("change"));
+    }
+
+    it("offers the credentials of Git hosts and registries as access", async () => {
+      const fixture = await open();
+      await openForm(fixture);
+      await settle(fixture, () => {
+        const options = queryAll(fixture, "#src-credential option").map((o) =>
+          o.textContent?.trim(),
+        );
+        expect(options).toEqual([
+          "None (public source)",
+          "git-example (Git server example.com)",
+          "registry-team (Team registry)",
+        ]);
+      });
+      expect(fixture.nativeElement.textContent).toContain("never to plugins");
+    });
+
+    it("sends the access of a private source, lists it and can remove it again", async () => {
+      const fixture = await open();
+      const create = vi.spyOn(backend, "createRepository");
+      const patch = vi.spyOn(backend, "patchRepository");
+      await openForm(fixture);
+      await settle(fixture, () => {
+        expect(queryAll(fixture, "#src-credential option")).toHaveLength(3);
+      });
+      fillForm(fixture, { name: "private-src", source: "git+https://git.example.com/p.git" });
+      chooseAccess(fixture, "git-example");
+      byText(fixture, "button", "Add and sync")?.click();
+      await settle(fixture, () => {
+        expect(source(fixture, "private-src")).toBeDefined();
+      });
+      expect(create).toHaveBeenCalledWith({
+        name: "private-src",
+        source: "git+https://git.example.com/p.git",
+        credential: "git-example",
+        trust: "prompt",
+      });
+      expect(source(fixture, "private-src").textContent).toContain("git-example");
+
+      byText(source(fixture, "private-src"), "button", "Edit")?.click();
+      await settle(fixture, () => {
+        expect(input(fixture, "src-name").value).toBe("private-src");
+      });
+      const select = (fixture.nativeElement as HTMLElement).querySelector<HTMLSelectElement>(
+        "#src-credential",
+      );
+      expect(select?.value).toBe("git-example");
+      chooseAccess(fixture, "");
+      byText(fixture, "button", "Save and sync")?.click();
+      await settle(fixture, () => {
+        expect(patch).toHaveBeenCalledWith("private-src", {
+          source: "git+https://git.example.com/p.git",
+          ref: null,
+          path: null,
+          credential: null,
+        });
+      });
+      await settle(fixture, () => {
+        expect(source(fixture, "private-src").textContent).not.toContain("git-example");
+      });
+    });
+
+    it("refuses access for a source that is not on https before anything is sent", async () => {
+      const fixture = await open();
+      const create = vi.spyOn(backend, "createRepository");
+      await openForm(fixture);
+      fillForm(fixture, { name: "local-src", source: "file:///tmp/demo" });
+      chooseAccess(fixture, "git-example");
+      byText(fixture, "button", "Add and sync")?.click();
+      await settle(fixture, () => {
+        expect(fixture.nativeElement.textContent).toContain(
+          "Access can only be used with https:// and git+https:// addresses.",
+        );
+      });
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("shows a refusal of the core at the access field", async () => {
+      const fixture = await open();
+      await openForm(fixture);
+      fillForm(fixture, { name: "demo-src", source: "https://example.com/p.tar.gz" });
+      vi.spyOn(backend, "createRepository").mockImplementation(() => {
+        throw new MockProblem(422, "validation", "invalid", [
+          { pointer: "/credential", code: "credential", message: "no such credential" },
+        ]);
+      });
+      await settle(fixture, () => {
+        expect(queryAll(fixture, "#src-credential option")).toHaveLength(3);
+      });
+      chooseAccess(fixture, "git-example");
+      byText(fixture, "button", "Add and sync")?.click();
+      await settle(fixture, () => {
+        expect(fixture.nativeElement.textContent).toContain("no such credential");
+      });
+    });
+
     it("lists a source whose first sync failed with its error", async () => {
       const fixture = await open();
       await openForm(fixture);

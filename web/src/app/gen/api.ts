@@ -1075,6 +1075,8 @@ export interface components {
             ref?: string;
             /** @description Sub-directory with the plugin folders; absent means the root. */
             path?: string;
+            /** @description Name of the credential instance (git-host or registry) for a private repository. Only the name, never the secret. */
+            credential?: string;
             trust?: components["schemas"]["RepositoryTrust"];
             /** @description false lists the entry but loads nothing. */
             enabled: boolean;
@@ -1100,6 +1102,8 @@ export interface components {
             ref?: string;
             /** @description Relative sub-directory that holds the plugin folders. */
             path?: string;
+            /** @description Credential instance (git-host or registry, GET /credentials) for a private repository; only for https and git+https sources. The secret goes only to Git or the download. */
+            credential?: components["schemas"]["Name"];
             /**
              * @description pinned is only valid for a git source whose ref is a full 40-character commit; the synced revision is then active without approval.
              * @default prompt
@@ -1115,6 +1119,8 @@ export interface components {
             ref?: string | null;
             /** @description Relative sub-directory that holds the plugin folders; null or an empty string removes it (the root). */
             path?: string | null;
+            /** @description Credential instance as in RepositoryCreate; null or an empty string removes it. */
+            credential?: string | null;
             /**
              * @description As in RepositoryCreate.
              * @enum {unknown}
