@@ -1,0 +1,22 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "pip",
+  "plugin.description": "Python-Paketindizes und ihre Zugangsdaten in die Konfiguration von pip und uv schreiben",
+  "settings.mode.label": "Ablage der Zugangsdaten",
+  "settings.mode.help": "file: pip.conf und uv.toml nennen den Index, die Zugangsdaten stehen in .netrc (Modus 0600). env: PIP_INDEX_URL und UV_DEFAULT_INDEX mit den Zugangsdaten in der Adresse werden aus einer Datei für die Shell-Umgebung exportiert (Modus 0600).",
+  "settings.targets.label": "Werkzeuge",
+  "settings.targets.help": "Werkzeuge, die den Index von Zugangsdaten erhalten.",
+  "settings.pipConfig.label": "pip-Konfigurationsdatei",
+  "settings.uvConfig.label": "uv-Konfigurationsdatei",
+  "settings.netrc.label": "netrc-Datei",
+  "settings.netrc.help": "Enthält die Zugangsdaten im Modus file. pip und uv lesen sie.",
+  "settings.envFile.label": "Datei für die Shell-Umgebung",
+  "settings.envFile.help": "Exportiert PIP_INDEX_URL und UV_DEFAULT_INDEX im Modus env.",
+  "settings.defaultIndex.label": "Standard-Index",
+  "settings.defaultIndex.help": "Index, den die Werkzeuge nutzen, solange keine Zugangsdaten einen setzen. Wird von der Prüfung angezeigt.",
+  "settings.tokenUsername.label": "Benutzername für Tokens",
+  "settings.tokenUsername.help": "Benutzername, der mit dem Geheimnis gesendet wird, wenn die Zugangsdaten keinen enthalten.",
+  "checks.config.label": "Wirksamer Index",
+  "consumes.registry.options.repository.label": "Repository-Name",
+  "consumes.registry.options.url.label": "Vollständige Index-Adresse"
+}

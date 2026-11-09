@@ -1,0 +1,260 @@
+# AP-18: the bundled consumer pip. It writes registry credentials as package index
+# for pip and uv: in mode file the index address goes into pip.conf and uv.toml and
+# the credential into .netrc (mode 0600), never into an address in a configuration
+# file; in mode env the shell environment file (mode 0600) exports PIP_INDEX_URL and
+# UV_DEFAULT_INDEX with the credential in the address. It is idempotent, reports in a
+# dry run and removes exactly its own blocks again, leaving files byte for byte as
+# before. Where pip and uv are installed, they are run against the fake registry.
+
+registry start
+registry accept alice t0k3n:ok@1
+
+env DATA=$HOME/.local/share/devbox
+env PIPCONF=home/.config/pip/pip.conf
+env UVCONF=home/.config/uv/uv.toml
+env NETRC=home/.netrc
+env ENVFILE=home/.config/devbox/env.d/pip.sh
+env UV_NO_CACHE=1
+env UV_PYTHON_DOWNLOADS=never
+env PIP_NO_CACHE_DIR=1
+env PIP_DISABLE_PIP_VERSION_CHECK=1
+
+exec devbox plugin test --apply $REPO/plugins/pip
+stdout '^ok +validate +pip'
+stdout '^ok +check +pip.config +ok'
+! stdout '^failed'
+
+# no credential: the check reports the default index of every tool
+exec devbox status
+stdout '^pip\.config +ok +pip: https://pypi\.org/simple, uv: https://pypi\.org/simple$'
+
+# --- mode file, new files ---------------------------------------------------------
+
+exec devbox cred add reg --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'pip:repository=pypi-group'
+stdin token.txt
+exec devbox cred set reg --from-stdin
+stdout '✓ pip apply'
+grep '^# >>> devbox:pip:reg >>>$' $PIPCONF
+grep '^\[global\]$' $PIPCONF
+grep '^index-url = http://127.0.0.1:[0-9]+/repository/pypi-group/simple$' $PIPCONF
+grep '^\[\[index\]\]$' $UVCONF
+grep '^name = "reg"$' $UVCONF
+grep '^url = "http://127.0.0.1:[0-9]+/repository/pypi-group/simple"$' $UVCONF
+grep '^default = true$' $UVCONF
+grep '^machine 127.0.0.1 login alice password t0k3n:ok@1$' $NETRC
+! grep 't0k3n' $PIPCONF
+! grep 't0k3n' $UVCONF
+! grep 'alice' $PIPCONF
+exec stat -c %a $NETRC
+stdout '^600$'
+! exists $ENVFILE
+exec devbox status
+stdout '^pip\.config +ok +pip: http://127\.0\.0\.1:[0-9]+/repository/pypi-group/simple, uv: http://127\.0\.0\.1:[0-9]+/repository/pypi-group/simple$'
+
+# pip and uv find the index and send the credential from .netrc
+[exec:pip] ! exec pip download --no-deps -d dl devbox-probe
+[exec:pip] registry log
+[exec:pip] stdout 'GET /repository/pypi-group/simple/devbox-probe/ auth=basic:alice'
+[exec:uv] stdin probe.txt
+[exec:uv] ! exec uv pip compile -
+[exec:uv] registry log
+[exec:uv] stdout 'GET /repository/pypi-group/simple/devbox-probe/ auth=basic:alice'
+
+# idempotent: a second apply changes nothing, a dry run reports nothing to do
+cp $PIPCONF pip.applied
+cp $UVCONF uv.applied
+cp $NETRC netrc.applied
+exec devbox cred apply reg
+cmp $PIPCONF pip.applied
+cmp $UVCONF uv.applied
+cmp $NETRC netrc.applied
+exec devbox cred apply reg --dry-run
+cmp $NETRC netrc.applied
+
+# remove: files that DevBox created are gone again
+exec devbox cred remove reg --force
+! exists $PIPCONF
+! exists $UVCONF
+! exists $NETRC
+
+# --- mode file, existing files ----------------------------------------------------
+
+# the block goes into the own [global] section of pip.conf and to the top of .netrc,
+# where every netrc parser accepts the markers; removing restores the files
+mkdir home/.config/pip home/.config/uv
+cp pre.pip.conf $PIPCONF
+cp pre.uv.toml $UVCONF
+cp pre.netrc $NETRC
+chmod 600 $NETRC
+exec devbox cred add own --type registry --field url=$REGISTRY --field layout=artifactory --consumer 'pip:repository=pypi-virtual'
+stdin token.txt
+exec devbox cred set own --from-stdin
+grep -count=1 '^\[global\]$' $PIPCONF
+grep '^  # >>> devbox:pip:own >>>$' $PIPCONF
+grep '^index-url = http://127.0.0.1:[0-9]+/artifactory/api/pypi/pypi-virtual/simple$' $PIPCONF
+grep '^url = "http://127.0.0.1:[0-9]+/artifactory/api/pypi/pypi-virtual/simple"$' $UVCONF
+grep '^link-mode = "copy"$' $UVCONF
+grep '^machine 127.0.0.1 login __token__ password t0k3n:ok@1$' $NETRC
+exec devbox status
+stdout 'pip: http://127\.0\.0\.1:[0-9]+/artifactory/api/pypi/pypi-virtual/simple'
+[exec:python3] exec python3 -I -c 'import netrc,os; print(netrc.netrc(os.environ["HOME"]+"/.netrc").hosts["127.0.0.1"][0])'
+[exec:python3] stdout '^__token__$'
+[exec:python3] exec python3 -I -c 'import configparser,os; c=configparser.RawConfigParser(); c.read(os.environ["HOME"]+"/.config/pip/pip.conf"); print(c["global"]["timeout"], c["global"]["index-url"], c["install"]["no-compile"])'
+[exec:python3] stdout '^60 http://127.0.0.1:[0-9]+/artifactory/api/pypi/pypi-virtual/simple true$'
+exec devbox cred remove own --force
+cmp $PIPCONF pre.pip.conf
+cmp $UVCONF pre.uv.toml
+cmp $NETRC pre.netrc
+
+# an index-url of its own in pip.conf is not overwritten: the consumer refuses
+cp conflict.pip.conf $PIPCONF
+exec devbox cred add dup --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'pip:repository=pypi-group'
+stdin token.txt
+! exec devbox cred set dup --from-stdin
+! exec devbox cred apply dup
+stdout 'sets index-url outside the block devbox:pip:dup'
+cmp $PIPCONF conflict.pip.conf
+cmp $UVCONF pre.uv.toml
+cmp $NETRC pre.netrc
+exec devbox cred remove dup --force
+cmp $PIPCONF conflict.pip.conf
+rm $PIPCONF
+rm $UVCONF
+rm $NETRC
+
+# layouts without enough options are refused, a full url wins
+exec devbox cred add bad --type registry --field url=$REGISTRY --field layout=gitlab --consumer 'pip:repository=group/name'
+stdin token.txt
+! exec devbox cred set bad --from-stdin
+! exec devbox cred apply bad
+stdout 'repository must be a project id'
+exec devbox cred remove bad --force
+exec devbox cred add full --type registry --field url=$REGISTRY --field layout=custom --consumer 'pip:url=https://pypi.example.com/simple/'
+stdin token.txt
+exec devbox cred set full --from-stdin
+grep '^index-url = https://pypi.example.com/simple$' $PIPCONF
+grep '^machine pypi.example.com login __token__ password t0k3n:ok@1$' $NETRC
+exec devbox cred remove full --force
+! exists $PIPCONF
+! exists $NETRC
+
+# the setting targets limits the tools
+exec devbox config set pip.targets '["uv"]'
+exec devbox cred add tea --type registry --field url=$REGISTRY --field layout=gitea --field username=alice --consumer 'pip:repository=acme'
+stdin token.txt
+exec devbox cred set tea --from-stdin
+! exists $PIPCONF
+grep '^url = "http://127.0.0.1:[0-9]+/api/packages/acme/pypi/simple"$' $UVCONF
+exec devbox status
+stdout '^pip\.config +ok +uv: http://127\.0\.0\.1:[0-9]+/api/packages/acme/pypi/simple$'
+exec devbox config unset pip.targets
+cp $UVCONF uv.tea
+exec devbox cred apply tea --dry-run --json
+stdout '"kind":"file","op":"create".*pip.conf'
+! exists $PIPCONF
+cmp $UVCONF uv.tea
+exec devbox cred apply tea
+grep '^index-url = http://127.0.0.1:[0-9]+/api/packages/acme/pypi/simple$' $PIPCONF
+exec devbox cred remove tea --force
+! exists $PIPCONF
+! exists $UVCONF
+! exists $NETRC
+
+# --- mode env ---------------------------------------------------------------------
+
+# the environment file exports both variables with the encoded credential; no
+# configuration file is written
+exec devbox config set pip.mode env
+exec devbox cred add team-registry --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'pip:repository=pypi-group'
+stdin token.txt
+exec devbox cred set team-registry --from-stdin
+grep '^export PIP_INDEX_URL=''http://alice:t0k3n%3Aok%401@127.0.0.1:[0-9]+/repository/pypi-group/simple''$' $ENVFILE
+grep '^export UV_DEFAULT_INDEX=''http://alice:t0k3n%3Aok%401@127.0.0.1:[0-9]+/repository/pypi-group/simple''$' $ENVFILE
+exec stat -c %a $ENVFILE
+stdout '^600$'
+! exists $PIPCONF
+! exists $UVCONF
+! exists $NETRC
+exec devbox status
+stdout '^pip\.config +ok +pip: http://127\.0\.0\.1:[0-9]+/repository/pypi-group/simple, uv: http://127\.0\.0\.1:[0-9]+/repository/pypi-group/simple$'
+! stdout 't0k3n'
+cp $ENVFILE env.applied
+exec devbox cred apply team-registry
+cmp $ENVFILE env.applied
+
+# pip and uv from a shell that loaded the environment file send the credential
+[exec:pip] ! exec bash -c '. "$HOME/.config/devbox/env.d/pip.sh" && pip download --no-deps -d dl devbox-env-pip'
+[exec:pip] registry log
+[exec:pip] stdout 'GET /repository/pypi-group/simple/devbox-env-pip/ auth=basic:alice'
+[exec:uv] ! exec bash -c '. "$HOME/.config/devbox/env.d/pip.sh" && echo devbox-env-uv | uv pip compile -'
+[exec:uv] registry log
+[exec:uv] stdout 'GET /repository/pypi-group/simple/devbox-env-uv/ auth=basic:alice'
+
+# switching to mode file moves the credential and drops the environment file
+exec devbox config set pip.mode file
+exec devbox cred apply team-registry
+! exists $ENVFILE
+grep '^index-url = http://127.0.0.1:[0-9]+/repository/pypi-group/simple$' $PIPCONF
+grep '^machine 127.0.0.1 login alice password t0k3n:ok@1$' $NETRC
+exec devbox config set pip.mode env
+exec devbox cred apply team-registry
+exists $ENVFILE
+! exists $PIPCONF
+! exists $UVCONF
+! exists $NETRC
+
+# a second credential cannot take over a variable that is set already
+exec devbox cred add second --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'pip:repository=other'
+stdin token.txt
+! exec devbox cred set second --from-stdin
+! exec devbox cred apply second
+stdout 'sets PIP_INDEX_URL outside the block devbox:pip:second'
+cmp $ENVFILE env.applied
+exec devbox cred remove second --force
+cmp $ENVFILE env.applied
+
+# remove takes the block and the environment file DevBox created with it
+exec devbox cred remove team-registry --force
+! exists $ENVFILE
+
+# an environment file that existed before stays as it was
+mkdir home/.config/devbox/env.d
+cp pre.env $ENVFILE
+exec devbox cred add keep --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'pip:repository=pypi-group'
+stdin token.txt
+exec devbox cred set keep --from-stdin
+grep 'PIP_INDEX_URL' $ENVFILE
+exec devbox cred remove keep --force
+cmp $ENVFILE pre.env
+exec devbox config unset pip.mode
+
+# the secret is not in output, history or events
+! exec grep -r 't0k3n' $HOME/.local/state/devbox/sessions $DATA/credentials.json
+exec devbox history --json
+stdout '"action": "pip.apply"'
+stdout '"action": "pip.remove"'
+
+-- token.txt --
+t0k3n:ok@1
+-- probe.txt --
+devbox-probe
+-- pre.env --
+export OWN=1
+-- pre.pip.conf --
+[global]
+timeout = 60
+
+[install]
+no-compile = true
+-- conflict.pip.conf --
+[global]
+index-url = https://pypi.example.com/simple
+-- pre.uv.toml --
+link-mode = "copy"
+-- pre.netrc --
+machine git.example.com login bob password s3cr3t
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "disabled": ["base", "java"] },
+  "vault": { "backend": "age" }
+}
