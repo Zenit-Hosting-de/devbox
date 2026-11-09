@@ -1,0 +1,101 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "nuget",
+  "version": "1.0.0",
+  "name": "NuGet",
+  "description": "Add registry feeds as package sources to NuGet.Config, with credentials in the file or the environment",
+  "category": "consumer",
+  "icon": "package",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["chmod", "rm", "stat"],
+    "plugins": { "registry": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": [],
+    "files": {
+      "read": ["${nuget.configPath}", "${nuget.envFile}"],
+      "write": ["${nuget.configPath}", "${nuget.envFile}"]
+    },
+    "sudo": false,
+    "credentials": ["registry"]
+  },
+  "settings": {
+    "mode": {
+      "type": "string",
+      "enum": ["file", "env"],
+      "default": "file",
+      "label": "Where credentials are stored",
+      "help": "file: the password is written into NuGet.Config as ClearTextPassword (mode 0600). env: NuGet.Config only lists the source, the credential is exported as NuGetPackageSourceCredentials_<name> from a shell environment file (mode 0600)."
+    },
+    "sourceName": {
+      "type": "string",
+      "pattern": "^([A-Za-z_][A-Za-z0-9_.-]*)?$",
+      "default": "",
+      "label": "Package source name",
+      "help": "Key of the package source in NuGet.Config. Empty: the instance name with underscores for hyphens. The option sourceName of an instance wins; with several instances, set it there."
+    },
+    "configPath": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.nuget/NuGet/NuGet.Config",
+      "label": "NuGet configuration file",
+      "advanced": true
+    },
+    "defaultSource": {
+      "type": "string",
+      "default": "https://api.nuget.org/v3/index.json",
+      "label": "Default source",
+      "help": "Written together with a new NuGet.Config or a new packageSources section, so that public packages stay available. Empty: no default source.",
+      "advanced": true
+    },
+    "defaultSourceName": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+$",
+      "default": "nuget.org",
+      "label": "Name of the default source",
+      "advanced": true
+    },
+    "envFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d/nuget.sh",
+      "label": "Shell environment file",
+      "help": "Exports the NuGetPackageSourceCredentials_* variables in mode env.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "config": {
+      "label": "Package sources",
+      "run": ["checks/config.sh"],
+      "timeout": "5s",
+      "cache": "1m",
+      "refreshOn": ["session.finished:nuget.*"]
+    }
+  },
+  "consumes": {
+    "registry": {
+      "apply": ["consume/apply.sh"],
+      "remove": ["consume/remove.sh"],
+      "options": {
+        "repository": { "type": "string", "label": "Repository name" },
+        "url": { "type": "string", "format": "uri", "label": "Full feed address" },
+        "sourceName": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$",
+          "label": "Package source name",
+          "help": "Key of the package source in NuGet.Config. Mode env allows letters, digits and underscores only."
+        }
+      }
+    }
+  },
+  "contributes": {
+    "overview": { "check": "nuget.config" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

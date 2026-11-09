@@ -11,6 +11,7 @@ last in the plugin search order, so a team can replace any of them.
 | `githost` | AP-16 (credential type `git-host`, verification against the API of the host; also the access of private plugin repositories, AP-27) |
 | `maven`  | AP-18 (install, update, registry consumer for `settings.xml`; mode `file` only, Maven reads no passwords from the environment) |
 | `gradle` | AP-18 (registry consumer: `gradle.properties` or `ORG_GRADLE_PROJECT_*` in `env.d`) |
+| `nuget`  | AP-18 (registry consumer: package sources in `NuGet.Config`, credentials in the file or `NuGetPackageSourceCredentials_*` in `env.d`) |
 | Plugin   | Work package                                                                                                                   |
 | -------- | ------------------------                                                                                                       |
 | `java`   | AP-13 (reference plugin)                                                                                                       |
