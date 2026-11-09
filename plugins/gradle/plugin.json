@@ -1,0 +1,88 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "gradle",
+  "version": "1.0.0",
+  "name": "Gradle",
+  "description": "Write registry credentials as Gradle properties, into gradle.properties or the environment",
+  "category": "consumer",
+  "icon": "package",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["chmod", "rm"],
+    "plugins": { "registry": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": [],
+    "files": {
+      "read": ["${gradle.propertiesPath}", "${gradle.envFile}"],
+      "write": ["${gradle.propertiesPath}", "${gradle.envFile}"]
+    },
+    "sudo": false,
+    "credentials": ["registry"]
+  },
+  "settings": {
+    "mode": {
+      "type": "string",
+      "enum": ["file", "env"],
+      "default": "file",
+      "label": "Where credentials are stored",
+      "help": "file: the properties are written into gradle.properties (mode 0600). env: they are exported as ORG_GRADLE_PROJECT_* variables from a shell environment file (mode 0600)."
+    },
+    "propertyPrefix": {
+      "type": "string",
+      "pattern": "^([A-Za-z_][A-Za-z0-9_]*)?$",
+      "default": "",
+      "label": "Property prefix",
+      "help": "Put in front of every property name, e.g. corp gives corpTeamRegistryUsername. Empty: the names start with the repository name, as Gradle's credentials(PasswordCredentials) expects."
+    },
+    "propertiesPath": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.gradle/gradle.properties",
+      "label": "Gradle properties file",
+      "help": "gradle.properties in the Gradle user home.",
+      "advanced": true
+    },
+    "envFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d/gradle.sh",
+      "label": "Shell environment file",
+      "help": "Exports the ORG_GRADLE_PROJECT_* variables in mode env.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "config": {
+      "label": "Registry credentials",
+      "run": ["checks/config.sh"],
+      "timeout": "5s",
+      "cache": "1m",
+      "refreshOn": ["session.finished:gradle.*"]
+    }
+  },
+  "consumes": {
+    "registry": {
+      "apply": ["consume/apply.sh"],
+      "remove": ["consume/remove.sh"],
+      "options": {
+        "repository": { "type": "string", "label": "Repository name" },
+        "url": { "type": "string", "format": "uri", "label": "Full repository address" },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9]*$",
+          "label": "Name in the properties",
+          "help": "Repository name in Gradle, the start of the property names. Default: the instance name in lowerCamelCase."
+        }
+      }
+    }
+  },
+  "contributes": {
+    "overview": { "check": "gradle.config" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

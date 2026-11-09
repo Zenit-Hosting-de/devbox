@@ -1,0 +1,18 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "Gradle",
+  "plugin.description": "Zugangsdaten von Registries als Gradle-Properties schreiben, in die gradle.properties oder in die Umgebung",
+  "settings.mode.label": "Ablage der Zugangsdaten",
+  "settings.mode.help": "file: Die Properties stehen in der gradle.properties (Modus 0600). env: Sie werden als Variablen ORG_GRADLE_PROJECT_* aus einer Datei für die Shell-Umgebung exportiert (Modus 0600).",
+  "settings.propertyPrefix.label": "Präfix der Properties",
+  "settings.propertyPrefix.help": "Steht vor jedem Property-Namen, z. B. ergibt corp den Namen corpTeamRegistryUsername. Leer: Die Namen beginnen mit dem Repository-Namen, wie es credentials(PasswordCredentials) in Gradle erwartet.",
+  "settings.propertiesPath.label": "Gradle-Properties-Datei",
+  "settings.propertiesPath.help": "gradle.properties im Gradle-Benutzerverzeichnis.",
+  "settings.envFile.label": "Datei für die Shell-Umgebung",
+  "settings.envFile.help": "Exportiert die Variablen ORG_GRADLE_PROJECT_* im Modus env.",
+  "checks.config.label": "Zugangsdaten für Registries",
+  "consumes.registry.options.repository.label": "Repository-Name",
+  "consumes.registry.options.url.label": "Vollständige Repository-Adresse",
+  "consumes.registry.options.name.label": "Name in den Properties",
+  "consumes.registry.options.name.help": "Repository-Name in Gradle, der Anfang der Property-Namen. Standard: der Name der Instanz in lowerCamelCase."
+}
