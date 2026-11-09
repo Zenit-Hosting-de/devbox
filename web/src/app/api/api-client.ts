@@ -3,6 +3,9 @@ import { Injectable, inject } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 import { environment } from "../../environments/environment";
 import type {
+  CatalogInstall,
+  CatalogInstallRequest,
+  CatalogSearch,
   CheckSummary,
   CredentialList,
   Info,
@@ -135,6 +138,23 @@ export class ApiClient {
 
   async deleteRepository(name: string): Promise<void> {
     await firstValueFrom(this.http.delete(`${this.base}/repositories/${encodeURIComponent(name)}`));
+  }
+
+  searchCatalog(q: string): Promise<CatalogSearch> {
+    const params = q ? new HttpParams().set("q", q) : undefined;
+    return firstValueFrom(
+      this.http.get<CatalogSearch>(`${this.base}/catalog/search`, params ? { params } : {}),
+    );
+  }
+
+  /** Downloads and checks a package; installs it when confirmed or when nothing needs a confirmation. */
+  installFromCatalog(body: CatalogInstallRequest): Promise<CatalogInstall> {
+    return firstValueFrom(this.http.post<CatalogInstall>(`${this.base}/catalog/install`, body));
+  }
+
+  /** Removes a plugin installed from a catalog. */
+  async deletePlugin(id: string): Promise<void> {
+    await firstValueFrom(this.http.delete(`${this.base}/plugins/${encodeURIComponent(id)}`));
   }
 
   profiles(): Promise<ProfileList> {

@@ -331,9 +331,9 @@ helpers are described in [concept.md](concept.md#plugin-protokoll) (German) and 
 A plugin repository is a Git repository, a tar.gz archive or a local directory that holds
 one or more plugin folders (each with a `plugin.json`). Its plugins appear like the bundled
 ones, with the repository as their origin (`devbox plugin list` shows `builtin`, `path` or
-`repository`). Only repositories of kind `plugins` work so far; entries of the other kinds
-(`catalog`, `profile`, `templates`, `packages`) are listed with the state `unsupported`
-and otherwise ignored.
+`repository`). Repositories of kind `plugins` and `catalog` (see
+[Plugin catalogs](#plugin-catalogs)) work so far; entries of the other kinds (`profile`,
+`templates`, `packages`) are listed with the state `unsupported` and otherwise ignored.
 
 Repositories are entries in `repositories` of `config.json` (user file), of a profile or
 of the system file. Add one with the CLI, or edit the file:
@@ -502,6 +502,47 @@ optional "Access" select lists the credential instances of type `git-host` and `
 the newest revision of a source holds no plugins, a warning offers one button "Use path
 <folder>" per suggested folder, which sets the path and syncs.
 
+### Plugin catalogs
+
+A catalog is a repository of kind `catalog` whose source is an `index.json`
+(`catalog.v1.json`, `https://` or `file://`) that lists plugins with versioned, signed
+packages. A catalog needs `trust` with the Sigstore identity that signs its packages:
+
+```json
+{
+  "repositories": {
+    "team-catalog": {
+      "kind": "catalog",
+      "source": "https://catalog.example.com/index.json",
+      "trust": { "issuer": "https://issuer.example.com", "identity": "https://ci.example.com/release" }
+    }
+  }
+}
+```
+
+```bash
+devbox repo sync team-catalog            # fetch the index (also done on first use)
+devbox plugin search [QUERY]             # ID, newest version, catalog, installed version; --json
+devbox plugin install kubectl[@1.2.3]    # --catalog NAME when several catalogs offer it
+devbox plugin update [ID]                # newest stable release of installed catalog plugins
+devbox plugin remove kubectl
+```
+
+Installing downloads the package, checks its SHA-256 against the index and its Sigstore
+bundle with `cosign verify-blob` against the identity of the catalog. A package with a
+wrong digest, without bundle or signed by another identity is refused. Then DevBox lists
+the permissions the plugin declares and asks for confirmation (`--yes` accepts them; without
+a terminal and without `--yes` the call ends with exit code 4). An update asks again only
+when the new version declares new permissions (marked `+`). Installed plugins live in
+`~/.local/share/devbox/catalog/<id>/` and are recorded in
+`~/.local/share/devbox/plugins.lock.json` (catalog, version, digest, signer). `plugin list`
+shows them with the origin `catalog:<name>@<version>`.
+
+In the web UI the Plugins page has a "Catalog" tab with search, install (after a dialog
+with the permissions), update and remove; the API has `GET /catalog/search?q=`,
+`POST /catalog/install` (without `confirm` it only returns the permissions) and
+`DELETE /plugins/{id}`.
+
 ### Switching plugins on and off
 
 ```bash
@@ -585,7 +626,7 @@ manages the service sees no restart, because the process ID stays.
 **Not available yet:** the PAM login (`/auth/*`), the login rate limit, TLS and
 non-loopback addresses; the command line client over the Unix socket; setting a
 credential secret over the API (`PUT /credentials/{name}/secret`); and the endpoints for
-groups, setup, profiles and plugin catalogs.
+groups and setup.
 
 ### WebSocket
 
@@ -640,10 +681,10 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
 - the registry consumers `nuget`, `pip`, `docker`, the consumer of `git-host` (Git credential
   helper for the user, SSH key upload) and the credential types `ssh-key`, `generic`; the
   event `credential.changed`
-- `devbox plugin install|update|remove` and plugin catalogs
-- plugin repositories: the web UI (Plugins page with "Installed" and "Sources"), the kinds
-  `catalog`, `profile`, `templates` and `packages`, SSH keys for `git+ssh://` sources and
-  Sigstore signatures (`trust` object), `devbox repo init`
+- version ranges from `plugins.require` of a profile (installing what a profile asks for)
+- plugin repositories: the kinds `profile`, `templates` and `packages`, SSH keys for
+  `git+ssh://` sources, Sigstore signatures (`trust` object) for kind `plugins`,
+  `devbox repo init`
 - `devbox doctor`, `devbox schema print`, `devbox migrate`, `devbox completion`
 - global flags `--quiet`, `--no-color`, `--lang`, `--socket`
 - the remaining bundled plugins (`node`, `dotnet`, `python`, `docker`, `git`, `xrdp`,

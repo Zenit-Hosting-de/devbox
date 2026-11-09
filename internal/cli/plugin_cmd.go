@@ -21,6 +21,7 @@ func (a *app) pluginCommand() *cobra.Command {
 		&cobra.Command{Use: "disable ID", Short: "switch a plugin off", Args: cobra.ExactArgs(1), RunE: func(_ *cobra.Command, args []string) error { return a.pluginSwitch(args[0], false) }},
 	)
 	cmd.AddCommand(a.pluginDevCommands()...)
+	cmd.AddCommand(a.catalogCommands()...)
 	return cmd
 }
 

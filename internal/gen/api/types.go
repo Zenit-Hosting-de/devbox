@@ -22,6 +22,21 @@ func (e DevBoxRequest) Valid() bool {
 	}
 }
 
+// Defines values for InstallFromCatalogParamsXDevBoxRequest.
+const (
+	InstallFromCatalogParamsXDevBoxRequestN1 InstallFromCatalogParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the InstallFromCatalogParamsXDevBoxRequest enum.
+func (e InstallFromCatalogParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case InstallFromCatalogParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RefreshChecksParamsXDevBoxRequest.
 const (
 	RefreshChecksParamsXDevBoxRequestN1 RefreshChecksParamsXDevBoxRequest = "1"
@@ -46,6 +61,21 @@ const (
 func (e PutCredentialSecretParamsXDevBoxRequest) Valid() bool {
 	switch e {
 	case PutCredentialSecretParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeletePluginParamsXDevBoxRequest.
+const (
+	DeletePluginParamsXDevBoxRequestN1 DeletePluginParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the DeletePluginParamsXDevBoxRequest enum.
+func (e DeletePluginParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case DeletePluginParamsXDevBoxRequestN1:
 		return true
 	default:
 		return false
@@ -247,6 +277,67 @@ func (e PatchSettingsParamsXDevBoxRequest) Valid() bool {
 	}
 }
 
+// CatalogHit A plugin offered by a catalog.
+type CatalogHit struct {
+	// Catalog Identifier of a plugin, credential instance, repository or schema.
+	Catalog     Name    `json:"catalog"`
+	Category    *string `json:"category,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Id          string  `json:"id"`
+
+	// Installed Version installed from this catalog; absent when not installed.
+	Installed *string `json:"installed,omitempty"`
+	Name      string  `json:"name"`
+
+	// Version Newest stable release.
+	Version string `json:"version"`
+}
+
+// CatalogInstall defines model for CatalogInstall.
+type CatalogInstall struct {
+	// Catalog Identifier of a plugin, credential instance, repository or schema.
+	Catalog   Name   `json:"catalog"`
+	Digest    string `json:"digest"`
+	Id        string `json:"id"`
+	Installed bool   `json:"installed"`
+
+	// NewPermissions Permissions the installed version did not declare; all for a new plugin.
+	NewPermissions []CatalogPermission `json:"newPermissions"`
+	Permissions    []CatalogPermission `json:"permissions"`
+
+	// PreviousVersion The version installed before; absent for a new plugin.
+	PreviousVersion *string `json:"previousVersion,omitempty"`
+	SignedBy        *string `json:"signedBy,omitempty"`
+	Version         string  `json:"version"`
+}
+
+// CatalogInstallRequest defines model for CatalogInstallRequest.
+type CatalogInstallRequest struct {
+	// Catalog Needed when several catalogs offer the plugin.
+	Catalog *Name `json:"catalog,omitempty"`
+
+	// Confirm Accept the declared permissions (all for a new plugin, the new ones for an update).
+	Confirm *bool  `json:"confirm,omitempty"`
+	Id      string `json:"id"`
+
+	// Version A published version; default the newest stable release.
+	Version *string `json:"version,omitempty"`
+}
+
+// CatalogPermission A permission a package declares.
+type CatalogPermission struct {
+	Kind  interface{} `json:"kind"`
+	Value string      `json:"value"`
+}
+
+// CatalogSearch defines model for CatalogSearch.
+type CatalogSearch struct {
+	Plugins []CatalogHit `json:"plugins"`
+
+	// Problems Catalogs that could not be read, by name.
+	Problems map[string]string `json:"problems"`
+}
+
 // CheckStatus Result state of a check.
 type CheckStatus = interface{}
 
@@ -427,7 +518,7 @@ type PluginDetail struct {
 	// Name Display name from the manifest.
 	Name *string `json:"name,omitempty"`
 
-	// Origin Where a plugin was found: bundled with the binary, in a directory of plugins.paths, or in the active revision of a plugin repository.
+	// Origin Where a plugin was found: bundled with the binary, in a directory of plugins.paths, in the active revision of a plugin repository, or installed from a catalog.
 	Origin PluginOrigin `json:"origin"`
 
 	// Path Plugin directory.
@@ -450,18 +541,18 @@ type PluginDetail struct {
 // PluginList All found plugins, sorted by ID. manifest and resolvedDefaults appear only with ?manifest=true.
 type PluginList = []PluginDetail
 
-// PluginOrigin Where a plugin was found: bundled with the binary, in a directory of plugins.paths, or in the active revision of a plugin repository.
+// PluginOrigin Where a plugin was found: bundled with the binary, in a directory of plugins.paths, in the active revision of a plugin repository, or installed from a catalog.
 type PluginOrigin struct {
-	// Kind builtin: bundled plugin; path: a directory of plugins.paths; repository: the active revision of a plugins repository.
+	// Kind builtin: bundled plugin; path: a directory of plugins.paths; repository: the active revision of a plugins repository; catalog: installed from a catalog (plugins.lock.json).
 	Kind interface{} `json:"kind"`
 
 	// Path The search path (kind path).
 	Path *string `json:"path,omitempty"`
 
-	// Repository Name of the repository (kind repository).
+	// Repository Name of the repository (kind repository) or of the catalog (kind catalog).
 	Repository *Name `json:"repository,omitempty"`
 
-	// Revision Short form (12 characters) of the active revision (kind repository).
+	// Revision Short form (12 characters) of the active revision (kind repository), or the installed version (kind catalog).
 	Revision *string `json:"revision,omitempty"`
 }
 
@@ -1031,6 +1122,21 @@ type StatusReport struct {
 // DevBoxRequest defines model for DevBoxRequest.
 type DevBoxRequest string
 
+// InstallFromCatalogParams defines parameters for InstallFromCatalog.
+type InstallFromCatalogParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest InstallFromCatalogParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// InstallFromCatalogParamsXDevBoxRequest defines parameters for InstallFromCatalog.
+type InstallFromCatalogParamsXDevBoxRequest string
+
+// SearchCatalogParams defines parameters for SearchCatalog.
+type SearchCatalogParams struct {
+	// Q Text in ID, name or description; empty lists everything.
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+}
+
 // ListChecksParams defines parameters for ListChecks.
 type ListChecksParams struct {
 	// Lang Language the viewer reads, e.g. de.
@@ -1060,6 +1166,15 @@ type ListPluginsParams struct {
 	// Manifest Include manifest and resolvedDefaults of every plugin.
 	Manifest *bool `form:"manifest,omitempty" json:"manifest,omitempty"`
 }
+
+// DeletePluginParams defines parameters for DeletePlugin.
+type DeletePluginParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest DeletePluginParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// DeletePluginParamsXDevBoxRequest defines parameters for DeletePlugin.
+type DeletePluginParamsXDevBoxRequest string
 
 // PatchPluginParams defines parameters for PatchPlugin.
 type PatchPluginParams struct {
@@ -1192,6 +1307,9 @@ type PatchSettingsParams struct {
 
 // PatchSettingsParamsXDevBoxRequest defines parameters for PatchSettings.
 type PatchSettingsParamsXDevBoxRequest string
+
+// InstallFromCatalogJSONRequestBody defines body for InstallFromCatalog for application/json ContentType.
+type InstallFromCatalogJSONRequestBody = CatalogInstallRequest
 
 // RefreshChecksJSONRequestBody defines body for RefreshChecks for application/json ContentType.
 type RefreshChecksJSONRequestBody = ChecksRefresh

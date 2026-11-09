@@ -93,15 +93,15 @@ func fill(p *Plugin, m *plugin.Manifest) {
 	p.Name, _ = m.Doc["name"].(string)
 	p.Version, _ = m.Doc["version"].(string)
 	p.Description, _ = m.Doc["description"].(string)
-	p.Permissions = permissionsOf(m.Doc)
+	p.Permissions = PermissionsOf(m.Doc)
 	if req, ok := m.Doc["requires"].(map[string]any); ok {
 		p.RequiresCommands = append(p.RequiresCommands, stringList(req["commands"])...)
 	}
 }
 
-// permissionsOf flattens the "permissions" of a manifest, in the order network,
+// PermissionsOf flattens the "permissions" of a manifest, in the order network,
 // files.read, files.write, sudo, credentials.
-func permissionsOf(doc map[string]any) []Permission {
+func PermissionsOf(doc map[string]any) []Permission {
 	out := []Permission{}
 	perms, _ := doc["permissions"].(map[string]any)
 	add := func(kind string, values []string) {

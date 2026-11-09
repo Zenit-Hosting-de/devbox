@@ -198,7 +198,7 @@ func (a *app) repoSync(cmd *cobra.Command, args []string) error {
 	names := args
 	if len(names) == 0 {
 		for _, e := range st.Repositories {
-			if e.Active() {
+			if e.Active() || e.Kind == repo.KindCatalog && e.Enabled {
 				names = append(names, e.Name)
 			}
 		}
@@ -308,6 +308,15 @@ func (a *app) printRepo(st *core.State, name string) error {
 // writeReport describes the state of a repository: what is active and, for a pending
 // revision, every plugin with its change and permissions; new permissions are marked.
 func writeReport(w io.Writer, v repo.View) {
+	if v.Kind == repo.KindCatalog {
+		switch {
+		case v.State == repo.StateActive && v.LastSync != nil:
+			_, _ = fmt.Fprintf(w, "%s: catalog index synced at %s\n", v.Name, v.LastSync.At)
+		default:
+			_, _ = fmt.Fprintf(w, "%s: catalog %s %s\n", v.Name, v.State, v.LastError)
+		}
+		return
+	}
 	switch v.State {
 	case repo.StatePending:
 		_, _ = fmt.Fprintf(w, "%s: revision %s waits for approval", v.Name, repo.ShortRevision(v.Pending.Revision))

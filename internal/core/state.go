@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Zenit-Hosting-de/devbox/internal/catalog"
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
 	"github.com/Zenit-Hosting-de/devbox/internal/profile"
@@ -38,6 +39,8 @@ type State struct {
 	Repositories []repo.Entry
 	// Repos syncs the repositories and reads their state.
 	Repos *repo.Manager
+	// Catalog syncs catalogs and installs plugins from them.
+	Catalog *catalog.Manager
 
 	layers []config.Layer // without env and call
 }
@@ -69,6 +72,7 @@ func Load(env Env, build Build, withCall bool) (*State, error) {
 	}
 	st.Repositories = st.collectRepositories()
 	st.Repos = st.newRepoManager()
+	st.Catalog = b.CatalogManager(env)
 
 	paths, err := pluginPaths(b.Ctx, st.System, st.User)
 	if err != nil {
@@ -78,7 +82,9 @@ func Load(env Env, build Build, withCall bool) (*State, error) {
 	for _, p := range paths {
 		roots = append(roots, plugin.Root{Dir: p, Origin: plugin.Origin{Kind: plugin.OriginPath, Path: p}})
 	}
-	// plugins from repositories come after plugins.paths and before the bundled ones
+	// plugins from catalogs and repositories come after plugins.paths and before the
+	// bundled ones
+	roots = append(roots, b.catalogRoot())
 	roots = append(roots, st.Repos.Roots(st.Repositories)...)
 	builtin, err := plugin.ExtractBuiltin(bundled.FS, filepath.Join(b.Ctx.XDG.Data, "devbox", "builtin"), build.Version)
 	if err != nil {
@@ -90,6 +96,7 @@ func Load(env Env, build Build, withCall bool) (*State, error) {
 	if err != nil {
 		return nil, err
 	}
+	st.markCatalogOrigins(cands)
 	st.Candidates = cands
 	st.Manifests = plugin.Winners(cands)
 	st.Defs = config.Definitions{}

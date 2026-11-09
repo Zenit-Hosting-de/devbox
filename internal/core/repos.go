@@ -69,7 +69,13 @@ func (st *State) Repository(name string) (repo.Entry, error) {
 }
 
 // RepositoryViews lists all repositories with their state, sorted by name.
-func (st *State) RepositoryViews() []repo.View { return st.Repos.Views(st.Repositories) }
+func (st *State) RepositoryViews() []repo.View {
+	views := st.Repos.Views(st.Repositories)
+	for i, e := range st.Repositories {
+		views[i] = st.catalogView(e, views[i])
+	}
+	return views
+}
 
 // RepositoryView returns one repository with its state.
 func (st *State) RepositoryView(name string) (repo.View, error) {
@@ -77,7 +83,7 @@ func (st *State) RepositoryView(name string) (repo.View, error) {
 	if err != nil {
 		return repo.View{}, err
 	}
-	return st.Repos.View(e), nil
+	return st.catalogView(e, st.Repos.View(e)), nil
 }
 
 // RepoSpec is a new plugin repository.
@@ -195,11 +201,14 @@ func (st *State) RemoveRepository(ctx context.Context, name string) error {
 	return st.Repos.Store.Remove(ctx, name)
 }
 
-// SyncRepository fetches a repository.
+// SyncRepository fetches a repository; for a catalog, its index.
 func (st *State) SyncRepository(ctx context.Context, name string) error {
 	e, err := st.Repository(name)
 	if err != nil {
 		return err
+	}
+	if e.Kind == repo.KindCatalog {
+		return st.SyncCatalog(ctx, name)
 	}
 	return st.Repos.Sync(ctx, e)
 }

@@ -14,6 +14,11 @@ export const routes: Routes = [
     data: { title: "nav.plugins" },
   },
   {
+    path: "plugins/catalog",
+    loadComponent: () => import("./pages/catalog").then((m) => m.CatalogPage),
+    data: { title: "nav.plugins" },
+  },
+  {
     path: "plugins/sources",
     loadComponent: () => import("./pages/sources").then((m) => m.SourcesPage),
     data: { title: "nav.plugins" },

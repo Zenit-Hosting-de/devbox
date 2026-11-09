@@ -20,7 +20,13 @@ export type Text = string;
  * via the `definition` "message".
  */
 export type Message =
-  StepMessage | ProgressMessage | ChangeMessage | LogMessage | SettingMessage | NoticeMessage | ResultMessage;
+  | StepMessage
+  | ProgressMessage
+  | ChangeMessage
+  | LogMessage
+  | SettingMessage
+  | NoticeMessage
+  | ResultMessage;
 
 /**
  * One line of sessions/<id>.events.jsonl: a protocol message written by a plugin to fd 3, wrapped with sequence number and time. $defs/message is the bare protocol message.
@@ -45,7 +51,14 @@ export interface DevBoxSessionEvent {
   /**
    * The protocol message.
    */
-  event: StepMessage | ProgressMessage | ChangeMessage | LogMessage | SettingMessage | NoticeMessage | ResultMessage;
+  event:
+    | StepMessage
+    | ProgressMessage
+    | ChangeMessage
+    | LogMessage
+    | SettingMessage
+    | NoticeMessage
+    | ResultMessage;
 }
 /**
  * Sub-step for the progress list.
