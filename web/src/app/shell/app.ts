@@ -24,7 +24,7 @@ import {
   ZToast,
   ZToastOutlet,
 } from "zenit-ui";
-import { SCHEMES } from "../settings/appearance";
+import { SCHEMES } from "../core/schemes";
 import { I18n, LANGUAGES, isLanguage } from "../i18n/i18n";
 import { PluginMessagesStore } from "../i18n/plugin-messages";
 import { PluginText } from "../i18n/plugin-text";

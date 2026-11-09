@@ -11,6 +11,8 @@ import { TestBed, type ComponentFixture } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { vi } from "vitest";
 import { apiInterceptor } from "../api/interceptor";
+import en from "../../i18n/en.json";
+import { PRELOADED_BUNDLES, messagesOf } from "../i18n/i18n";
 import { MockBackend } from "../mock/mock-backend";
 import { mockInterceptor } from "../mock/mock-interceptor";
 import { mockSocketFactoryProvider } from "../mock/mock-socket";
@@ -94,6 +96,8 @@ export function testProviders(extra: AnyProvider[] = []): AnyProvider[] {
     provideHttpClient(withInterceptors([apiInterceptor, mockInterceptor])),
     mockSocketFactoryProvider,
     { provide: TERMINAL_FACTORY, useValue: fakeTerminalFactory },
+    // English is a lazy chunk in the app; tests render synchronously, so they start with it.
+    { provide: PRELOADED_BUNDLES, useValue: { en: messagesOf(en) } },
     ...extra,
   ];
 }

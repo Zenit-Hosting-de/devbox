@@ -1,9 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 import { ZField, ZSegment, ZTheme, type ZSegmentOption } from "zenit-ui";
+import { SCHEMES } from "../core/schemes";
 import { I18n, LANGUAGES, isLanguage } from "../i18n/i18n";
-
-/** Colour schemes the UI offers; 'system' follows the operating system. */
-export const SCHEMES = ["system", "light", "dark", "contrast"] as const;
 
 /**
  * Language and colour scheme of this browser. Both are kept client-side in this milestone

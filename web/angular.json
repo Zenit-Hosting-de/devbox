@@ -26,7 +26,6 @@
               "@angular/cdk/overlay-prebuilt.css",
               "zenit-ui/styles/themes.css",
               "zenit-ui/styles/zenit-ui.css",
-              "@xterm/xterm/css/xterm.css",
               "src/styles.css"
             ],
             "extractLicenses": false,
