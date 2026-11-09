@@ -11,6 +11,9 @@ import type {
   Messages,
   PluginDetail,
   ProblemCode,
+  Profile,
+  ProfileCreate,
+  ProfileUpdate,
   ProblemError,
   Repository,
   RepositoryCreate,
@@ -114,6 +117,21 @@ export class MockBackend {
       .map((s) => [`${s.plugin}.${s.name}`, s.userValue]),
   );
   private readonly repositories: Repository[] = structuredClone(repositoriesFixture);
+  private readonly profiles: Profile[] = [
+    {
+      id: "example-team",
+      name: "Example team",
+      version: "2026.11.1",
+      source: "git+https://git.example.com/platform/devbox-profile.git",
+      ref: "main",
+      path: "profile.json",
+      origin: "user",
+      kind: "git",
+      fetchedAt: "2026-11-09T08:00:00Z",
+      locked: ["java.keepPatches"],
+      settings: 3,
+    },
+  ];
   /** Plugins that are switched off: ID -> layer (user, system, profile:<id>). */
   private readonly off = new Map<string, string>();
   private readonly sessions = new Map<string, Live>();
@@ -237,6 +255,69 @@ export class MockBackend {
       throw new MockProblem(404, "not-found", `No result for ${id}.`);
     }
     return structuredClone(found);
+  }
+
+  // ---- profiles -------------------------------------------------------------
+
+  profileList(): Profile[] {
+    return structuredClone(this.profiles);
+  }
+
+  createProfile(body: ProfileCreate): Profile {
+    if (!/^(file|https|git\+https|git\+ssh):\/\/.+/.test(body.source)) {
+      throw new MockProblem(422, "validation", "The profile source is invalid.", [
+        { pointer: "/source", code: "pattern", message: "unsupported source" },
+      ]);
+    }
+    if (this.profiles.some((p) => p.source === body.source && p.ref === body.ref)) {
+      throw new MockProblem(409, "conflict", "The profile source is already configured.");
+    }
+    const name =
+      body.source
+        .replace(/\/+$/, "")
+        .split("/")
+        .pop()
+        ?.replace(/\.(git|json)$/, "") ?? "team";
+    const id = name.toLowerCase().replace(/[^a-z0-9-]/g, "-") || "team";
+    const entry: Profile = {
+      id,
+      name,
+      version: "1.0.0",
+      source: body.source,
+      ...(body.ref ? { ref: body.ref } : {}),
+      ...(body.path ? { path: body.path } : {}),
+      ...(body.trust ? { trust: body.trust } : {}),
+      origin: "user",
+      kind: body.source.startsWith("git+")
+        ? "git"
+        : body.source.startsWith("https")
+          ? "https"
+          : "file",
+      ...(body.source.startsWith("file") ? {} : { fetchedAt: new Date().toISOString() }),
+      locked: [],
+      settings: 0,
+    };
+    this.profiles.push(entry);
+    this.broadcast({ type: "settings", keys: [] });
+    return structuredClone(entry);
+  }
+
+  updateProfiles(): ProfileUpdate[] {
+    return this.profiles.map((p) => {
+      if (p.kind !== "file") {
+        p.fetchedAt = new Date().toISOString();
+      }
+      return { ...structuredClone(p), changed: false, revision: MockBackend.remoteRevision };
+    });
+  }
+
+  deleteProfile(id: string): void {
+    const index = this.profiles.findIndex((p) => p.id === id || p.source === id);
+    if (index < 0) {
+      throw new MockProblem(404, "not-found", `No profile ${id}.`);
+    }
+    this.profiles.splice(index, 1);
+    this.broadcast({ type: "settings", keys: [] });
   }
 
   credentials(): CredentialList {

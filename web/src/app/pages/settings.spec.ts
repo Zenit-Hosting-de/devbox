@@ -48,7 +48,7 @@ describe("SettingsPage (against the mock backend)", () => {
   it("groups the settings by plugin with the origin of every value", async () => {
     const fixture = await open();
     const titles = queryAll(fixture, "z-panel .z-panel__title").map((t) => t.textContent?.trim());
-    expect(titles).toEqual(["Docker", "Java", "Node.js", "System", "Appearance"]);
+    expect(titles).toEqual(["Docker", "Java", "Node.js", "System", "Profiles", "Appearance"]);
     const java = panel(fixture, "Java");
     const badges = queryAll(java, "z-badge").map((b) => b.textContent?.trim());
     // Default of the plugin, user value, profile lock.
@@ -180,6 +180,7 @@ describe("SettingsPage (against the mock backend)", () => {
     await settle(fixture);
     expect(queryAll(fixture, "z-panel .z-panel__title").map((t) => t.textContent?.trim())).toEqual([
       "Java",
+      "Profiles",
       "Appearance",
     ]);
     expect(panel(fixture, "Java").querySelector("#set-java-vendorApi")).toBeNull();

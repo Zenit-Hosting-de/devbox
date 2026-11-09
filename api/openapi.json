@@ -43,6 +43,10 @@
       "description": "Action runs."
     },
     {
+      "name": "profiles",
+      "description": "Profiles of teams: sources, cache, signatures."
+    },
+    {
       "name": "credentials",
       "description": "Credential instances without secrets."
     },
@@ -445,6 +449,134 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      }
+    },
+    "/profiles": {
+      "get": {
+        "tags": ["profiles"],
+        "operationId": "listProfiles",
+        "summary": "The profile sources of the system and the user configuration.",
+        "description": "In layer order: the profiles of the system file first, then those of the user file. Each entry tells what its local copy holds (the file of a file source, the cached copy of a remote one); a profile that cannot be read has problem set. Nothing is fetched.",
+        "responses": {
+          "200": {
+            "description": "Profiles in layer order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "tags": ["profiles"],
+        "operationId": "createProfile",
+        "summary": "Fetch a profile and add its source to the user configuration.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The profile was fetched (and its signature checked) and the source added.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Fetches a remote profile into the cache, or reads a local file, validates it against the profile schema and, with trust, checks its Sigstore signature with cosign. Only then the source is appended to profiles of the user configuration. 409 conflict when the source or a profile with the same ID is configured already; 422 validation for an invalid profile or signature; a failed download or Git call and a missing cosign are prerequisite errors."
+      }
+    },
+    "/profiles/update": {
+      "post": {
+        "tags": ["profiles"],
+        "operationId": "updateProfiles",
+        "summary": "Fetch all remote profiles again.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One entry per profile source; a failed fetch has error set and keeps the previous copy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileUpdateList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/profiles/{id}": {
+      "delete": {
+        "tags": ["profiles"],
+        "operationId": "deleteProfile",
+        "summary": "Remove a profile of the user configuration and its cached copy.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Profile ID (or the source as written)."
+          },
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The source is removed."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "409 conflict for a profile of the system configuration."
       }
     },
     "/credentials": {
@@ -2799,6 +2931,194 @@
             },
             "description": "Repositories concerned; empty when only a plugin was switched."
           }
+        }
+      },
+      "ProfileTrust": {
+        "description": "Sigstore identity that must have signed the profile; the bundle is <profile>.sigstore.json next to it.",
+        "type": "object",
+        "required": ["issuer", "identity"],
+        "additionalProperties": false,
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "description": "OIDC issuer of the signing certificate."
+          },
+          "identity": {
+            "type": "string",
+            "description": "Certificate identity, e.g. the URL of the release workflow."
+          }
+        }
+      },
+      "ProfileCreate": {
+        "description": "A new profile source of the user configuration.",
+        "type": "object",
+        "required": ["source"],
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "pattern": "^(file|https|git\\+https|git\\+ssh)://",
+            "description": "file:// (a local file), https:// (a JSON file, at most 1 MiB), git+https:// or git+ssh:// (a Git repository with ref and path). Placeholders such as ${xdg:config} are allowed."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Git branch, tag or commit; only for Git sources."
+          },
+          "path": {
+            "type": "string",
+            "description": "Path of the profile file in a Git repository (default profile.json), or below a file:// directory."
+          },
+          "trust": {
+            "$ref": "#/components/schemas/ProfileTrust"
+          }
+        }
+      },
+      "Profile": {
+        "description": "A profile source with what its local copy holds.",
+        "type": "object",
+        "required": ["id", "source", "origin", "locked", "settings"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "ID of the profile; empty while it cannot be read."
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(file|https|git\\+https|git\\+ssh)://",
+            "description": "file:// (a local file), https:// (a JSON file, at most 1 MiB), git+https:// or git+ssh:// (a Git repository with ref and path). Placeholders such as ${xdg:config} are allowed."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Git branch, tag or commit; only for Git sources."
+          },
+          "path": {
+            "type": "string",
+            "description": "Path of the profile file in a Git repository (default profile.json), or below a file:// directory."
+          },
+          "trust": {
+            "$ref": "#/components/schemas/ProfileTrust"
+          },
+          "origin": {
+            "enum": ["system", "user"],
+            "description": "The configuration file that names the source."
+          },
+          "kind": {
+            "enum": ["file", "https", "git"]
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the cached copy of a remote profile was fetched."
+          },
+          "locked": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Settings the profile locks, sorted."
+          },
+          "settings": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of settings the profile sets."
+          },
+          "problem": {
+            "type": "string",
+            "description": "Why the profile cannot be read; absent when it can."
+          }
+        }
+      },
+      "ProfileList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Profile"
+        }
+      },
+      "ProfileUpdate": {
+        "description": "The outcome of fetching one profile again.",
+        "type": "object",
+        "required": ["id", "source", "origin", "locked", "settings", "changed"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "ID of the profile; empty while it cannot be read."
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^(file|https|git\\+https|git\\+ssh)://",
+            "description": "file:// (a local file), https:// (a JSON file, at most 1 MiB), git+https:// or git+ssh:// (a Git repository with ref and path). Placeholders such as ${xdg:config} are allowed."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Git branch, tag or commit; only for Git sources."
+          },
+          "path": {
+            "type": "string",
+            "description": "Path of the profile file in a Git repository (default profile.json), or below a file:// directory."
+          },
+          "trust": {
+            "$ref": "#/components/schemas/ProfileTrust"
+          },
+          "origin": {
+            "enum": ["system", "user"],
+            "description": "The configuration file that names the source."
+          },
+          "kind": {
+            "enum": ["file", "https", "git"]
+          },
+          "fetchedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the cached copy of a remote profile was fetched."
+          },
+          "locked": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Settings the profile locks, sorted."
+          },
+          "settings": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of settings the profile sets."
+          },
+          "problem": {
+            "type": "string",
+            "description": "Why the profile cannot be read; absent when it can."
+          },
+          "changed": {
+            "type": "boolean",
+            "description": "The cached copy changed; always false for file sources."
+          },
+          "revision": {
+            "type": "string",
+            "description": "Git commit or SHA-256 of the fetched file."
+          },
+          "error": {
+            "type": "string",
+            "description": "Why the fetch failed; the previous copy stays."
+          }
+        }
+      },
+      "ProfileUpdateList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ProfileUpdate"
         }
       }
     }

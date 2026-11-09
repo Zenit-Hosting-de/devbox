@@ -16,6 +16,7 @@ import { problemText } from "../core/status";
 import { I18n } from "../i18n/i18n";
 import { PluginText } from "../i18n/plugin-text";
 import { Appearance } from "../settings/appearance";
+import { Profiles } from "../settings/profiles";
 import { SettingsGroup, settingName } from "../settings/settings-group";
 import { PluginsStore } from "../stores/plugins.store";
 import { SettingsStore } from "../stores/settings.store";
@@ -32,6 +33,7 @@ interface GroupView {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Appearance,
+    Profiles,
     SettingsGroup,
     ZAlert,
     ZAlertAction,
@@ -94,6 +96,10 @@ interface GroupView {
           </z-panel>
         }
       }
+
+      <z-panel [title]="i18n.t('profiles.title')" headingLevel="2">
+        <dbx-profiles />
+      </z-panel>
 
       <z-panel [title]="i18n.t('appearance.title')" headingLevel="2">
         <dbx-appearance />

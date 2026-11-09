@@ -10,6 +10,10 @@ import type {
   PluginDetail,
   PluginList,
   Ref,
+  Profile,
+  ProfileCreate,
+  ProfileList,
+  ProfileUpdateList,
   Repository,
   RepositoryCreate,
   RepositoryList,
@@ -131,6 +135,24 @@ export class ApiClient {
 
   async deleteRepository(name: string): Promise<void> {
     await firstValueFrom(this.http.delete(`${this.base}/repositories/${encodeURIComponent(name)}`));
+  }
+
+  profiles(): Promise<ProfileList> {
+    return firstValueFrom(this.http.get<ProfileList>(`${this.base}/profiles`));
+  }
+
+  /** Fetches the profile (and checks its signature), then adds the source to the user configuration. */
+  createProfile(body: ProfileCreate): Promise<Profile> {
+    return firstValueFrom(this.http.post<Profile>(`${this.base}/profiles`, body));
+  }
+
+  /** Fetches all remote profiles again; failures are reported per profile. */
+  updateProfiles(): Promise<ProfileUpdateList> {
+    return firstValueFrom(this.http.post<ProfileUpdateList>(`${this.base}/profiles/update`, null));
+  }
+
+  async deleteProfile(id: string): Promise<void> {
+    await firstValueFrom(this.http.delete(`${this.base}/profiles/${encodeURIComponent(id)}`));
   }
 
   credentials(): Promise<CredentialList> {

@@ -38,6 +38,11 @@ export interface CredentialList {
 }
 export type Messages = Schemas["Messages"];
 export type PluginOrigin = Schemas["PluginOrigin"];
+export type Profile = Schemas["Profile"];
+export type ProfileList = Schemas["ProfileList"];
+export type ProfileCreate = Schemas["ProfileCreate"];
+export type ProfileUpdate = Schemas["ProfileUpdate"];
+export type ProfileUpdateList = Schemas["ProfileUpdateList"];
 export type Repository = Schemas["Repository"];
 export type RepositoryList = Schemas["RepositoryList"];
 export type RepositoryState = Schemas["RepositoryState"];

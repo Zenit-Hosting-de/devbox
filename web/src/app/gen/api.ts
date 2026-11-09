@@ -177,6 +177,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The profile sources of the system and the user configuration.
+         * @description In layer order: the profiles of the system file first, then those of the user file. Each entry tells what its local copy holds (the file of a file source, the cached copy of a remote one); a profile that cannot be read has problem set. Nothing is fetched.
+         */
+        get: operations["listProfiles"];
+        put?: never;
+        /**
+         * Fetch a profile and add its source to the user configuration.
+         * @description Fetches a remote profile into the cache, or reads a local file, validates it against the profile schema and, with trust, checks its Sigstore signature with cosign. Only then the source is appended to profiles of the user configuration. 409 conflict when the source or a profile with the same ID is configured already; 422 validation for an invalid profile or signature; a failed download or Git call and a missing cosign are prerequisite errors.
+         */
+        post: operations["createProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profiles/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fetch all remote profiles again. */
+        post: operations["updateProfiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/profiles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a profile of the user configuration and its cached copy.
+         * @description 409 conflict for a profile of the system configuration.
+         */
+        delete: operations["deleteProfile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/credentials": {
         parameters: {
             query?: never;
@@ -1141,6 +1202,95 @@ export interface components {
             /** @description Repositories concerned; empty when only a plugin was switched. */
             repositories: components["schemas"]["Name"][];
         };
+        /** @description Sigstore identity that must have signed the profile; the bundle is <profile>.sigstore.json next to it. */
+        ProfileTrust: {
+            /** @description OIDC issuer of the signing certificate. */
+            issuer: string;
+            /** @description Certificate identity, e.g. the URL of the release workflow. */
+            identity: string;
+        };
+        /** @description A new profile source of the user configuration. */
+        ProfileCreate: {
+            /** @description file:// (a local file), https:// (a JSON file, at most 1 MiB), git+https:// or git+ssh:// (a Git repository with ref and path). Placeholders such as ${xdg:config} are allowed. */
+            source: string;
+            /** @description Git branch, tag or commit; only for Git sources. */
+            ref?: string;
+            /** @description Path of the profile file in a Git repository (default profile.json), or below a file:// directory. */
+            path?: string;
+            trust?: components["schemas"]["ProfileTrust"];
+        };
+        /** @description A profile source with what its local copy holds. */
+        Profile: {
+            /** @description ID of the profile; empty while it cannot be read. */
+            id: string;
+            name?: string;
+            version?: string;
+            /** @description file:// (a local file), https:// (a JSON file, at most 1 MiB), git+https:// or git+ssh:// (a Git repository with ref and path). Placeholders such as ${xdg:config} are allowed. */
+            source: string;
+            /** @description Git branch, tag or commit; only for Git sources. */
+            ref?: string;
+            /** @description Path of the profile file in a Git repository (default profile.json), or below a file:// directory. */
+            path?: string;
+            trust?: components["schemas"]["ProfileTrust"];
+            /**
+             * @description The configuration file that names the source.
+             * @enum {unknown}
+             */
+            origin: "system" | "user";
+            /** @enum {unknown} */
+            kind?: "file" | "https" | "git";
+            /**
+             * Format: date-time
+             * @description When the cached copy of a remote profile was fetched.
+             */
+            fetchedAt?: string;
+            /** @description Settings the profile locks, sorted. */
+            locked: string[];
+            /** @description Number of settings the profile sets. */
+            settings: number;
+            /** @description Why the profile cannot be read; absent when it can. */
+            problem?: string;
+        };
+        ProfileList: components["schemas"]["Profile"][];
+        /** @description The outcome of fetching one profile again. */
+        ProfileUpdate: {
+            /** @description ID of the profile; empty while it cannot be read. */
+            id: string;
+            name?: string;
+            version?: string;
+            /** @description file:// (a local file), https:// (a JSON file, at most 1 MiB), git+https:// or git+ssh:// (a Git repository with ref and path). Placeholders such as ${xdg:config} are allowed. */
+            source: string;
+            /** @description Git branch, tag or commit; only for Git sources. */
+            ref?: string;
+            /** @description Path of the profile file in a Git repository (default profile.json), or below a file:// directory. */
+            path?: string;
+            trust?: components["schemas"]["ProfileTrust"];
+            /**
+             * @description The configuration file that names the source.
+             * @enum {unknown}
+             */
+            origin: "system" | "user";
+            /** @enum {unknown} */
+            kind?: "file" | "https" | "git";
+            /**
+             * Format: date-time
+             * @description When the cached copy of a remote profile was fetched.
+             */
+            fetchedAt?: string;
+            /** @description Settings the profile locks, sorted. */
+            locked: string[];
+            /** @description Number of settings the profile sets. */
+            settings: number;
+            /** @description Why the profile cannot be read; absent when it can. */
+            problem?: string;
+            /** @description The cached copy changed; always false for file sources. */
+            changed: boolean;
+            /** @description Git commit or SHA-256 of the fetched file. */
+            revision?: string;
+            /** @description Why the fetch failed; the previous copy stays. */
+            error?: string;
+        };
+        ProfileUpdateList: components["schemas"]["ProfileUpdate"][];
     };
     responses: {
         /** @description Error in RFC 9457 format. */
@@ -1441,6 +1591,108 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Profiles in layer order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every modifying request (CSRF protection), together with a matching Origin. */
+                "X-DevBox-Request": components["parameters"]["DevBoxRequest"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileCreate"];
+            };
+        };
+        responses: {
+            /** @description The profile was fetched (and its signature checked) and the source added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Profile"];
+                };
+            };
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateProfiles: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every modifying request (CSRF protection), together with a matching Origin. */
+                "X-DevBox-Request": components["parameters"]["DevBoxRequest"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One entry per profile source; a failed fetch has error set and keeps the previous copy. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileUpdateList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every modifying request (CSRF protection), together with a matching Origin. */
+                "X-DevBox-Request": components["parameters"]["DevBoxRequest"];
+            };
+            path: {
+                /** @description Profile ID (or the source as written). */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The source is removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

@@ -9,7 +9,13 @@ import {
 import { inject } from "@angular/core";
 import { Observable, delay } from "rxjs";
 import { environment } from "../../environments/environment";
-import type { RepositoryCreate, RepositoryPatch, SessionCreate, SessionsQuery } from "../api/types";
+import type {
+  ProfileCreate,
+  RepositoryCreate,
+  RepositoryPatch,
+  SessionCreate,
+  SessionsQuery,
+} from "../api/types";
 import { MockBackend, MockProblem } from "./mock-backend";
 
 type Answer = { status: number; body: unknown; headers?: Record<string, string> };
@@ -81,6 +87,21 @@ function route(req: HttpRequest<unknown>, backend: MockBackend, path: string): A
     }
     if (method === "PATCH" && !id) {
       backend.patchSettings((req.body ?? {}) as Record<string, unknown>);
+      return { status: 204, body: null };
+    }
+  }
+  if (area === "profiles") {
+    if (method === "GET" && !id) {
+      return ok(backend.profileList());
+    }
+    if (method === "POST" && !id) {
+      return { status: 201, body: backend.createProfile(req.body as ProfileCreate) };
+    }
+    if (method === "POST" && id === "update") {
+      return ok(backend.updateProfiles());
+    }
+    if (method === "DELETE" && id) {
+      backend.deleteProfile(id);
       return { status: 204, body: null };
     }
   }
