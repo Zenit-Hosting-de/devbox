@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/core"
@@ -195,6 +196,8 @@ func newTestEnv(t *testing.T, mods ...func(*Options)) *testEnv {
 		Auth:        "local",
 		Logger:      slog.New(slog.NewJSONHandler(e.logs, nil)),
 		Broadcaster: e.bc,
+		// Never the embedded build: internal/api/dist changes while `make build` runs.
+		UI: fstest.MapFS{},
 	}
 	for _, m := range mods {
 		m(&opts)

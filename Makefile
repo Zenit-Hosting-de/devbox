@@ -19,6 +19,21 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.dat
 BIN_DIR := bin
 BINARY  := $(BIN_DIR)/devbox
 
+# Several targets build the binary (build, lint, test) and the Angular build rewrites
+# internal/api/dist/ui, which is embedded into every Go build of internal/api. Under
+# `make -j` two things would collide:
+#  - Go builds reading dist while the web build rewrites it. The step is split into the
+#    web target and the Go targets wait for it when build is among the goals.
+#  - Two builds writing bin/devbox at once. go-build-bin writes next to the target and
+#    renames, so a running binary is never truncated. When build runs together with
+#    lint or test, its binary is written after them so it is the one that stays.
+# The Go tests do not read dist: internal/api takes the UI as an option.
+ifneq ($(filter build,$(MAKECMDGOALS)),)
+AFTER_WEB := web
+# lint and test also leave an (unstamped) bin/devbox; build writes the stamped one last.
+BUILD_LAST := $(filter lint test,$(MAKECMDGOALS))
+endif
+
 # ---------------------------------------------------------------------------
 # Tools (Go tools are pinned via the tool directives in go.mod)
 # ---------------------------------------------------------------------------
@@ -46,6 +61,11 @@ GEN_DIRS    := $(GO_GEN_DIR) web/src/app/gen sdk/ts/src/gen
 
 # Flags for go-jsonschema; each schema becomes its own package to avoid type name clashes.
 GO_JSONSCHEMA_FLAGS := --tags json
+
+# Builds the binary into $(BINARY) atomically (see above); extra go build flags in $(1).
+define go-build-bin
+CGO_ENABLED=0 $(GO) build $(1) -o $(BINARY).tmp.$$$$ ./cmd/devbox && mv -f $(BINARY).tmp.$$$$ $(BINARY)
+endef
 
 # Plugin tests (bats); empty until plugins with tests exist.
 BATS_DIRS := $(wildcard plugins/*/tests)
@@ -92,10 +112,13 @@ generate-check: generate ## Fail if generated code differs from the committed st
 	fi
 
 .PHONY: build
-build: ## Build the workspaces and the devbox binary into bin/
-	npm run build --workspaces --if-present
+build: web | $(BUILD_LAST) ## Build the workspaces and the devbox binary into bin/
 	@mkdir -p $(BIN_DIR)
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/devbox
+	$(call go-build-bin,-trimpath -ldflags "$(LDFLAGS)")
+
+.PHONY: web
+web: ## Build the workspaces (writes the UI into internal/api/dist/ui)
+	npm run build --workspaces --if-present
 
 .PHONY: dev
 dev: ## Run the core and the Angular dev server (UI on http://localhost:4200)
@@ -110,18 +133,19 @@ dev-mock: ## Run the UI against typed mock data, without the core (http://localh
 	npm --workspace web run start:mock
 
 .PHONY: test
-test: ## Run Go tests (race detector), CLI flows (testscript), workspace tests and plugin bats tests
+test: | $(AFTER_WEB) ## Run Go tests (race detector), CLI flows (testscript), workspace tests and plugin bats tests
 	@# The race detector needs cgo; release builds stay CGO_ENABLED=0.
 	CGO_ENABLED=1 $(GO) test -race $(GO_PACKAGES)
 	$(GO) test -run TestScripts ./cmd/devbox
 	npm test --workspaces --if-present
 ifneq ($(strip $(BATS_DIRS)),)
-	CGO_ENABLED=0 $(GO) build -o $(BINARY) ./cmd/devbox
+	@mkdir -p $(BIN_DIR)
+	$(call go-build-bin,)
 	PATH="$(CURDIR)/$(BIN_DIR):$$PATH" bats $(BATS_DIRS)
 endif
 
 .PHONY: lint
-lint: ## Run golangci-lint, shellcheck, ESLint, Prettier and the JSON/literal checks
+lint: | $(AFTER_WEB) ## Run golangci-lint, shellcheck, ESLint, Prettier and the JSON/literal checks
 	$(GOLANGCI_LINT) run $(GO_PKG_DIRS)
 	@files=$$(git ls-files -co --exclude-standard -- '*.sh' '*.bash' | while IFS= read -r f; do [ -f "$$f" ] && echo "$$f"; done || true); \
 	if [ -n "$$files" ]; then echo "shellcheck"; echo "$$files" | xargs shellcheck -x --source-path=SCRIPTDIR; fi
@@ -129,7 +153,8 @@ lint: ## Run golangci-lint, shellcheck, ESLint, Prettier and the JSON/literal ch
 	npm run --silent format:check
 	$(GO) run ./internal/tools/jsoncheck
 	$(GO) run ./internal/tools/literalcheck
-	CGO_ENABLED=0 $(GO) build -o $(BINARY) ./cmd/devbox
+	@mkdir -p $(BIN_DIR)
+	$(call go-build-bin,)
 	@for dir in plugins/*/; do echo "plugin validate $$dir"; $(BINARY) plugin validate "$$dir"; done
 
 .PHONY: e2e
