@@ -24,20 +24,22 @@ const (
 
 // View is a repository as GET /repositories lists it (api/openapi.json, Repository).
 type View struct {
-	Name      string       `json:"name"`
-	Kind      string       `json:"kind"`
-	Source    string       `json:"source,omitempty"`
-	Ref       string       `json:"ref,omitempty"`
-	Path      string       `json:"path,omitempty"`
-	Trust     string       `json:"trust,omitempty"`
-	Enabled   bool         `json:"enabled"`
-	Origin    string       `json:"origin"`
-	Locked    bool         `json:"locked"`
-	State     string       `json:"state"`
-	Active    *ActiveView  `json:"active,omitempty"`
-	Pending   *PendingView `json:"pending,omitempty"`
-	LastSync  *LastSync    `json:"lastSync,omitempty"`
-	LastError string       `json:"lastError,omitempty"`
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`
+	Source string `json:"source,omitempty"`
+	Ref    string `json:"ref,omitempty"`
+	Path   string `json:"path,omitempty"`
+	// Credential is the name of the credential instance, never a secret.
+	Credential string       `json:"credential,omitempty"`
+	Trust      string       `json:"trust,omitempty"`
+	Enabled    bool         `json:"enabled"`
+	Origin     string       `json:"origin"`
+	Locked     bool         `json:"locked"`
+	State      string       `json:"state"`
+	Active     *ActiveView  `json:"active,omitempty"`
+	Pending    *PendingView `json:"pending,omitempty"`
+	LastSync   *LastSync    `json:"lastSync,omitempty"`
+	LastError  string       `json:"lastError,omitempty"`
 }
 
 // ActiveView is the revision whose plugins are loaded.
@@ -89,7 +91,7 @@ type PermissionView struct {
 // as state "error".
 func (m *Manager) View(e Entry) View {
 	v := View{
-		Name: e.Name, Kind: e.Kind, Source: e.Source, Ref: e.Ref, Path: e.Path,
+		Name: e.Name, Kind: e.Kind, Source: e.Source, Ref: e.Ref, Path: e.Path, Credential: e.Credential,
 		Enabled: e.Enabled, Origin: e.Origin, Locked: e.Locked,
 	}
 	if e.Supported() {

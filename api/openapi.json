@@ -2657,6 +2657,10 @@
             "type": "string",
             "description": "Sub-directory with the plugin folders; absent means the root."
           },
+          "credential": {
+            "type": "string",
+            "description": "Name of the credential instance (git-host or registry) for a private repository. Only the name, never the secret."
+          },
           "trust": {
             "$ref": "#/components/schemas/RepositoryTrust"
           },
@@ -2719,6 +2723,10 @@
             "type": "string",
             "description": "Relative sub-directory that holds the plugin folders."
           },
+          "credential": {
+            "$ref": "#/components/schemas/Name",
+            "description": "Credential instance (git-host or registry, GET /credentials) for a private repository; only for https and git+https sources. The secret goes only to Git or the download."
+          },
           "trust": {
             "enum": ["prompt", "pinned"],
             "default": "prompt",
@@ -2744,6 +2752,10 @@
           "path": {
             "type": ["string", "null"],
             "description": "Relative sub-directory that holds the plugin folders; null or an empty string removes it (the root)."
+          },
+          "credential": {
+            "type": ["string", "null"],
+            "description": "Credential instance as in RepositoryCreate; null or an empty string removes it."
           },
           "trust": {
             "enum": ["prompt", "pinned"],

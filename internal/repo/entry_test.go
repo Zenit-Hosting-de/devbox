@@ -113,7 +113,15 @@ func TestEntryProblem(t *testing.T) {
 		{"pinned with an abbreviated commit", plugins("git+https://git.example.com/p.git", map[string]any{"ref": commit[:12], "trust": "pinned"}), "pinned needs"},
 		{"pinned with a tarball", plugins("https://repo.example.com/p.tgz", map[string]any{"trust": "pinned"}), "pinned needs"},
 		{"signature trust", plugins("git+https://git.example.com/p.git", map[string]any{"trust": map[string]any{"issuer": "i", "identity": "d"}}), "AP-23"},
-		{"credential", plugins("git+https://git.example.com/p.git", map[string]any{"credential": "company-git"}), "not supported yet"},
+		{"credential on git over https", plugins("git+https://git.example.com/p.git", map[string]any{"credential": "company-git"}), ""},
+		{"credential on a tarball", plugins("https://repo.example.com/p.tgz", map[string]any{"credential": "company-registry"}), ""},
+		{"credential with an invalid name", plugins("https://repo.example.com/p.tgz", map[string]any{"credential": "No Way"}), "not the name of a credential instance"},
+		{"credential on git over ssh", plugins("git+ssh://git@git.example.com/p.git", map[string]any{"credential": "company-git"}), "git+ssh"},
+		{"credential on a local directory", plugins("file:///srv/plugins", map[string]any{"credential": "company-git"}), "only used with https"},
+		{"credential on a local repository", plugins("git+file:///srv/p.git", map[string]any{"credential": "company-git"}), "only used with https"},
+		{"password in the address", plugins("git+https://alice:s3cret@git.example.com/p.git", nil), "must not contain a user name or password"},
+		{"user name with a credential", plugins("https://alice@repo.example.com/p.tgz", map[string]any{"credential": "company-registry"}), "must not contain a user name or password"},
+		{"user name only", plugins("git+https://alice@git.example.com/p.git", nil), ""},
 		{"ref on a tarball", plugins("https://repo.example.com/p.tgz", map[string]any{"ref": "main"}), "only supported for git"},
 		{"ref that looks like an option", plugins("git+https://git.example.com/p.git", map[string]any{"ref": "--upload-pack=x"}), "not valid"},
 		{"file with a host", plugins("file://other/srv", nil), "no host"},
@@ -149,13 +157,19 @@ func TestEntryExpandsPlaceholders(t *testing.T) {
 }
 
 func TestValidateNew(t *testing.T) {
-	if err := ValidateNew("team", "git+https://git.example.com/p.git", commit, "", TrustPinned); err != nil {
+	if err := ValidateNew("team", "git+https://git.example.com/p.git", commit, "", TrustPinned, ""); err != nil {
 		t.Error(err)
 	}
-	if err := ValidateNew("team", "git+https://git.example.com/p.git", "main", "", TrustPinned); err == nil {
+	if err := ValidateNew("team", "git+https://git.example.com/p.git", "main", "", TrustPinned, ""); err == nil {
 		t.Error("pinned with a branch must be refused")
 	}
-	if err := ValidateNew("team", "ftp://x.example.com/p", "", "", ""); err == nil {
+	if err := ValidateNew("team", "git+https://git.example.com/p.git", "", "", "", "company-git"); err != nil {
+		t.Error(err)
+	}
+	if err := ValidateNew("team", "git+https://git.example.com/p.git", "", "", "", "Not A Name"); err == nil {
+		t.Error("an invalid credential name must be refused")
+	}
+	if err := ValidateNew("team", "ftp://x.example.com/p", "", "", "", ""); err == nil {
 		t.Error("an unknown scheme must be refused")
 	}
 }

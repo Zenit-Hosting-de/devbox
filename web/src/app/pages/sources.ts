@@ -14,6 +14,7 @@ import {
   ZPageHeader,
   ZPanel,
   ZPanelActions,
+  ZSelect,
   ZSkeleton,
   ZSpecList,
   ZToast,
@@ -25,6 +26,7 @@ import { ApiProblem } from "../api/problem";
 import type { Repository, RepositoryCreate, RepositoryPatch, RepositoryState } from "../api/types";
 import { fieldErrorText, layerName, problemText } from "../core/status";
 import { I18n } from "../i18n/i18n";
+import { CredentialsStore } from "../stores/credentials.store";
 import { RepositoriesStore } from "../stores/repositories.store";
 import { PluginTabs } from "./plugin-tabs";
 import {
@@ -36,15 +38,19 @@ import {
 export const NAME_PATTERN = /^[a-z][a-z0-9-]{1,31}$/;
 const SOURCE_PATTERN = /^(git\+https|git\+ssh|git\+file|https|file):\/\/\S+$/;
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
+/** Sources a credential can be used for: the secret only goes over https. */
+const CREDENTIAL_SOURCE_PATTERN = /^(git\+https|https):\/\//;
+/** Credential types a source can name (the core refuses others). */
+const CREDENTIAL_TYPES: readonly string[] = ["git-host", "registry"];
 
-type Field = "name" | "source" | "ref" | "path" | "trust";
+type Field = "name" | "source" | "ref" | "path" | "trust" | "credential";
 type Trust = "prompt" | "pinned";
 export type FieldErrors = Partial<Record<Field, string>>;
 
 /** Client-side checks of the form; the core validates again. Values are the trimmed inputs. */
 export function validateSource(
   i18n: I18n,
-  values: { name: string; source: string; ref: string; trust: Trust },
+  values: { name: string; source: string; ref: string; trust: Trust; credential?: string },
 ): FieldErrors {
   const errors: FieldErrors = {};
   if (values.name === "") {
@@ -63,6 +69,9 @@ export function validateSource(
   }
   if (values.trust === "pinned" && !(git && COMMIT_PATTERN.test(values.ref))) {
     errors.trust = i18n.t("sources.error.pinned");
+  }
+  if (values.credential && !errors.source && !CREDENTIAL_SOURCE_PATTERN.test(values.source)) {
+    errors.credential = i18n.t("sources.error.credentialSource");
   }
   return errors;
 }
@@ -116,6 +125,7 @@ function emptyRevisionPaths(repository: Repository): string[] | null {
     ZPageHeader,
     ZPanel,
     ZPanelActions,
+    ZSelect,
     ZSkeleton,
     ZSpecList,
   ],
@@ -222,6 +232,35 @@ function emptyRevisionPaths(repository: Repository): string[] | null {
                 [disabled]="store.saving()"
                 (input)="path.set(text($event))"
               />
+            </z-field>
+            <z-field
+              [label]="i18n.t('sources.field.credential')"
+              for="src-credential"
+              [hint]="
+                i18n.t(
+                  credentialOptions().length > 0
+                    ? 'sources.field.credentialHint'
+                    : 'sources.field.credentialEmpty'
+                )
+              "
+              [error]="errors().credential ?? ''"
+            >
+              <z-select>
+                <select
+                  id="src-credential"
+                  [disabled]="store.saving()"
+                  (change)="credential.set(text($event))"
+                >
+                  <option value="" [selected]="credential() === ''">
+                    {{ i18n.t("sources.field.credentialNone") }}
+                  </option>
+                  @for (option of credentialOptions(); track option.value) {
+                    <option [value]="option.value" [selected]="credential() === option.value">
+                      {{ option.label }}
+                    </option>
+                  }
+                </select>
+              </z-select>
             </z-field>
             <div>
               <z-option-group
@@ -401,6 +440,7 @@ export class SourcesPage {
   protected readonly store = inject(RepositoriesStore);
   private readonly dialog = inject(ZDialog);
   private readonly toast = inject(ZToast);
+  private readonly credentials = inject(CredentialsStore);
 
   protected readonly formOpen = signal(false);
   /** Name of the source the form edits; null while it adds one. */
@@ -411,6 +451,7 @@ export class SourcesPage {
   protected readonly source = signal("");
   protected readonly ref = signal("");
   protected readonly path = signal("");
+  protected readonly credential = signal("");
   protected readonly trust = signal<Trust>("prompt");
   private readonly submitted = signal(false);
   private readonly serverErrors = signal<FieldErrors>({});
@@ -429,6 +470,22 @@ export class SourcesPage {
     },
   ]);
 
+  /** Instances a source can use (Git hosts and registries); the current one stays listed. */
+  protected readonly credentialOptions = computed<{ value: string; label: string }[]>(() => {
+    const options = this.credentials
+      .instances()
+      .filter((c) => CREDENTIAL_TYPES.includes(c.type))
+      .map((c) => ({
+        value: c.name,
+        label: c.label ? `${c.name} (${c.label})` : c.name,
+      }));
+    const current = this.credential();
+    if (current !== "" && !options.some((o) => o.value === current)) {
+      options.push({ value: current, label: current });
+    }
+    return options;
+  });
+
   /** Client checks once a submit was tried, then the answers of the core for what it refused. */
   protected readonly errors = computed<FieldErrors>(() => {
     const client = this.submitted() ? validateSource(this.i18n, this.values()) : {};
@@ -446,6 +503,7 @@ export class SourcesPage {
 
   constructor() {
     void this.store.ensureLoaded();
+    void this.credentials.ensureLoaded();
   }
 
   protected reload(): void {
@@ -476,6 +534,7 @@ export class SourcesPage {
     this.source.set(repository.source ?? "");
     this.ref.set(repository.ref ?? "");
     this.path.set(repository.path ?? "");
+    this.credential.set(repository.credential ?? "");
     this.trust.set(repository.trust === "pinned" ? "pinned" : "prompt");
     this.formOpen.set(true);
   }
@@ -517,6 +576,7 @@ export class SourcesPage {
           trust: values.trust,
           ...(values.ref ? { ref: values.ref } : {}),
           ...(values.path ? { path: values.path } : {}),
+          ...(values.credential ? { credential: values.credential } : {}),
         };
         const created = await this.store.add(body);
         this.closeForm();
@@ -531,11 +591,12 @@ export class SourcesPage {
     }
   }
 
-  /** Source, ref and path are always sent (null removes); trust only when it changed. */
+  /** Source, ref and path are always sent (null removes); access and trust only when changed. */
   private patchOf(values: {
     source: string;
     ref: string;
     path: string;
+    credential: string;
     trust: Trust;
   }): RepositoryPatch {
     const before = this.original?.trust === "pinned" ? "pinned" : "prompt";
@@ -543,6 +604,9 @@ export class SourcesPage {
       source: values.source,
       ref: values.ref || null,
       path: values.path || null,
+      ...(values.credential !== (this.original?.credential ?? "")
+        ? { credential: values.credential || null }
+        : {}),
       ...(values.trust !== before || this.original?.trust === "signature"
         ? { trust: values.trust }
         : {}),
@@ -618,12 +682,20 @@ export class SourcesPage {
     }
   }
 
-  private values(): { name: string; source: string; ref: string; path: string; trust: Trust } {
+  private values(): {
+    name: string;
+    source: string;
+    ref: string;
+    path: string;
+    credential: string;
+    trust: Trust;
+  } {
     return {
       name: this.name().trim(),
       source: this.source().trim(),
       ref: this.ref().trim(),
       path: this.path().trim(),
+      credential: this.credential(),
       trust: this.trust(),
     };
   }
@@ -635,6 +707,7 @@ export class SourcesPage {
     this.source.set("");
     this.ref.set("");
     this.path.set("");
+    this.credential.set("");
     this.trust.set("prompt");
   }
 
@@ -651,7 +724,7 @@ export class SourcesPage {
     const fields: FieldErrors = {};
     let rest = problem.errors.length === 0;
     for (const error of problem.errors) {
-      const match = /^\/(name|source|ref|path|trust)$/.exec(error.pointer);
+      const match = /^\/(name|source|ref|path|trust|credential)$/.exec(error.pointer);
       if (match?.[1]) {
         fields[match[1] as Field] = fieldErrorText(this.i18n, error);
       } else {
@@ -676,6 +749,9 @@ export class SourcesPage {
     }
     if (repository.path) {
       facts.push({ term: t("sources.label.path"), value: repository.path, mono: true });
+    }
+    if (repository.credential) {
+      facts.push({ term: t("sources.label.credential"), value: repository.credential, mono: true });
     }
     if (repository.trust) {
       facts.push({

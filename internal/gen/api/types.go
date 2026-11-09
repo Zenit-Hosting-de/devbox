@@ -483,6 +483,9 @@ type Repository struct {
 	// Active The revision whose plugins are loaded.
 	Active *RepositoryActive `json:"active,omitempty"`
 
+	// Credential Name of the credential instance (git-host or registry) for a private repository. Only the name, never the secret.
+	Credential *string `json:"credential,omitempty"`
+
 	// Enabled false lists the entry but loads nothing.
 	Enabled bool `json:"enabled"`
 
@@ -549,6 +552,9 @@ type RepositoryApprove struct {
 
 // RepositoryCreate A new repository of kind plugins; it is written to the user configuration and synced.
 type RepositoryCreate struct {
+	// Credential Credential instance (git-host or registry, GET /credentials) for a private repository; only for https and git+https sources. The secret goes only to Git or the download.
+	Credential *Name `json:"credential,omitempty"`
+
 	// Name Identifier of a plugin, credential instance, repository or schema.
 	Name Name `json:"name"`
 
@@ -582,6 +588,9 @@ type RepositoryList = []Repository
 
 // RepositoryPatch Changes of a repository in the user configuration. Fields that are absent stay; null or an empty string removes ref and path.
 type RepositoryPatch struct {
+	// Credential Credential instance as in RepositoryCreate; null or an empty string removes it.
+	Credential *string `json:"credential,omitempty"`
+
 	// Path Relative sub-directory that holds the plugin folders; null or an empty string removes it (the root).
 	Path *string `json:"path,omitempty"`
 

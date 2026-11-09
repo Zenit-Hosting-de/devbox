@@ -58,7 +58,13 @@
         "username": { "type": "string", "label": "User name" }
       },
       "secret": { "label": "Token or password", "expires": "optional" },
-      "verify": "registry.verify"
+      "verify": "registry.verify",
+      "httpAuth": {
+        "scheme": "bearer",
+        "by": "layout",
+        "schemes": { "gitlab": "private-token", "gitea": "token" },
+        "userField": "username"
+      }
     }
   },
   "actions": {

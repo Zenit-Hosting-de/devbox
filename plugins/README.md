@@ -8,6 +8,7 @@ last in the plugin search order, so a team can replace any of them.
 | Plugin   | Work package                                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `java`   | AP-13 (reference plugin)                                                                                                       |
+| `githost` | AP-16 (credential type `git-host`, verification against the API of the host; also the access of private plugin repositories, AP-27) |
 | `maven`  | AP-18 (install, update, registry consumer for `settings.xml`; mode `file` only, Maven reads no passwords from the environment) |
 | Plugin   | Work package                                                                                                                   |
 | -------- | ------------------------                                                                                                       |

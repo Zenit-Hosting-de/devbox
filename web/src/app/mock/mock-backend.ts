@@ -440,6 +440,7 @@ export class MockBackend {
     if (body.trust === "pinned" && !/^[0-9a-f]{40}$/.test(body.ref ?? "")) {
       errors.push({ pointer: "/ref", code: "pinned-ref", message: "pinned needs a full commit" });
     }
+    errors.push(...this.credentialErrors(body.credential, body.source));
     if (errors.length > 0) {
       throw new MockProblem(422, "validation", "The repository is invalid.", errors);
     }
@@ -452,6 +453,7 @@ export class MockBackend {
       source: body.source,
       ...(body.ref ? { ref: body.ref } : {}),
       ...(body.path ? { path: body.path } : {}),
+      ...(body.credential ? { credential: body.credential } : {}),
       trust: body.trust ?? "prompt",
       enabled: true,
       origin: "user",
@@ -464,7 +466,34 @@ export class MockBackend {
     return structuredClone(entry);
   }
 
-  /** Changes an entry of the user configuration and syncs it; null removes ref and path. */
+  /** The credential must exist, be a git-host or registry and belong to an https address. */
+  private credentialErrors(credential: string | undefined, source: string): ProblemError[] {
+    if (!credential) {
+      return [];
+    }
+    const instance = credentialsFixture.find((c) => c.name === credential);
+    if (!instance || !["git-host", "registry"].includes(instance.type)) {
+      return [
+        {
+          pointer: "/credential",
+          code: "credential",
+          message: `Credential ${credential} does not exist or is of another type.`,
+        },
+      ];
+    }
+    if (!/^(git\+https|https):\/\//.test(source)) {
+      return [
+        {
+          pointer: "/credential",
+          code: "credential",
+          message: "A credential is only used with https and git+https sources.",
+        },
+      ];
+    }
+    return [];
+  }
+
+  /** Changes an entry of the user configuration and syncs it; null removes ref, path and credential. */
   patchRepository(name: string, body: RepositoryPatch): Repository {
     const entry = this.findRepository(name);
     if (entry.origin !== "user" || entry.locked) {
@@ -484,6 +513,8 @@ export class MockBackend {
     if (trust === "pinned" && !/^[0-9a-f]{40}$/.test(ref ?? "")) {
       errors.push({ pointer: "/ref", code: "pinned-ref", message: "pinned needs a full commit" });
     }
+    const credential = body.credential === undefined ? entry.credential : (body.credential ?? "");
+    errors.push(...this.credentialErrors(credential, source));
     if (errors.length > 0) {
       throw new MockProblem(422, "validation", "The repository is invalid.", errors);
     }
@@ -492,6 +523,10 @@ export class MockBackend {
     entry.trust = trust;
     delete entry.ref;
     delete entry.path;
+    delete entry.credential;
+    if (credential) {
+      entry.credential = credential;
+    }
     if (ref) {
       entry.ref = ref;
     }

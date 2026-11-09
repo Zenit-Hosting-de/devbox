@@ -29,6 +29,13 @@ type Manager struct {
 	LookPath func(name string) (string, error)
 	// Client downloads tarballs; nil uses the proxy of the environment.
 	Client *http.Client
+	// Credential resolves a credential instance of a repository (type, address, user
+	// name and secret from the vault); nil means repositories cannot use credentials.
+	Credential func(ctx context.Context, name string) (*Credential, error)
+	// Helper returns the absolute path of the devbox binary, which the version control
+	// tool runs as its credential helper (repo git-credential); nil means it cannot
+	// use credentials.
+	Helper func() (string, error)
 	// Now returns the current time; nil uses the clock.
 	Now func() time.Time
 }
@@ -124,7 +131,11 @@ func (m *Manager) fetchAndScan(ctx context.Context, e Entry) (string, []Plugin, 
 		return "", nil, nil, err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	rev, err := m.fetchInto(ctx, e, tmp)
+	cred, err := m.resolveCredential(ctx, e)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	rev, err := m.fetchInto(ctx, e, cred, tmp)
 	if err != nil {
 		return "", nil, nil, err
 	}

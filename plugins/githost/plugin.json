@@ -1,0 +1,99 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "githost",
+  "version": "1.0.0",
+  "name": "Git host",
+  "description": "Credential type for Git hosts (GitHub, GitLab, Gitea, Bitbucket) with verification against the API of the host",
+  "category": "credentials",
+  "icon": "key",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["curl"]
+  },
+  "permissions": {
+    "network": [],
+    "files": { "read": [], "write": [] },
+    "sudo": false,
+    "credentials": ["git-host"]
+  },
+  "settings": {
+    "verifyUrls": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {
+        "github": "{url}/api/v3/user",
+        "gitlab": "{url}/api/v4/user",
+        "gitea": "{url}/api/v1/user",
+        "bitbucket": "{url}/rest/api/1.0/application-properties",
+        "generic": ""
+      },
+      "label": "Verification address per flavor",
+      "help": "Address the verification requests, per flavor; {url} stands for the address of the instance. Empty: only check that the host answers.",
+      "advanced": true
+    },
+    "publicApis": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {
+        "github.com": "https://api.github.com/user",
+        "bitbucket.org": "https://api.bitbucket.org/2.0/user"
+      },
+      "label": "Verification address of public hosts",
+      "help": "Hosted services whose API lives elsewhere: the host name of the instance, then the address the verification requests.",
+      "advanced": true
+    },
+    "timeout": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300,
+      "default": 20,
+      "label": "Time limit of the verification in seconds",
+      "advanced": true
+    }
+  },
+  "credentialTypes": {
+    "git-host": {
+      "label": "Git host",
+      "fields": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "default": "https://github.com",
+          "label": "Address",
+          "help": "Address of the host, e.g. a GitLab server of the company."
+        },
+        "flavor": {
+          "type": "string",
+          "enum": ["github", "gitlab", "gitea", "bitbucket", "generic"],
+          "default": "github",
+          "label": "Kind of host"
+        },
+        "username": {
+          "type": "string",
+          "default": "oauth2",
+          "label": "User name",
+          "help": "Sent with the token to Git. Most hosts accept any non-empty name; Bitbucket needs the account name (app password) or x-token-auth (access token)."
+        }
+      },
+      "secret": { "label": "Personal access token", "expires": "optional" },
+      "verify": "githost.verify",
+      "httpAuth": {
+        "scheme": "bearer",
+        "by": "flavor",
+        "schemes": { "gitlab": "private-token", "gitea": "token", "bitbucket": "basic" }
+      }
+    }
+  },
+  "actions": {
+    "verify": {
+      "label": "Verify credential",
+      "run": ["actions/verify.sh"],
+      "timeout": "6m"
+    }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

@@ -11,6 +11,7 @@ import (
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
 	"github.com/Zenit-Hosting-de/devbox/internal/platform"
 	"github.com/Zenit-Hosting-de/devbox/internal/schema"
+	"github.com/Zenit-Hosting-de/devbox/internal/vault"
 )
 
 // SystemConfigEnv overrides the path of the system configuration, e.g. for tests and
@@ -43,6 +44,12 @@ type Env struct {
 	// HTTPClient downloads plugin repositories (tarballs); nil uses the proxy of the
 	// environment. Tests set it to reach a local server.
 	HTTPClient *http.Client
+	// Keyring is the Secret Service of the vault; nil uses the one of the session.
+	// Tests set a fake.
+	Keyring vault.KeyringAPI
+	// VaultPassphrase asks for the passphrase of a vault that has one; nil means the
+	// process cannot ask (the service).
+	VaultPassphrase func() (string, error)
 }
 
 // Base is what every command needs before plugins are loaded: the validator, the

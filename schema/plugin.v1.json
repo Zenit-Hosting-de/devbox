@@ -639,8 +639,37 @@
         "verify": {
           "$ref": "#/$defs/ref",
           "description": "Action that verifies an instance."
+        },
+        "httpAuth": {
+          "type": "object",
+          "required": ["scheme"],
+          "additionalProperties": false,
+          "description": "How DevBox sends the secret of an instance to its host when it downloads a private repository (an https tarball): in the Authorization header as bearer or token, as basic authentication with the user name, or as PRIVATE-TOKEN header. Only credential types of repositories need it.",
+          "properties": {
+            "scheme": {
+              "$ref": "#/$defs/httpScheme",
+              "description": "Scheme used when nothing below applies."
+            },
+            "by": {
+              "$ref": "#/$defs/key",
+              "description": "Field whose value selects the scheme from schemes."
+            },
+            "schemes": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/httpScheme" },
+              "description": "Scheme per value of the field named in by."
+            },
+            "userField": {
+              "$ref": "#/$defs/key",
+              "description": "Field that holds a user name; when an instance sets it, the scheme is basic (unless it is private-token)."
+            }
+          }
         }
       }
+    },
+    "httpScheme": {
+      "enum": ["bearer", "basic", "token", "private-token"],
+      "description": "Authorization: Bearer <secret>, Authorization: Basic <user:secret>, Authorization: token <secret>, or the header PRIVATE-TOKEN: <secret>."
     },
     "consumer": {
       "type": "object",

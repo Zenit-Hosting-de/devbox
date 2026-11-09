@@ -154,6 +154,12 @@ type CredentialType struct {
 	// Non-secret fields of an instance.
 	Fields CredentialTypeFields `json:"fields"`
 
+	// How DevBox sends the secret of an instance to its host when it downloads a
+	// private repository (an https tarball): in the Authorization header as bearer or
+	// token, as basic authentication with the user name, or as PRIVATE-TOKEN header.
+	// Only credential types of repositories need it.
+	HttpAuth *CredentialTypeHttpAuth `json:"httpAuth,omitempty,omitzero"`
+
 	// Label of the credential type.
 	Label Text `json:"label"`
 
@@ -166,6 +172,46 @@ type CredentialType struct {
 
 // Non-secret fields of an instance.
 type CredentialTypeFields map[string]Subschema
+
+// How DevBox sends the secret of an instance to its host when it downloads a
+// private repository (an https tarball): in the Authorization header as bearer or
+// token, as basic authentication with the user name, or as PRIVATE-TOKEN header.
+// Only credential types of repositories need it.
+type CredentialTypeHttpAuth struct {
+	// Field whose value selects the scheme from schemes.
+	By *Key `json:"by,omitempty,omitzero"`
+
+	// Scheme used when nothing below applies.
+	Scheme HttpScheme `json:"scheme"`
+
+	// Scheme per value of the field named in by.
+	Schemes CredentialTypeHttpAuthSchemes `json:"schemes,omitempty,omitzero"`
+
+	// Field that holds a user name; when an instance sets it, the scheme is basic
+	// (unless it is private-token).
+	UserField *Key `json:"userField,omitempty,omitzero"`
+}
+
+// Scheme per value of the field named in by.
+type CredentialTypeHttpAuthSchemes map[string]HttpScheme
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *CredentialTypeHttpAuth) UnmarshalJSON(value []byte) error {
+	var raw map[string]interface{}
+	if err := json.Unmarshal(value, &raw); err != nil {
+		return err
+	}
+	if _, ok := raw["scheme"]; raw != nil && !ok {
+		return fmt.Errorf("field scheme in CredentialTypeHttpAuth: required")
+	}
+	type Plain CredentialTypeHttpAuth
+	var plain Plain
+	if err := json.Unmarshal(value, &plain); err != nil {
+		return err
+	}
+	*j = CredentialTypeHttpAuth(plain)
+	return nil
+}
 
 // The secret of an instance.
 type CredentialTypeSecret struct {
@@ -264,6 +310,40 @@ func (j *Duration) UnmarshalJSON(value []byte) error {
 		return fmt.Errorf("field %s pattern match: must match %s", "", `^\d+(ms|s|m|h)$`)
 	}
 	*j = Duration(plain)
+	return nil
+}
+
+type HttpScheme string
+
+const HttpSchemeBasic HttpScheme = "basic"
+const HttpSchemeBearer HttpScheme = "bearer"
+const HttpSchemePrivateToken HttpScheme = "private-token"
+const HttpSchemeToken HttpScheme = "token"
+
+var enumValues_HttpScheme = []interface{}{
+	"bearer",
+	"basic",
+	"token",
+	"private-token",
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (j *HttpScheme) UnmarshalJSON(value []byte) error {
+	var v string
+	if err := json.Unmarshal(value, &v); err != nil {
+		return err
+	}
+	var ok bool
+	for _, expected := range enumValues_HttpScheme {
+		if reflect.DeepEqual(v, expected) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid value (expected one of %#v): %#v", enumValues_HttpScheme, v)
+	}
+	*j = HttpScheme(v)
 	return nil
 }
 
