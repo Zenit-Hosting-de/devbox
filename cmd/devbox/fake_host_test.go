@@ -20,7 +20,7 @@ import (
 // serves tarballs below /dl/, Git over http (git http-backend) for paths with ".git/",
 // and the verification path /api/v4/user. Everything but the verification path needs
 // the accepted credential; without it, the host answers 401 (with a basic challenge
-// for Git). It logs every request with the kind of authentication, never the secret.
+// for Git). Paths below /pub/ are public: files and Git without credential. It logs every request with the kind of authentication, never the secret.
 type fakeHost struct {
 	mu      sync.Mutex
 	root    string
@@ -51,6 +51,9 @@ func (f *fakeHost) auth(r *http.Request) (kind string, ok bool) {
 
 func (f *fakeHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	kind, ok := f.auth(r)
+	if strings.HasPrefix(r.URL.Path, "/pub/") {
+		ok = true
+	}
 	f.mu.Lock()
 	f.log = append(f.log, fmt.Sprintf("%s %s auth=%s ok=%v", r.Method, r.URL.Path, kind, ok))
 	f.mu.Unlock()
@@ -62,7 +65,7 @@ func (f *fakeHost) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/api/v4/user":
 		w.WriteHeader(http.StatusOK)
-	case strings.HasPrefix(r.URL.Path, "/dl/"):
+	case strings.HasPrefix(r.URL.Path, "/dl/") || (strings.HasPrefix(r.URL.Path, "/pub/") && !strings.Contains(r.URL.Path, ".git/")):
 		http.ServeFile(w, r, filepath.Join(f.root, filepath.FromSlash(strings.TrimPrefix(r.URL.Path, "/")))) //nolint:gosec // fake host of a test; the paths come from the script
 	case strings.Contains(r.URL.Path, ".git/") && f.backend != nil:
 		f.backend.ServeHTTP(w, r)

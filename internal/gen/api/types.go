@@ -67,6 +67,51 @@ func (e PatchPluginParamsXDevBoxRequest) Valid() bool {
 	}
 }
 
+// Defines values for CreateProfileParamsXDevBoxRequest.
+const (
+	CreateProfileParamsXDevBoxRequestN1 CreateProfileParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the CreateProfileParamsXDevBoxRequest enum.
+func (e CreateProfileParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case CreateProfileParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateProfilesParamsXDevBoxRequest.
+const (
+	UpdateProfilesParamsXDevBoxRequestN1 UpdateProfilesParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the UpdateProfilesParamsXDevBoxRequest enum.
+func (e UpdateProfilesParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case UpdateProfilesParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeleteProfileParamsXDevBoxRequest.
+const (
+	DeleteProfileParamsXDevBoxRequestN1 DeleteProfileParamsXDevBoxRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the DeleteProfileParamsXDevBoxRequest enum.
+func (e DeleteProfileParamsXDevBoxRequest) Valid() bool {
+	switch e {
+	case DeleteProfileParamsXDevBoxRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateRepositoryParamsXDevBoxRequest.
 const (
 	CreateRepositoryParamsXDevBoxRequestN1 CreateRepositoryParamsXDevBoxRequest = "1"
@@ -474,6 +519,117 @@ type ProblemError struct {
 	// Pointer JSON Pointer of the field in the request body.
 	Pointer string `json:"pointer"`
 }
+
+// Profile A profile source with what its local copy holds.
+type Profile struct {
+	// FetchedAt When the cached copy of a remote profile was fetched.
+	FetchedAt *time.Time `json:"fetchedAt,omitempty"`
+
+	// Id ID of the profile; empty while it cannot be read.
+	Id   string      `json:"id"`
+	Kind interface{} `json:"kind,omitempty"`
+
+	// Locked Settings the profile locks, sorted.
+	Locked []string `json:"locked"`
+	Name   *string  `json:"name,omitempty"`
+
+	// Origin The configuration file that names the source.
+	Origin interface{} `json:"origin"`
+
+	// Path Path of the profile file in a Git repository (default profile.json), or below a file:// directory.
+	Path *string `json:"path,omitempty"`
+
+	// Problem Why the profile cannot be read; absent when it can.
+	Problem *string `json:"problem,omitempty"`
+
+	// Ref Git branch, tag or commit; only for Git sources.
+	Ref *string `json:"ref,omitempty"`
+
+	// Settings Number of settings the profile sets.
+	Settings int `json:"settings"`
+
+	// Source file:// (a local file), https:// (a JSON file, at most 1 MiB), git+https:// or git+ssh:// (a Git repository with ref and path). Placeholders such as ${xdg:config} are allowed.
+	Source string `json:"source"`
+
+	// Trust Sigstore identity that must have signed the profile; the bundle is <profile>.sigstore.json next to it.
+	Trust   *ProfileTrust `json:"trust,omitempty"`
+	Version *string       `json:"version,omitempty"`
+}
+
+// ProfileCreate A new profile source of the user configuration.
+type ProfileCreate struct {
+	// Path Path of the profile file in a Git repository (default profile.json), or below a file:// directory.
+	Path *string `json:"path,omitempty"`
+
+	// Ref Git branch, tag or commit; only for Git sources.
+	Ref *string `json:"ref,omitempty"`
+
+	// Source file:// (a local file), https:// (a JSON file, at most 1 MiB), git+https:// or git+ssh:// (a Git repository with ref and path). Placeholders such as ${xdg:config} are allowed.
+	Source string `json:"source"`
+
+	// Trust Sigstore identity that must have signed the profile; the bundle is <profile>.sigstore.json next to it.
+	Trust *ProfileTrust `json:"trust,omitempty"`
+}
+
+// ProfileList defines model for ProfileList.
+type ProfileList = []Profile
+
+// ProfileTrust Sigstore identity that must have signed the profile; the bundle is <profile>.sigstore.json next to it.
+type ProfileTrust struct {
+	// Identity Certificate identity, e.g. the URL of the release workflow.
+	Identity string `json:"identity"`
+
+	// Issuer OIDC issuer of the signing certificate.
+	Issuer string `json:"issuer"`
+}
+
+// ProfileUpdate The outcome of fetching one profile again.
+type ProfileUpdate struct {
+	// Changed The cached copy changed; always false for file sources.
+	Changed bool `json:"changed"`
+
+	// Error Why the fetch failed; the previous copy stays.
+	Error *string `json:"error,omitempty"`
+
+	// FetchedAt When the cached copy of a remote profile was fetched.
+	FetchedAt *time.Time `json:"fetchedAt,omitempty"`
+
+	// Id ID of the profile; empty while it cannot be read.
+	Id   string      `json:"id"`
+	Kind interface{} `json:"kind,omitempty"`
+
+	// Locked Settings the profile locks, sorted.
+	Locked []string `json:"locked"`
+	Name   *string  `json:"name,omitempty"`
+
+	// Origin The configuration file that names the source.
+	Origin interface{} `json:"origin"`
+
+	// Path Path of the profile file in a Git repository (default profile.json), or below a file:// directory.
+	Path *string `json:"path,omitempty"`
+
+	// Problem Why the profile cannot be read; absent when it can.
+	Problem *string `json:"problem,omitempty"`
+
+	// Ref Git branch, tag or commit; only for Git sources.
+	Ref *string `json:"ref,omitempty"`
+
+	// Revision Git commit or SHA-256 of the fetched file.
+	Revision *string `json:"revision,omitempty"`
+
+	// Settings Number of settings the profile sets.
+	Settings int `json:"settings"`
+
+	// Source file:// (a local file), https:// (a JSON file, at most 1 MiB), git+https:// or git+ssh:// (a Git repository with ref and path). Placeholders such as ${xdg:config} are allowed.
+	Source string `json:"source"`
+
+	// Trust Sigstore identity that must have signed the profile; the bundle is <profile>.sigstore.json next to it.
+	Trust   *ProfileTrust `json:"trust,omitempty"`
+	Version *string       `json:"version,omitempty"`
+}
+
+// ProfileUpdateList defines model for ProfileUpdateList.
+type ProfileUpdateList = []ProfileUpdate
 
 // Ref Fully qualified check or action, <plugin>.<name>.
 type Ref = string
@@ -914,6 +1070,33 @@ type PatchPluginParams struct {
 // PatchPluginParamsXDevBoxRequest defines parameters for PatchPlugin.
 type PatchPluginParamsXDevBoxRequest string
 
+// CreateProfileParams defines parameters for CreateProfile.
+type CreateProfileParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest CreateProfileParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// CreateProfileParamsXDevBoxRequest defines parameters for CreateProfile.
+type CreateProfileParamsXDevBoxRequest string
+
+// UpdateProfilesParams defines parameters for UpdateProfiles.
+type UpdateProfilesParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest UpdateProfilesParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// UpdateProfilesParamsXDevBoxRequest defines parameters for UpdateProfiles.
+type UpdateProfilesParamsXDevBoxRequest string
+
+// DeleteProfileParams defines parameters for DeleteProfile.
+type DeleteProfileParams struct {
+	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
+	XDevBoxRequest DeleteProfileParamsXDevBoxRequest `json:"X-DevBox-Request"`
+}
+
+// DeleteProfileParamsXDevBoxRequest defines parameters for DeleteProfile.
+type DeleteProfileParamsXDevBoxRequest string
+
 // CreateRepositoryParams defines parameters for CreateRepository.
 type CreateRepositoryParams struct {
 	// XDevBoxRequest Required on every modifying request (CSRF protection), together with a matching Origin.
@@ -1018,6 +1201,9 @@ type PutCredentialSecretJSONRequestBody = SecretPut
 
 // PatchPluginJSONRequestBody defines body for PatchPlugin for application/json ContentType.
 type PatchPluginJSONRequestBody = PluginPatch
+
+// CreateProfileJSONRequestBody defines body for CreateProfile for application/json ContentType.
+type CreateProfileJSONRequestBody = ProfileCreate
 
 // CreateRepositoryJSONRequestBody defines body for CreateRepository for application/json ContentType.
 type CreateRepositoryJSONRequestBody = RepositoryCreate

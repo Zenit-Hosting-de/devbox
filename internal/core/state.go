@@ -10,6 +10,7 @@ import (
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
+	"github.com/Zenit-Hosting-de/devbox/internal/profile"
 	"github.com/Zenit-Hosting-de/devbox/internal/repo"
 	bundled "github.com/Zenit-Hosting-de/devbox/plugins"
 )
@@ -56,8 +57,11 @@ func Load(env Env, build Build, withCall bool) (*State, error) {
 		return nil, err
 	}
 
-	for _, f := range []*config.File{st.System, st.User} {
-		profiles, err := loadProfiles(b, f)
+	for _, f := range []struct {
+		file   *config.File
+		origin string
+	}{{st.System, profile.OriginSystem}, {st.User, profile.OriginUser}} {
+		profiles, err := loadProfiles(b, env, f.file, f.origin)
 		if err != nil {
 			return nil, err
 		}
@@ -137,26 +141,6 @@ func pluginPaths(ctx config.Context, files ...*config.File) ([]string, error) {
 		}
 		str, _ := v.(string)
 		out = append(out, str)
-	}
-	return out, nil
-}
-
-func loadProfiles(b *Base, f *config.File) ([]*config.File, error) {
-	entries, _ := f.Plain()["profiles"].([]any)
-	var out []*config.File
-	for _, raw := range entries {
-		entry, _ := raw.(map[string]any)
-		source, _ := entry["source"].(string)
-		rel, _ := entry["path"].(string)
-		path, err := config.ProfilePath(b.Ctx, source, rel)
-		if err != nil {
-			return nil, err
-		}
-		pf, err := config.ReadFile(b.Validator, "profile", path, false)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pf)
 	}
 	return out, nil
 }

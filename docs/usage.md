@@ -208,6 +208,45 @@ A profile can lock a key; `config set` then refuses it. Other parts of `config.j
 (opens `$VISUAL` or `$EDITOR`) and checked with `devbox config validate`. The proxy and CA
 file from `network` are passed to every plugin.
 
+## Profiles
+
+A profile holds the defaults of a team: settings (possibly locked), plugins to switch on or
+off, prepared credential instances, repositories. It is one JSON file (`profile.v1.json`)
+from one of these sources:
+
+| Source | Example | Read from |
+| --- | --- | --- |
+| local file | `file://${xdg:config}/devbox/team.json` | the file itself, at every start |
+| web server | `https://example.com/devbox/profile.json` (at most 1 MiB) | the cached copy |
+| Git repository | `git+https://git.example.com/platform/devbox-profile.git` or `git+ssh://…`, with `ref` and `path` (default `profile.json`) | the cached copy |
+
+Remote profiles are cached under `~/.cache/devbox/profiles/<key>/profile.json`. A cached copy
+is used as long as it exists; `devbox profile update` fetches again. A failed fetch keeps the
+previous copy.
+
+```bash
+devbox profile add git+https://git.example.com/platform/devbox-profile.git --ref main --path profile.json
+devbox profile add https://example.com/devbox/profile.json \
+  --trust-issuer https://issuer.example.com --trust-identity https://ci.example.com/release
+devbox profile list                 # ID, version, origin (system or user), source, state; --json
+devbox profile show example-team    # settings with lock, credentials, groups, repositories
+devbox profile update [ID]          # fetch remote profiles again
+devbox profile remove example-team  # only profiles of the user file; deletes the cached copy
+```
+
+`add` fetches and checks the profile first and writes the source into `profiles` of the user
+file only when that worked. A second profile with the same ID is refused.
+
+**Signature.** With `--trust-issuer` and `--trust-identity` (`trust` in `config.json`), the
+profile must be signed with Sigstore by that identity. The bundle lies next to the profile as
+`<profile>.sigstore.json` (for example `profile.json.sigstore.json` in the same folder of the
+repository or on the web server) and is checked with `cosign verify-blob`; `cosign` must be
+in `PATH`. A missing or invalid signature is refused with the message of cosign, and no new
+copy replaces the cached one. Local files with `trust` are checked at every start.
+
+The web UI shows the profiles under Settings, with add, fetch again and remove; the API has
+`GET /profiles`, `POST /profiles`, `POST /profiles/update` and `DELETE /profiles/{id}`.
+
 ## Credentials
 
 A credential instance has a type (defined by a plugin: `registry` and `git-host` are bundled), fields, a secret
@@ -601,7 +640,6 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
 - the registry consumers `nuget`, `pip`, `docker`, the consumer of `git-host` (Git credential
   helper for the user, SSH key upload) and the credential types `ssh-key`, `generic`; the
   event `credential.changed`
-- `devbox profile …`; profiles from HTTPS or Git sources (only `file://` works today)
 - `devbox plugin install|update|remove` and plugin catalogs
 - plugin repositories: the web UI (Plugins page with "Installed" and "Sources"), the kinds
   `catalog`, `profile`, `templates` and `packages`, SSH keys for `git+ssh://` sources and

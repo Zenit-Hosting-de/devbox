@@ -246,3 +246,19 @@ func (m *Manager) checkoutCommit(ctx context.Context, g *gitCall, address, commi
 	_, err = m.runGit(ctx, g, dest, "-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", commit)
 	return err
 }
+
+// FetchGit makes a shallow copy of a Git source (git+https://, git+ssh:// or
+// git+file://) at ref into the empty directory dest, without the .git directory, and
+// returns the commit. It serves sources that are not repositories, such as profiles;
+// name only appears in errors.
+func (m *Manager) FetchGit(ctx context.Context, name, source, ref, dest string) (string, error) {
+	kind, addr, err := splitSource(source)
+	if err != nil {
+		return "", invalidf("%v", err)
+	}
+	if kind != sourceGit {
+		return "", invalidf("source %q is not a Git source", source)
+	}
+	e := Entry{Name: name, Source: source, source: source, Ref: ref, Trust: TrustPrompt}
+	return m.fetchGit(ctx, e, nil, addr, dest)
+}

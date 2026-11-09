@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"os"
 	"strings"
 
@@ -115,29 +114,6 @@ func ProfileLayer(f *File) Layer {
 		}
 	}
 	return l
-}
-
-// ProfilePath resolves a profile source to a local file. Until AP-12 adds HTTPS and
-// Git sources, only file:// sources are supported. Placeholders other than settings
-// are expanded first.
-func ProfilePath(ctx Context, source string, relPath string) (string, error) {
-	expanded, err := Expand(source, func(ref string) (any, error) { return ContextLookup(ctx, ref) })
-	if err != nil {
-		return "", err
-	}
-	s, _ := expanded.(string)
-	u, err := url.Parse(s)
-	if err != nil {
-		return "", &Error{Code: CodeValidation, Detail: fmt.Sprintf("profile source %q: %v", source, err)}
-	}
-	if u.Scheme != "file" {
-		return "", &Error{Code: CodeValidation, Detail: fmt.Sprintf("profile source %q: only file:// sources are supported yet", source)}
-	}
-	p := u.Path
-	if relPath != "" {
-		p = strings.TrimSuffix(p, "/") + "/" + relPath
-	}
-	return p, nil
 }
 
 // CheckKey checks that a plugin defines the key and that no profile locks it.

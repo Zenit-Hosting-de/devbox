@@ -1,0 +1,236 @@
+# AP-12: profiles from a file, from https and from a Git repository, the cache under
+# ~/.cache/devbox/profiles, devbox profile add|list|show|update|remove and the optional
+# Sigstore signature (cosign is a fake here: it accepts a bundle that names the
+# identity and rejects every other).
+
+[!exec:git] skip 'git is not installed'
+
+env GIT_AUTHOR_NAME=Test GIT_AUTHOR_EMAIL=test@example.com GIT_AUTHOR_DATE=2026-11-09T09:00:00Z
+env GIT_COMMITTER_NAME=Test GIT_COMMITTER_EMAIL=test@example.com GIT_COMMITTER_DATE=2026-11-09T09:00:00Z
+
+# no profile yet
+exec devbox profile list --json
+stdout '^\[\]$'
+
+# a local file: added, its locked setting wins over the user
+exec devbox profile add file://$WORK/local/profile.json
+stdout '^local-team: profile Local Team 1.0.0 added \(1 settings, 1 locked\)$'
+grep '"source": "file://' home/.config/devbox/config.json
+exec devbox config explain node.channel
+stdout '\[locked\]'
+! exec devbox config set node.channel current
+stderr 'setting-locked: node.channel: locked by profile:local-team'
+
+# the same source twice is a conflict
+! exec devbox profile add file://$WORK/local/profile.json
+stderr 'conflict: .*already configured'
+
+# a profile that does not match the schema is refused and not added
+! exec devbox profile add file://$WORK/local/broken.json
+stderr 'validation'
+exec devbox profile list
+! stdout broken
+
+# https: fetched into the cache
+cp srv-files/profile.json srv/pub/web/profile.json
+host start srv
+env SSL_CERT_FILE=$HOSTCA
+exec devbox profile add $HOST/pub/web/profile.json
+stdout '^web-team: profile Web Team 2026.11.1 added \(1 settings, 0 locked\)$'
+exec devbox profile list
+stdout '^web-team +2026.11.1 +user +https://127.0.0.1:[0-9]+/pub/web/profile.json +fetched '
+exec devbox config get node.keepPatches
+stdout '^4$'
+
+# the cached copy is used without network; update fetches the new version
+cp srv-files/profile-2.json srv/pub/web/profile.json
+exec devbox config get node.keepPatches
+stdout '^4$'
+exec devbox profile update web-team
+stdout '^web-team: updated to 2026.11.2 \(revision [0-9a-f]{12}\)$'
+exec devbox config get node.keepPatches
+stdout '^5$'
+exec devbox profile update web-team
+stdout '^web-team: up to date'
+
+# a failing update keeps the previous copy
+rm srv/pub/web/profile.json
+! exec devbox profile update web-team
+stdout 'web-team: update failed, the previous copy stays: prerequisite: download .*404'
+exec devbox config get node.keepPatches
+stdout '^5$'
+
+# Git: a profile in a sub-directory of a repository on the host, at a branch
+cd gitsrc
+exec git init --quiet --initial-branch=main
+exec git add .
+exec git -c commit.gpgsign=false commit --quiet -m one
+exec git branch stable
+cd ..
+exec git clone --quiet --bare gitsrc srv/pub/team/profile.git
+env GIT_SSL_CAINFO=$HOSTCA
+exec devbox profile add git+$HOST/pub/team/profile.git --ref stable --path team/profile.json
+stdout '^git-team: profile Git Team 3.0.0 added'
+exec devbox profile show git-team
+stdout '^ref: +stable$'
+stdout '^path: +team/profile.json$'
+stdout '^  node.distUrl = "https://mirror.example.com/node"$'
+stdout '^credentials: company-git$'
+exec devbox config get node.distUrl
+stdout '^https://mirror.example.com/node$'
+exec devbox profile show git-team --json
+stdout '"kind": "git"'
+stdout '"profile": \{'
+
+# a missing file in the repository is a clear error
+! exec devbox profile add git+$HOST/pub/team/profile.git --path nope.json
+stderr 'the repository has no file nope.json'
+
+# remove: the entry and the cache are gone, the lock no longer applies
+exec devbox profile remove local-team
+stdout '^local-team: profile removed$'
+exec devbox config set node.channel current
+exec devbox profile remove web-team
+! exec devbox profile remove web-team
+stderr 'not-found'
+exec devbox profile list
+! stdout web-team
+
+# a profile of the system configuration cannot be removed here
+mkdir etc/devbox
+cp etc-config.json etc/devbox/config.json
+exec devbox profile list
+stdout '^sys-team +1.0.0 +system '
+! exec devbox profile remove sys-team
+stderr 'conflict: .*system configuration'
+rm etc/devbox/config.json
+
+# signature: without cosign the check cannot run
+cp srv-files/signed.json srv/pub/signed/profile.json
+cp srv-files/bundle-ok.json srv/pub/signed/profile.json.sigstore.json
+[!exec:cosign] ! exec devbox profile add $HOST/pub/signed/profile.json --trust-issuer https://issuer.example.com --trust-identity https://ci.example.com/release
+[!exec:cosign] stderr 'prerequisite: cosign is needed'
+
+# with cosign: no bundle, a bundle of another identity, then the right bundle
+chmod 0755 bin/cosign
+env PATH=$WORK/bin:$PATH
+rm srv/pub/signed/profile.json.sigstore.json
+! exec devbox profile add $HOST/pub/signed/profile.json --trust-issuer https://issuer.example.com --trust-identity https://ci.example.com/release
+stderr 'requires a signature by https://ci.example.com/release, but there is no signature bundle'
+cp srv-files/bundle-wrong.json srv/pub/signed/profile.json.sigstore.json
+! exec devbox profile add $HOST/pub/signed/profile.json --trust-issuer https://issuer.example.com --trust-identity https://ci.example.com/release
+stderr 'validation: the signature of profile source .* is not valid for https://ci.example.com/release \(issuer https://issuer.example.com\): Error: none of the expected identities matched'
+exec devbox profile list
+! stdout signed-team
+cp srv-files/bundle-ok.json srv/pub/signed/profile.json.sigstore.json
+exec devbox profile add $HOST/pub/signed/profile.json --trust-issuer https://issuer.example.com --trust-identity https://ci.example.com/release
+stdout '^signed-team: profile Signed Team 1.0.0 added'
+exec devbox profile list
+stdout '^signed-team .* signed, fetched '
+
+# an update with an invalid signature keeps the verified copy
+cp srv-files/bundle-wrong.json srv/pub/signed/profile.json.sigstore.json
+! exec devbox profile update signed-team
+stdout 'signed-team: update failed, the previous copy stays: validation: the signature'
+exec devbox profile show signed-team
+stdout '^version: +1.0.0$'
+
+# a local file with trust is checked when the configuration is loaded
+cp srv-files/signed.json local/signed.json
+cp srv-files/bundle-wrong.json local/signed.json.sigstore.json
+! exec devbox profile add file://$WORK/local/signed.json --trust-issuer https://issuer.example.com --trust-identity https://ci.example.com/release
+stderr 'is not valid for'
+
+# only one of the trust flags is a usage error
+! exec devbox profile add file://$WORK/local/signed.json --trust-issuer https://issuer.example.com
+stderr 'go together'
+
+-- local/profile.json --
+{
+  "id": "local-team",
+  "name": "Local Team",
+  "version": "1.0.0",
+  "settings": {
+    "node.channel": { "value": "lts", "locked": true }
+  }
+}
+-- local/broken.json --
+{
+  "id": "broken",
+  "name": "Broken"
+}
+-- srv-files/profile.json --
+{
+  "id": "web-team",
+  "name": "Web Team",
+  "version": "2026.11.1",
+  "settings": {
+    "node.keepPatches": { "value": 4 }
+  }
+}
+-- srv-files/profile-2.json --
+{
+  "id": "web-team",
+  "name": "Web Team",
+  "version": "2026.11.2",
+  "settings": {
+    "node.keepPatches": { "value": 5 }
+  }
+}
+-- srv-files/signed.json --
+{
+  "id": "signed-team",
+  "name": "Signed Team",
+  "version": "1.0.0"
+}
+-- srv-files/bundle-ok.json --
+{"identity": "https://ci.example.com/release", "issuer": "https://issuer.example.com"}
+-- srv-files/bundle-wrong.json --
+{"identity": "https://ci.example.com/other", "issuer": "https://issuer.example.com"}
+-- srv/pub/web/.keep --
+-- srv/pub/signed/.keep --
+-- gitsrc/team/profile.json --
+{
+  "id": "git-team",
+  "name": "Git Team",
+  "version": "3.0.0",
+  "settings": {
+    "node.distUrl": { "value": "https://mirror.example.com/node" }
+  },
+  "credentials": {
+    "company-git": {
+      "type": "git-host",
+      "label": "Company Git",
+      "fields": { "url": "https://git.example.com", "flavor": "gitlab" }
+    }
+  }
+}
+-- etc-config.json --
+{
+  "profiles": [
+    { "source": "file://${env:HOME}/../sys/profile.json" }
+  ]
+}
+-- sys/profile.json --
+{
+  "id": "sys-team",
+  "name": "System Team",
+  "version": "1.0.0"
+}
+-- bin/cosign --
+#!/bin/sh
+# fake cosign: verify-blob --bundle B --certificate-identity I --certificate-oidc-issuer O FILE
+bundle= identity=
+while [ $# -gt 1 ]; do
+  case "$1" in
+    --bundle) bundle=$2; shift ;;
+    --certificate-identity) identity=$2; shift ;;
+  esac
+  shift
+done
+if grep -q "\"identity\": \"$identity\"" "$bundle"; then
+  echo "Verified OK"
+  exit 0
+fi
+echo "Error: none of the expected identities matched" >&2
+exit 1
