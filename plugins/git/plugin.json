@@ -1,0 +1,125 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "git",
+  "version": "1.0.0",
+  "name": "Git",
+  "description": "Set the Git identity and defaults and hand tokens of Git hosts to a credential helper",
+  "category": "tool",
+  "icon": "code",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["git", "mkdir", "cp", "chmod", "stat", "rm"],
+    "plugins": { "githost": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": [],
+    "files": {
+      "read": ["${git.gitconfig}", "${xdg:config}/git", "${git.credentialsFile}"],
+      "write": ["${git.gitconfig}", "${git.credentialsFile}"]
+    },
+    "sudo": false,
+    "credentials": ["git-host"]
+  },
+  "settings": {
+    "userName": {
+      "type": "string",
+      "default": "",
+      "label": "Name for commits",
+      "help": "Default of the action identity (user.name). Empty: the action asks for it."
+    },
+    "userEmail": {
+      "type": "string",
+      "default": "",
+      "label": "E-mail address for commits",
+      "help": "Default of the action identity (user.email). Empty: the action asks for it."
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {},
+      "label": "Git defaults",
+      "help": "Git configuration keys and their values, e.g. init.defaultBranch: main or pull.rebase: true. The action defaults writes them into a marked block of the Git configuration file."
+    },
+    "credentialHelper": {
+      "type": "string",
+      "default": "store",
+      "label": "Credential helper",
+      "help": "Helper that keeps the tokens of Git hosts. store: a file of DevBox (mode 0600, see credentialsFile). Any other value is a Git credential helper as in credential.helper, e.g. libsecret or an absolute path; DevBox hands the token to it with git credential approve."
+    },
+    "gitconfig": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.gitconfig",
+      "label": "Git configuration file",
+      "advanced": true
+    },
+    "credentialsFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/git-credentials",
+      "label": "Token file of the helper store",
+      "help": "Read and written by git credential-store; only used with the helper store.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "config": {
+      "label": "Git configuration",
+      "run": ["checks/config.sh"],
+      "timeout": "5s",
+      "cache": "1m",
+      "refreshOn": ["session.finished:git.*"]
+    }
+  },
+  "actions": {
+    "identity": {
+      "label": "Set identity",
+      "run": ["actions/identity.sh"],
+      "params": {
+        "name": {
+          "type": "string",
+          "default": "${git.userName}",
+          "label": "Name"
+        },
+        "email": {
+          "type": "string",
+          "default": "${git.userEmail}",
+          "pattern": "^([^\\s<>@]+@[^\\s<>@]+)?$",
+          "label": "E-mail address"
+        }
+      },
+      "timeout": "1m"
+    },
+    "defaults": {
+      "label": "Apply defaults",
+      "run": ["actions/defaults.sh"],
+      "timeout": "1m"
+    }
+  },
+  "consumes": {
+    "git-host": {
+      "apply": ["consume/apply.sh"],
+      "remove": ["consume/remove.sh"],
+      "options": {
+        "protocol": {
+          "type": "string",
+          "enum": ["https"],
+          "default": "https",
+          "label": "Protocol"
+        }
+      }
+    }
+  },
+  "contributes": {
+    "setup": [
+      { "action": "git.identity" },
+      { "action": "git.defaults", "after": ["git.identity"] }
+    ],
+    "overview": { "check": "git.config", "primaryAction": "git.identity" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}
