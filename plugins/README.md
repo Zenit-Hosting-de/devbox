@@ -10,6 +10,7 @@ last in the plugin search order, so a team can replace any of them.
 | `java`   | AP-13 (reference plugin)                                                                                                       |
 | `githost` | AP-16 (credential type `git-host`, verification against the API of the host; also the access of private plugin repositories, AP-27) |
 | `maven`  | AP-18 (install, update, registry consumer for `settings.xml`; mode `file` only, Maven reads no passwords from the environment) |
+| `pip`    | AP-18 (registry consumer for pip and uv: `pip.conf`, `uv.toml` and `.netrc`, or `PIP_INDEX_URL` and `UV_DEFAULT_INDEX`)       |
 | Plugin   | Work package                                                                                                                   |
 | -------- | ------------------------                                                                                                       |
 | `java`   | AP-13 (reference plugin)                                                                                                       |
