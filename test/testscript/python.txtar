@@ -1,0 +1,140 @@
+# AP-17: the python plugin passes devbox plugin test against a fake uv installer (the
+# sources are redirected by settings): checks, dry runs without changes, and every
+# action applied twice with no change on the second run.
+
+uvdist start
+uvdist python 3.13.1 3.12.7 3.11.10 3.14.0rc1
+uvdist tool ruff 0.8.0
+
+exec devbox plugin test --apply --set python.uvInstallUrl=$UVINSTALL --set python.pythonMirror=$UVMIRROR $REPO/plugins/python
+stdout '^ok +validate +python'
+stdout '^ok +check +python.installed +missing'
+stdout '^ok +check +python.latest +ok'
+stdout '^ok +dry-run +python.install +4 planned changes'
+stdout '^ok +apply +python.install +[1-9][0-9]* changes'
+stdout '^ok +repeat +python.install +no changes'
+stdout '^ok +repeat +python.update +no changes'
+stdout '^ok +repeat +python.use +no changes'
+stdout '^ok +repeat +python.tools +no changes'
+stdout '^skipped +apply +python.remove +danger'
+stdout '^ok +dry-run +python.remove'
+! stdout '^failed'
+
+# the same with more versions and tools configured: they are part of the planned
+# changes and installed once
+exec devbox plugin test --apply --set python.uvInstallUrl=$UVINSTALL --set python.pythonMirror=$UVMIRROR --set 'python.versions=["3.12","3.13"]' --set 'python.tools=["ruff>=0.5,<1"]' $REPO/plugins/python
+stdout '^ok +dry-run +python.install +7 planned changes'
+stdout '^ok +repeat +python.install +no changes'
+stdout '^ok +repeat +python.tools +no changes'
+! stdout '^failed'
+
+# the bundled python plugin (unpacked from the binary) used for real
+exec devbox plugin info python --json
+stdout '"state": "ready"'
+stdout '"path": ".*/devbox/builtin/.*/python"'
+
+# without a version: uv, the newest stable release as the default, PATH for new shells
+exec devbox run python.install --set python.uvInstallUrl=$UVINSTALL --set python.pythonMirror=$UVMIRROR --json
+stdout '"kind":"file","op":"create","summary":"uv","target":".*/home/.local/bin/uv","type":"change"'
+stdout '"kind":"file","op":"create","summary":"Python 3.13.1"'
+stdout '"kind":"link","op":"update","summary":"points to Python 3.13.1"'
+stdout '"summary":"Python 3.13.1","type":"result"'
+exec home/.local/bin/uv --version
+stdout 'uv 0.5.0'
+exec home/.local/bin/python --version
+stdout 'Python 3.13.1'
+exists home/.local/share/uv/python/cpython-3.13.1-fake/bin/python3
+grep 'export PATH=".*/home/.local/bin:\$PATH"' home/.config/devbox/env.d/python.sh
+grep '# >>> devbox:python >>>' home/.config/devbox/env.d/python.sh
+grep 'python install 3.13 mirror=http://.*/python-build-standalone' $UVSTATE/uv.log
+
+# a second install changes nothing
+exec devbox run python.install --set python.uvInstallUrl=$UVINSTALL --set python.pythonMirror=$UVMIRROR --json
+! stdout '"type":"change"'
+
+# another minor version without making it the default; unknown and invalid versions fail
+exec devbox run python.install -p version=3.12 -p makeDefault=false --set python.uvInstallUrl=$UVINSTALL
+exists home/.local/share/uv/python/cpython-3.12.7-fake/bin/python3
+exec home/.local/bin/python --version
+stdout 'Python 3.13.1'
+! exec devbox run python.install -p version=3.99 --set python.uvInstallUrl=$UVINSTALL
+! exec devbox run python.install -p version=abc --set python.uvInstallUrl=$UVINSTALL
+
+# the installed check lists them, the default is marked
+exec devbox status --json --set python.uvInstallUrl=$UVINSTALL
+stdout '"id": "python.installed"'
+stdout '"summary": "Python 3.13.1 \(default\), 3.12.7"'
+
+# switch the default
+exec devbox run python.use -p version=3.12 --set python.uvInstallUrl=$UVINSTALL --json
+stdout '"kind":"link","op":"update","summary":"points to Python 3.12.7"'
+exec home/.local/bin/python --version
+stdout 'Python 3.12.7'
+exec devbox run python.use -p version=3.12.7 --set python.uvInstallUrl=$UVINSTALL --json
+! stdout '"type":"change"'
+! exec devbox run python.use -p version=3.10 --set python.uvInstallUrl=$UVINSTALL
+
+# tools from the settings, once
+exec devbox run python.tools --set python.uvInstallUrl=$UVINSTALL --set 'python.tools=["ruff>=0.5,<1"]' --json
+stdout '"kind":"package","op":"create","summary":"Python tool","target":"ruff"'
+exists home/.local/bin/ruff
+grep 'tool install ruff>=0.5,<1' $UVSTATE/uv.log
+exec devbox run python.tools --set python.uvInstallUrl=$UVINSTALL --set 'python.tools=["ruff>=0.5,<1"]' --json
+! stdout '"type":"change"'
+
+# new releases: the latest check reports them, update takes uv, every minor version
+# and the tools to the newest release, the default follows its minor version
+uvdist python 3.13.2 3.12.8
+uvdist uv 0.6.0
+uvdist tool ruff 0.9.0
+exec devbox status --json --set python.uvInstallUrl=$UVINSTALL
+stdout '"summary": "Updates: uv, 3.13.2, 3.12.8, ruff"'
+exec devbox run python.update --set python.uvInstallUrl=$UVINSTALL --dry-run --json
+stdout '"kind":"file","op":"update","summary":"newer uv"'
+stdout '"summary":"Python 3.13.2"'
+stdout '"kind":"package","op":"update",.*"target":"ruff"'
+exec home/.local/bin/uv --version
+stdout 'uv 0.5.0'
+exec devbox run python.update --set python.uvInstallUrl=$UVINSTALL --json
+stdout '"kind":"file","op":"update","summary":"uv 0.6.0"'
+stdout '"op":"create","summary":"Python 3.13.2"'
+stdout '"op":"create","summary":"Python 3.12.8"'
+stdout '"kind":"package","op":"update","summary":"Python tool 0.9.0","target":"ruff"'
+exec home/.local/bin/uv --version
+stdout 'uv 0.6.0'
+exec home/.local/bin/python --version
+stdout 'Python 3.12.8'
+
+# a second update changes nothing
+exec devbox run python.update --set python.uvInstallUrl=$UVINSTALL --json
+! stdout '"type":"change"'
+exec devbox status --json --set python.uvInstallUrl=$UVINSTALL
+stdout '"summary": "Up to date"'
+
+# without self update uv is left alone
+uvdist uv 0.7.0
+exec devbox run python.update --set python.uvInstallUrl=$UVINSTALL --set python.selfUpdate=false --json
+! stdout '"type":"change"'
+! grep 'self update 0.6.0' $UVSTATE/uv.log
+
+# remove a version that is not the default, one that is not installed and the default
+exec devbox run python.remove -p version=3.13.1 --yes --set python.uvInstallUrl=$UVINSTALL
+! exists home/.local/share/uv/python/cpython-3.13.1-fake
+exec devbox run python.remove -p version=3.11 --yes --set python.uvInstallUrl=$UVINSTALL --json
+stdout '"summary":"Python 3.11 is not installed","type":"result"'
+exec devbox run python.remove -p version=3.12.8 --yes --set python.uvInstallUrl=$UVINSTALL --json
+stdout '"kind":"link","op":"delete","summary":"no default Python"'
+! exists home/.local/share/uv/python/cpython-3.12.8-fake
+! exists home/.local/bin/python
+exists home/.local/bin/uv
+
+# an installer that cannot be reached is a missing prerequisite and installs nothing
+! exec devbox run python.install --set python.uvInstallUrl=$UVINSTALL/missing --set python.binDir=$WORK/other/bin
+! exists other/bin/uv
+
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "paths": ["${xdg:data}/devbox/plugins"] }
+}
+-- home/.local/share/devbox/plugins/base/plugin.json --
+{ "id": "base", "version": "1.0.0", "name": "Base stand-in" }

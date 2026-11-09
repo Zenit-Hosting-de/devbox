@@ -39,6 +39,7 @@ func TestScripts(t *testing.T) {
 			"registry":   cmdRegistry,
 			"releases":   cmdReleases,
 			"nodedist":   cmdNodeDist,
+			"uvdist":     cmdUvDist,
 		},
 		Setup: func(e *testscript.Env) error {
 			e.Setenv("HOME", e.WorkDir+"/home")
