@@ -4,6 +4,10 @@
 
 import { Injectable } from "@angular/core";
 import type {
+  CatalogHit,
+  CatalogInstall,
+  CatalogInstallRequest,
+  CatalogSearch,
   CheckSummary,
   CredentialList,
   Info,
@@ -255,6 +259,73 @@ export class MockBackend {
       throw new MockProblem(404, "not-found", `No result for ${id}.`);
     }
     return structuredClone(found);
+  }
+
+  // ---- catalog --------------------------------------------------------------
+
+  private readonly catalogHits: CatalogHit[] = [
+    {
+      id: "kubectl",
+      catalog: "zenit-hosting",
+      name: "kubectl",
+      description: "Kubernetes command line tool.",
+      category: "tool",
+      version: "1.2.3",
+    },
+    {
+      id: "helm",
+      catalog: "zenit-hosting",
+      name: "Helm",
+      description: "Package manager for Kubernetes.",
+      category: "tool",
+      version: "3.0.0",
+    },
+  ];
+
+  searchCatalog(q: string): CatalogSearch {
+    const query = q.toLowerCase();
+    return {
+      plugins: structuredClone(
+        this.catalogHits.filter((h) =>
+          `${h.id} ${h.name} ${h.description ?? ""}`.toLowerCase().includes(query),
+        ),
+      ),
+      problems: {},
+    };
+  }
+
+  installFromCatalog(body: CatalogInstallRequest): CatalogInstall {
+    const hit = this.catalogHits.find((h) => h.id === body.id);
+    if (!hit) {
+      throw new MockProblem(404, "not-found", `No catalog offers ${body.id}.`);
+    }
+    const permissions = [{ kind: "network" as const, value: "https://downloads.example.com" }];
+    const result: CatalogInstall = {
+      id: hit.id,
+      catalog: hit.catalog,
+      version: body.version ?? hit.version,
+      ...(hit.installed ? { previousVersion: hit.installed } : {}),
+      digest: "sha256:" + "0".repeat(64),
+      signedBy: "https://ci.example.com/release",
+      permissions,
+      newPermissions: hit.installed ? [] : permissions,
+      installed: false,
+    };
+    if (hit.installed || body.confirm) {
+      hit.installed = result.version;
+      result.installed = true;
+      this.announcePlugins([hit.id], []);
+    }
+    return result;
+  }
+
+  deletePlugin(id: string): void {
+    const hit = this.catalogHits.find((h) => h.id === id && h.installed);
+    if (!hit) {
+      throw new MockProblem(409, "conflict", `${id} is not installed from a catalog.`);
+    }
+    delete hit.installed;
+    this.announcePlugins([id], []);
   }
 
   // ---- profiles -------------------------------------------------------------

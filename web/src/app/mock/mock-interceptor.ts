@@ -10,6 +10,7 @@ import { inject } from "@angular/core";
 import { Observable, delay } from "rxjs";
 import { environment } from "../../environments/environment";
 import type {
+  CatalogInstallRequest,
   ProfileCreate,
   RepositoryCreate,
   RepositoryPatch,
@@ -42,6 +43,18 @@ function route(req: HttpRequest<unknown>, backend: MockBackend, path: string): A
     if (method === "PATCH" && id && !third) {
       const body = (req.body ?? {}) as { enabled?: boolean };
       return ok(backend.patchPlugin(id, body.enabled === true));
+    }
+    if (method === "DELETE" && id && !third) {
+      backend.deletePlugin(id);
+      return { status: 204, body: null };
+    }
+  }
+  if (area === "catalog") {
+    if (method === "GET" && id === "search") {
+      return ok(backend.searchCatalog(req.params.get("q") ?? ""));
+    }
+    if (method === "POST" && id === "install") {
+      return ok(backend.installFromCatalog(req.body as CatalogInstallRequest));
     }
   }
   if (area === "repositories") {

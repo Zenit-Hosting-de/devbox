@@ -3,7 +3,7 @@ import { RouterLink } from "@angular/router";
 import { ZTab, ZTabs } from "zenit-ui";
 import { I18n } from "../i18n/i18n";
 
-/** Tab bar of the plugin area: the installed plugins and their sources. */
+/** Tab bar of the plugin area: the installed plugins, the catalogs and the sources. */
 @Component({
   selector: "dbx-plugin-tabs",
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -12,6 +12,9 @@ import { I18n } from "../i18n/i18n";
     <nav zTabs [attr.aria-label]="i18n.t('plugins.tabs')">
       <a zTab routerLink="/plugins" [active]="active() === 'installed'">
         {{ i18n.t("plugins.tab.installed") }}
+      </a>
+      <a zTab routerLink="/plugins/catalog" [active]="active() === 'catalog'">
+        {{ i18n.t("plugins.tab.catalog") }}
       </a>
       <a zTab routerLink="/plugins/sources" [active]="active() === 'sources'">
         {{ i18n.t("plugins.tab.sources") }}
@@ -27,5 +30,5 @@ import { I18n } from "../i18n/i18n";
 })
 export class PluginTabs {
   protected readonly i18n = inject(I18n);
-  readonly active = input.required<"installed" | "sources">();
+  readonly active = input.required<"installed" | "catalog" | "sources">();
 }

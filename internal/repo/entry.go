@@ -10,11 +10,15 @@ import (
 	"strings"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
+	"github.com/Zenit-Hosting-de/devbox/internal/sigstore"
 )
 
 // KindPlugins is the only kind of repository that is handled; the others are listed
 // as unsupported.
 const KindPlugins = "plugins"
+
+// KindCatalog is a catalog: an index.json with signed, versioned plugin packages.
+const KindCatalog = "catalog"
 
 // Trust values of an entry. TrustSignature stands for the object form (a Sigstore
 // identity), which arrives with the catalog (AP-23).
@@ -54,7 +58,9 @@ type Entry struct {
 	Path       string
 	Credential string
 	// Trust is TrustPrompt, TrustPinned or TrustSignature.
-	Trust   string
+	Trust string
+	// Signer is the Sigstore identity of the object form of trust; nil otherwise.
+	Signer  *sigstore.Identity
 	Enabled bool
 	// Origin is "user", "system" or "profile:<id>".
 	Origin string
@@ -112,6 +118,9 @@ func parseEntry(name string, raw any, origin string, expand func(string) (string
 		e.Trust = t
 	case map[string]any:
 		e.Trust = TrustSignature
+		e.Signer = &sigstore.Identity{}
+		e.Signer.Issuer, _ = t["issuer"].(string)
+		e.Signer.Identity, _ = t["identity"].(string)
 	}
 	if enabled, ok := m["enabled"].(bool); ok {
 		e.Enabled = enabled
@@ -178,6 +187,9 @@ func splitSource(source string) (kind, addr string, err error) {
 	}
 	return "", "", fmt.Errorf("source %q: %s:// is not supported for plugin repositories", source, scheme)
 }
+
+// Expanded returns the source with placeholders resolved, or why it cannot be.
+func (e Entry) Expanded() (string, error) { return e.source, e.expandErr }
 
 // Problem returns why the entry cannot be synced or loaded, or nil. It is about the
 // configuration only; entries of other kinds have no problem here.

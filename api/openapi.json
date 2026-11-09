@@ -201,6 +201,40 @@
           }
         },
         "description": "Writes plugins.disabled of the user configuration; doing the same twice changes nothing. 409 conflict for a plugin of the category core (cannot be switched off) and for switching on a plugin that the system configuration or a profile switches off (the detail names the source)."
+      },
+      "delete": {
+        "tags": ["plugins"],
+        "operationId": "deletePlugin",
+        "summary": "Remove a plugin installed from a catalog.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Plugin ID.",
+            "schema": {
+              "$ref": "#/components/schemas/Name"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The plugin folder and its lock entry are gone."
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Only plugins of plugins.lock.json can be removed; 409 conflict for a bundled plugin or one from a folder or repository, 404 for an unknown one."
       }
     },
     "/plugins/{id}/messages/{lang}": {
@@ -248,6 +282,87 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      }
+    },
+    "/catalog/search": {
+      "get": {
+        "tags": ["plugins"],
+        "operationId": "searchCatalog",
+        "summary": "Search the plugins of all catalogs.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Text in ID, name or description; empty lists everything."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matches sorted by ID and catalog; catalogs that could not be read are named in problems.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogSearch"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Uses the cached index of each catalog; a catalog that was never synced is synced first."
+      }
+    },
+    "/catalog/install": {
+      "post": {
+        "tags": ["plugins"],
+        "operationId": "installFromCatalog",
+        "summary": "Install or update a plugin from a catalog.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DevBoxRequest"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogInstallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The checked package. installed is true when the plugin was put in place; false when its permissions need confirm.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogInstall"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "description": "Downloads the package, checks its digest and its Sigstore signature against the trust identity of the catalog and unpacks it. A new plugin needs confirm, an update only when it declares new permissions; without confirm the answer lists the permissions and nothing is installed. 422 validation for a wrong digest or signature, 409 conflict for a plugin present from another origin, the version installed already or several catalogs without catalog."
       }
     },
     "/checks": {
@@ -2556,14 +2671,14 @@
         ]
       },
       "PluginOrigin": {
-        "description": "Where a plugin was found: bundled with the binary, in a directory of plugins.paths, or in the active revision of a plugin repository.",
+        "description": "Where a plugin was found: bundled with the binary, in a directory of plugins.paths, in the active revision of a plugin repository, or installed from a catalog.",
         "type": "object",
         "required": ["kind"],
         "additionalProperties": false,
         "properties": {
           "kind": {
-            "enum": ["builtin", "path", "repository"],
-            "description": "builtin: bundled plugin; path: a directory of plugins.paths; repository: the active revision of a plugins repository."
+            "enum": ["builtin", "path", "repository", "catalog"],
+            "description": "builtin: bundled plugin; path: a directory of plugins.paths; repository: the active revision of a plugins repository; catalog: installed from a catalog (plugins.lock.json)."
           },
           "path": {
             "type": "string",
@@ -2571,11 +2686,11 @@
           },
           "repository": {
             "$ref": "#/components/schemas/Name",
-            "description": "Name of the repository (kind repository)."
+            "description": "Name of the repository (kind repository) or of the catalog (kind catalog)."
           },
           "revision": {
             "type": "string",
-            "description": "Short form (12 characters) of the active revision (kind repository)."
+            "description": "Short form (12 characters) of the active revision (kind repository), or the installed version (kind catalog)."
           }
         }
       },
@@ -3119,6 +3234,145 @@
         "type": "array",
         "items": {
           "$ref": "#/components/schemas/ProfileUpdate"
+        }
+      },
+      "CatalogPermission": {
+        "description": "A permission a package declares.",
+        "type": "object",
+        "required": ["kind", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": ["network", "files.read", "files.write", "sudo", "credentials"]
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "CatalogHit": {
+        "description": "A plugin offered by a catalog.",
+        "type": "object",
+        "required": ["id", "catalog", "name", "version"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "catalog": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string",
+            "description": "Newest stable release."
+          },
+          "installed": {
+            "type": "string",
+            "description": "Version installed from this catalog; absent when not installed."
+          }
+        }
+      },
+      "CatalogSearch": {
+        "type": "object",
+        "required": ["plugins", "problems"],
+        "additionalProperties": false,
+        "properties": {
+          "plugins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogHit"
+            }
+          },
+          "problems": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Catalogs that could not be read, by name."
+          }
+        }
+      },
+      "CatalogInstallRequest": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,31}$"
+          },
+          "version": {
+            "type": "string",
+            "description": "A published version; default the newest stable release."
+          },
+          "catalog": {
+            "$ref": "#/components/schemas/Name",
+            "description": "Needed when several catalogs offer the plugin."
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false,
+            "description": "Accept the declared permissions (all for a new plugin, the new ones for an update)."
+          }
+        }
+      },
+      "CatalogInstall": {
+        "type": "object",
+        "required": [
+          "id",
+          "catalog",
+          "version",
+          "digest",
+          "permissions",
+          "newPermissions",
+          "installed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "catalog": {
+            "$ref": "#/components/schemas/Name"
+          },
+          "version": {
+            "type": "string"
+          },
+          "previousVersion": {
+            "type": "string",
+            "description": "The version installed before; absent for a new plugin."
+          },
+          "digest": {
+            "type": "string"
+          },
+          "signedBy": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogPermission"
+            }
+          },
+          "newPermissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogPermission"
+            },
+            "description": "Permissions the installed version did not declare; all for a new plugin."
+          },
+          "installed": {
+            "type": "boolean"
+          }
         }
       }
     }

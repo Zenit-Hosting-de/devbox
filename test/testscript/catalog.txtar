@@ -1,0 +1,158 @@
+# AP-23: plugins from a catalog. The index and the packages lie in a folder (file://
+# source); cosign is a fake that accepts a bundle naming the expected identity.
+# Install checks digest and signature, asks for the permissions and records the plugin
+# in plugins.lock.json; an update with new permissions asks again.
+
+chmod 0755 bin/cosign
+env PATH=$WORK/bin:$PATH
+catalog build cat-src out https://ci.example.com/release
+mkdir home/.config/devbox
+cp config.json home/.config/devbox/config.json
+
+# the catalog appears as a repository; sync reads the index
+exec devbox repo list
+stdout '^team +new +catalog +user '
+exec devbox repo sync team
+exec devbox repo list
+stdout '^team +active +catalog '
+
+# search
+exec devbox plugin search
+stdout '^kubeish +1.1.0 +team +Plugin kubeish'
+stdout '^helmish +2.0.0 +team '
+exec devbox plugin search helm
+! stdout kubeish
+exec devbox plugin search --json
+stdout '"id": "helmish"'
+
+# without a terminal and without --yes the permissions cannot be confirmed: exit 4
+! exec devbox plugin install kubeish@1.0.0
+stderr 'kubeish 1.0.0 from catalog team declares these permissions:'
+stderr 'network: https://downloads.example.com'
+stderr 'need a confirmation; run in a terminal or pass --yes'
+! exists home/.local/share/devbox/catalog/kubeish
+! exists home/.local/share/devbox/plugins.lock.json
+
+# install an older version, then it is a ready plugin from the catalog
+exec devbox plugin install kubeish@1.0.0 --yes
+stdout '^kubeish: 1.0.0 installed from catalog team \(signature checked\)$'
+exec devbox plugin list
+stdout '^kubeish +1.0.0 +ready +catalog:team@1.0.0'
+grep '"catalog": "team"' home/.local/share/devbox/plugins.lock.json
+grep '"signedBy": "https://ci.example.com/release"' home/.local/share/devbox/plugins.lock.json
+exec devbox plugin search kube
+stdout 'installed 1.0.0'
+
+# the update declares a new permission: it needs a confirmation again
+! exec devbox plugin update kubeish
+stderr 'kubeish 1.1.0 \(installed: 1.0.0\) declares new permissions \(\+\):'
+stderr '\+ sudo: true'
+stderr '  network: https://downloads.example.com'
+exec devbox plugin list
+stdout '^kubeish +1.0.0 '
+exec devbox plugin update kubeish --yes
+stdout '^kubeish: updated 1.0.0 -> 1.1.0'
+exec devbox plugin update
+stdout '^kubeish: up to date$'
+
+# an update without new permissions needs no confirmation
+exec devbox plugin install helmish@1.0.0 --yes
+exec devbox plugin update helmish
+stdout '^helmish: updated 1.0.0 -> 2.0.0'
+
+# a package signed by another identity is refused, nothing is installed
+catalog sign out/toolish-1.0.0.tar.gz https://ci.example.com/other
+! exec devbox plugin install toolish --yes
+stderr 'validation: the signature of toolish 1.0.0 from catalog team is not valid for https://ci.example.com/release \(issuer https://issuer.example.com\): Error: none of the expected identities matched'
+! exists home/.local/share/devbox/catalog/toolish
+
+# an unsigned package is refused
+rm out/toolish-1.0.0.tar.gz.sigstore.json
+! exec devbox plugin install toolish --yes
+stderr 'the package of toolish 1.0.0 is not signed'
+
+# a package that does not match its digest is refused
+catalog sign out/toolish-1.0.0.tar.gz https://ci.example.com/release
+cp out/helmish-1.0.0.tar.gz out/toolish-1.0.0.tar.gz
+! exec devbox plugin install toolish --yes
+stderr 'does not match its digest'
+! exists home/.local/share/devbox/catalog/toolish
+
+# unknown plugins and plugins that are present otherwise
+! exec devbox plugin install nope --yes
+stderr 'not-found: nope: no catalog offers this plugin'
+! exec devbox plugin install java --yes
+stderr 'conflict: java: a plugin with this ID is already present \(builtin\)'
+! exec devbox plugin remove java
+stderr 'not installed from a catalog \(builtin\)'
+
+# remove
+exec devbox plugin remove kubeish
+stdout '^kubeish: removed$'
+! exists home/.local/share/devbox/catalog/kubeish
+! grep kubeish home/.local/share/devbox/plugins.lock.json
+exec devbox plugin list
+! stdout kubeish
+
+# a catalog without trust identity cannot install
+cp config-notrust.json home/.config/devbox/config.json
+! exec devbox plugin install toolish --yes
+stderr 'catalog team has no trust identity'
+
+-- config.json --
+{
+  "repositories": {
+    "team": {
+      "kind": "catalog",
+      "source": "file://${env:HOME}/../out/index.json",
+      "trust": { "issuer": "https://issuer.example.com", "identity": "https://ci.example.com/release" }
+    }
+  }
+}
+-- config-notrust.json --
+{
+  "repositories": {
+    "team": { "kind": "catalog", "source": "file://${env:HOME}/../out/index.json" }
+  }
+}
+-- cat-src/kubeish/1.0.0/plugin.json --
+{
+  "id": "kubeish", "version": "1.0.0", "name": "Kubeish", "description": "Cluster tool", "category": "tool",
+  "permissions": { "network": ["https://downloads.example.com"] }
+}
+-- cat-src/kubeish/1.1.0/plugin.json --
+{
+  "id": "kubeish", "version": "1.1.0", "name": "Kubeish", "description": "Cluster tool", "category": "tool",
+  "permissions": { "network": ["https://downloads.example.com"], "sudo": true }
+}
+-- cat-src/helmish/1.0.0/plugin.json --
+{
+  "id": "helmish", "version": "1.0.0", "name": "Helmish", "description": "Charts", "category": "tool",
+  "permissions": { "network": ["https://charts.example.com"] }
+}
+-- cat-src/helmish/2.0.0/plugin.json --
+{
+  "id": "helmish", "version": "2.0.0", "name": "Helmish", "description": "Charts", "category": "tool",
+  "permissions": { "network": ["https://charts.example.com"] }
+}
+-- cat-src/toolish/1.0.0/plugin.json --
+{
+  "id": "toolish", "version": "1.0.0", "name": "Toolish", "description": "Tool", "category": "tool"
+}
+-- bin/cosign --
+#!/bin/sh
+# fake cosign: verify-blob --bundle B --certificate-identity I --certificate-oidc-issuer O FILE
+bundle= identity=
+while [ $# -gt 1 ]; do
+  case "$1" in
+    --bundle) bundle=$2; shift ;;
+    --certificate-identity) identity=$2; shift ;;
+  esac
+  shift
+done
+if grep -q "\"identity\":\"$identity\"" "$bundle"; then
+  echo "Verified OK"
+  exit 0
+fi
+echo "Error: none of the expected identities matched" >&2
+exit 1

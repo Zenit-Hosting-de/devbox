@@ -80,6 +80,7 @@ export function originBadge(i18n: I18n, origin: PluginOrigin): string {
     case "path":
       return i18n.t("plugins.origin.path");
     case "repository":
+    case "catalog":
       return origin.repository ?? "";
   }
 }
@@ -95,6 +96,11 @@ export function originLine(i18n: I18n, origin: PluginOrigin): string {
       return i18n.t("plugins.originLine.repository", {
         name: origin.repository ?? "",
         revision: origin.revision ?? "",
+      });
+    case "catalog":
+      return i18n.t("plugins.originLine.catalog", {
+        name: origin.repository ?? "",
+        version: origin.revision ?? "",
       });
   }
 }

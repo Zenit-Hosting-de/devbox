@@ -599,6 +599,7 @@ func TestRepositoryDisabledAndUnsupported(t *testing.T) {
 	repos := doc["repositories"].(map[string]any)
 	repos["team"].(map[string]any)["enabled"] = false
 	repos["catalog-one"] = map[string]any{"kind": "catalog", "source": "https://catalog.example.com/index.json"}
+	repos["templ"] = map[string]any{"kind": "templates", "source": "https://templates.example.com/t.tar.gz"}
 	e.writeUserConfig(doc)
 
 	team := e.repository("team")
@@ -611,12 +612,19 @@ func TestRepositoryDisabledAndUnsupported(t *testing.T) {
 	}
 	e.wantProblem(e.request(http.MethodPost, "/repositories/team/sync", nil), http.StatusConflict, codeConflict)
 
+	// a catalog without trust identity cannot be used
 	cat := e.repository("catalog-one")
-	if cat["state"] != "unsupported" || cat["kind"] != "catalog" || cat["trust"] != nil || cat["active"] != nil {
+	if cat["state"] != "error" || cat["kind"] != "catalog" || cat["trust"] != "signature" || cat["active"] != nil {
 		t.Errorf("catalog-one = %v", cat)
 	}
 	e.wantProblem(e.request(http.MethodPost, "/repositories/catalog-one/sync", nil), http.StatusConflict, codeConflict)
 	e.wantProblem(e.request(http.MethodPost, "/repositories/catalog-one/approve", map[string]any{"revision": "abc"}), http.StatusConflict, codeConflict)
+
+	templ := e.repository("templ")
+	if templ["state"] != "unsupported" || templ["trust"] != nil {
+		t.Errorf("templ = %v", templ)
+	}
+	e.wantProblem(e.request(http.MethodPost, "/repositories/templ/sync", nil), http.StatusConflict, codeConflict)
 
 	// switching it on again loads the active revision
 	repos["team"].(map[string]any)["enabled"] = true

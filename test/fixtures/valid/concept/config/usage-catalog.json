@@ -1,0 +1,9 @@
+{
+  "repositories": {
+    "team-catalog": {
+      "kind": "catalog",
+      "source": "https://catalog.example.com/index.json",
+      "trust": { "issuer": "https://issuer.example.com", "identity": "https://ci.example.com/release" }
+    }
+  }
+}

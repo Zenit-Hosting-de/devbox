@@ -49,7 +49,11 @@ export interface paths {
         get: operations["getPlugin"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove a plugin installed from a catalog.
+         * @description Only plugins of plugins.lock.json can be removed; 409 conflict for a bundled plugin or one from a folder or repository, 404 for an unknown one.
+         */
+        delete: operations["deletePlugin"];
         options?: never;
         head?: never;
         /**
@@ -73,6 +77,46 @@ export interface paths {
         get: operations["getPluginMessages"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the plugins of all catalogs.
+         * @description Uses the cached index of each catalog; a catalog that was never synced is synced first.
+         */
+        get: operations["searchCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Install or update a plugin from a catalog.
+         * @description Downloads the package, checks its digest and its Sigstore signature against the trust identity of the catalog and unpacks it. A new plugin needs confirm, an update only when it declares new permissions; without confirm the answer lists the permissions and nothing is installed. 422 validation for a wrong digest or signature, 409 conflict for a plugin present from another origin, the version installed already or several catalogs without catalog.
+         */
+        post: operations["installFromCatalog"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1012,18 +1056,18 @@ export interface components {
         };
         /** @description Every message the core may send. */
         WsServerMessage: components["schemas"]["WsOutput"] | components["schemas"]["WsEvent"] | components["schemas"]["WsSession"] | components["schemas"]["WsCheck"] | components["schemas"]["WsSettings"] | components["schemas"]["WsPlugins"] | components["schemas"]["WsRestart"] | components["schemas"]["WsGap"] | components["schemas"]["WsError"] | components["schemas"]["WsPing"] | components["schemas"]["WsPong"];
-        /** @description Where a plugin was found: bundled with the binary, in a directory of plugins.paths, or in the active revision of a plugin repository. */
+        /** @description Where a plugin was found: bundled with the binary, in a directory of plugins.paths, in the active revision of a plugin repository, or installed from a catalog. */
         PluginOrigin: {
             /**
-             * @description builtin: bundled plugin; path: a directory of plugins.paths; repository: the active revision of a plugins repository.
+             * @description builtin: bundled plugin; path: a directory of plugins.paths; repository: the active revision of a plugins repository; catalog: installed from a catalog (plugins.lock.json).
              * @enum {unknown}
              */
-            kind: "builtin" | "path" | "repository";
+            kind: "builtin" | "path" | "repository" | "catalog";
             /** @description The search path (kind path). */
             path?: string;
-            /** @description Name of the repository (kind repository). */
+            /** @description Name of the repository (kind repository) or of the catalog (kind catalog). */
             repository?: components["schemas"]["Name"];
-            /** @description Short form (12 characters) of the active revision (kind repository). */
+            /** @description Short form (12 characters) of the active revision (kind repository), or the installed version (kind catalog). */
             revision?: string;
         };
         /** @description Switches a plugin on or off for the user (plugins.disabled of the user configuration). */
@@ -1291,6 +1335,56 @@ export interface components {
             error?: string;
         };
         ProfileUpdateList: components["schemas"]["ProfileUpdate"][];
+        /** @description A permission a package declares. */
+        CatalogPermission: {
+            /** @enum {unknown} */
+            kind: "network" | "files.read" | "files.write" | "sudo" | "credentials";
+            value: string;
+        };
+        /** @description A plugin offered by a catalog. */
+        CatalogHit: {
+            id: string;
+            catalog: components["schemas"]["Name"];
+            name: string;
+            description?: string;
+            category?: string;
+            /** @description Newest stable release. */
+            version: string;
+            /** @description Version installed from this catalog; absent when not installed. */
+            installed?: string;
+        };
+        CatalogSearch: {
+            plugins: components["schemas"]["CatalogHit"][];
+            /** @description Catalogs that could not be read, by name. */
+            problems: {
+                [key: string]: string;
+            };
+        };
+        CatalogInstallRequest: {
+            id: string;
+            /** @description A published version; default the newest stable release. */
+            version?: string;
+            /** @description Needed when several catalogs offer the plugin. */
+            catalog?: components["schemas"]["Name"];
+            /**
+             * @description Accept the declared permissions (all for a new plugin, the new ones for an update).
+             * @default false
+             */
+            confirm: boolean;
+        };
+        CatalogInstall: {
+            id: string;
+            catalog: components["schemas"]["Name"];
+            version: string;
+            /** @description The version installed before; absent for a new plugin. */
+            previousVersion?: string;
+            digest: string;
+            signedBy?: string;
+            permissions: components["schemas"]["CatalogPermission"][];
+            /** @description Permissions the installed version did not declare; all for a new plugin. */
+            newPermissions: components["schemas"]["CatalogPermission"][];
+            installed: boolean;
+        };
     };
     responses: {
         /** @description Error in RFC 9457 format. */
@@ -1382,6 +1476,33 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    deletePlugin: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every modifying request (CSRF protection), together with a matching Origin. */
+                "X-DevBox-Request": components["parameters"]["DevBoxRequest"];
+            };
+            path: {
+                /** @description Plugin ID. */
+                id: components["schemas"]["Name"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The plugin folder and its lock entry are gone. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     patchPlugin: {
         parameters: {
             query?: never;
@@ -1440,6 +1561,61 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    searchCatalog: {
+        parameters: {
+            query?: {
+                /** @description Text in ID, name or description; empty lists everything. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matches sorted by ID and catalog; catalogs that could not be read are named in problems. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogSearch"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    installFromCatalog: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required on every modifying request (CSRF protection), together with a matching Origin. */
+                "X-DevBox-Request": components["parameters"]["DevBoxRequest"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogInstallRequest"];
+            };
+        };
+        responses: {
+            /** @description The checked package. installed is true when the plugin was put in place; false when its permissions need confirm. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogInstall"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };

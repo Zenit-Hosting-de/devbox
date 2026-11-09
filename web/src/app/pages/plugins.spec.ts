@@ -19,12 +19,13 @@ describe("PluginsPage (against the mock backend)", () => {
     return fixture;
   }
 
-  it("has the tabs Installed and Sources, Installed being current", async () => {
+  it("has the tabs Installed, Catalog and Sources, Installed being current", async () => {
     const fixture = await open();
     const tabs = queryAll(fixture, "nav a.z-tab");
-    expect(tabs.map((t) => t.textContent?.trim())).toEqual(["Installed", "Sources"]);
+    expect(tabs.map((t) => t.textContent?.trim())).toEqual(["Installed", "Catalog", "Sources"]);
     expect(tabs[0]?.getAttribute("aria-current")).toBe("page");
-    expect(tabs[1]?.getAttribute("href")).toBe("/plugins/sources");
+    expect(tabs[1]?.getAttribute("href")).toBe("/plugins/catalog");
+    expect(tabs[2]?.getAttribute("href")).toBe("/plugins/sources");
   });
 
   it("shows where every plugin comes from", async () => {

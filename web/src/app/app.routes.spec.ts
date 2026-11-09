@@ -35,6 +35,7 @@ describe("routes", () => {
     "/",
     "/plugins",
     "/plugins/sources",
+    "/plugins/catalog",
     "/plugins/java",
     "/verlauf",
     "/einstellungen",

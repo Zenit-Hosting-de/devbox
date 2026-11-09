@@ -12,15 +12,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
 	"github.com/Zenit-Hosting-de/devbox/internal/schema"
+	"github.com/Zenit-Hosting-de/devbox/internal/sigstore"
 )
 
 const (
@@ -372,87 +371,24 @@ func (f *Fetcher) Check(ctx context.Context, s Source, file string) error {
 	return f.Verify(ctx, s, file)
 }
 
-// verified remembers files whose signature cosign accepted in this process, by the
-// digest of profile, bundle and identity, so the server does not run cosign for every
-// request.
-var verified sync.Map
-
 // Verify checks the Sigstore bundle <file>.sigstore.json with cosign: the profile must
 // be signed by the identity and issuer of the source.
 func (f *Fetcher) Verify(ctx context.Context, s Source, file string) error {
 	bundle := file + BundleSuffix
-	data, err := os.ReadFile(file) //nolint:gosec // the profile file of a source
-	if err != nil {
-		return err
-	}
-	sig, err := os.ReadFile(bundle) //nolint:gosec // next to the profile file
-	if errors.Is(err, fs.ErrNotExist) {
-		return invalidf("profile source %q requires a signature by %s, but there is no signature bundle (%s)", s.Source, s.Trust.Identity, path.Base(bundle))
-	}
-	if err != nil {
-		return err
-	}
-	h := sha256.New()
-	for _, part := range [][]byte{data, sig, []byte(s.Trust.Issuer), []byte(s.Trust.Identity)} {
-		sum := sha256.Sum256(part)
-		h.Write(sum[:])
-	}
-	memo := hex.EncodeToString(h.Sum(nil))
-	if _, ok := verified.Load(memo); ok {
+	v := sigstore.Verifier{LookPath: f.LookPath, Getenv: f.Getenv}
+	err := v.Verify(ctx, file, bundle, sigstore.Identity{Issuer: s.Trust.Issuer, Identity: s.Trust.Identity})
+	var invalid *sigstore.InvalidError
+	switch {
+	case err == nil:
 		return nil
-	}
-	look := f.LookPath
-	if look == nil {
-		look = exec.LookPath
-	}
-	bin, err := look("cosign")
-	if err != nil {
+	case errors.Is(err, sigstore.ErrNoBundle):
+		return invalidf("profile source %q requires a signature by %s, but there is no signature bundle (%s)", s.Source, s.Trust.Identity, path.Base(bundle))
+	case errors.Is(err, sigstore.ErrNoCosign):
 		return prerequisitef("cosign is needed to check the signature of profile source %q and is not installed (or not in PATH)", s.Source)
+	case errors.As(err, &invalid):
+		return invalidf("the signature of profile source %q is not valid for %s (issuer %s): %s", s.Source, s.Trust.Identity, s.Trust.Issuer, invalid.Output)
 	}
-	ctx, cancel := context.WithTimeout(ctx, FetchTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, bin, "verify-blob", //nolint:gosec // cosign from the PATH of the call, arguments are built here
-		"--bundle", bundle,
-		"--certificate-identity", s.Trust.Identity,
-		"--certificate-oidc-issuer", s.Trust.Issuer,
-		file)
-	cmd.Env = f.cosignEnv()
-	var out bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &out
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(out.String())
-		if len(msg) > 1000 {
-			msg = msg[len(msg)-1000:]
-		}
-		if msg == "" {
-			msg = err.Error()
-		}
-		return invalidf("the signature of profile source %q is not valid for %s (issuer %s): %s", s.Source, s.Trust.Identity, s.Trust.Issuer, msg)
-	}
-	verified.Store(memo, true)
-	return nil
-}
-
-// cosignEnvPassThrough lists the variables cosign gets: home, proxy, certificates and
-// the Sigstore trust root.
-var cosignEnvPassThrough = []string{
-	"HOME", "PATH", "TMPDIR", "LANG",
-	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
-	"SSL_CERT_FILE", "SSL_CERT_DIR", "TUF_ROOT", "SIGSTORE_ROOT_FILE",
-}
-
-func (f *Fetcher) cosignEnv() []string {
-	getenv := f.Getenv
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	var env []string
-	for _, k := range cosignEnvPassThrough {
-		if v := getenv(k); v != "" {
-			env = append(env, k+"="+v)
-		}
-	}
-	return env
+	return err
 }
 
 // Remove deletes the cached copy of a remote source.

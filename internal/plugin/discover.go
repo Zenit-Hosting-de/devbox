@@ -30,6 +30,9 @@ const (
 	OriginBuiltin    = "builtin"
 	OriginPath       = "path"
 	OriginRepository = "repository"
+	// OriginCatalog is a plugin installed from a catalog; Repository names the catalog
+	// and Revision the installed version.
+	OriginCatalog = "catalog"
 )
 
 // Origin says where a plugin was found (api/openapi.json, PluginOrigin).
@@ -42,13 +45,14 @@ type Origin struct {
 	Revision   string `json:"revision,omitempty"`
 }
 
-// String is the short text form: builtin, path:<dir> or repository:<name>@<revision>.
+// String is the short text form: builtin, path:<dir>, repository:<name>@<revision> or
+// catalog:<name>@<version>.
 func (o Origin) String() string {
 	switch o.Kind {
 	case OriginPath:
 		return OriginPath + ":" + o.Path
-	case OriginRepository:
-		return OriginRepository + ":" + o.Repository + "@" + o.Revision
+	case OriginRepository, OriginCatalog:
+		return o.Kind + ":" + o.Repository + "@" + o.Revision
 	}
 	return o.Kind
 }
