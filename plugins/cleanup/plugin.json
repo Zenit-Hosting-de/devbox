@@ -1,0 +1,200 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "cleanup",
+  "version": "1.0.0",
+  "name": "Cleanup",
+  "description": "Clean package caches, old build folders in projects and unused Docker data, with sizes in the dry run",
+  "category": "maintenance",
+  "icon": "cleaning_services",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["find", "du", "rm"]
+  },
+  "permissions": {
+    "network": [],
+    "files": {
+      "read": [
+        "${cleanup.npmCache}",
+        "${cleanup.mavenCache}",
+        "${cleanup.gradleCache}",
+        "${cleanup.nugetCache}",
+        "${cleanup.pipCache}",
+        "${cleanup.uvCache}",
+        "${cleanup.projectRoots}"
+      ],
+      "write": [
+        "${cleanup.npmCache}",
+        "${cleanup.mavenCache}",
+        "${cleanup.gradleCache}",
+        "${cleanup.nugetCache}",
+        "${cleanup.pipCache}",
+        "${cleanup.uvCache}",
+        "${cleanup.projectRoots}"
+      ]
+    },
+    "sudo": false,
+    "credentials": []
+  },
+  "settings": {
+    "projectRoots": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
+      "default": [],
+      "label": "Project folders",
+      "help": "Absolute paths of the folders that hold projects. Build folders are searched below them only. The home directory itself and folders above it are refused. Empty switches the search off."
+    },
+    "olderThanDays": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3650,
+      "default": 30,
+      "label": "Minimum age in days",
+      "help": "A build folder is removed only when nothing in it was changed for this many days."
+    },
+    "patterns": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[^/:]+(:[^/:]+)?$" },
+      "uniqueItems": true,
+      "default": [
+        "node_modules",
+        "target",
+        "build",
+        "dist",
+        ".gradle",
+        "__pycache__",
+        "bin:*.*proj",
+        "obj:*.*proj"
+      ],
+      "label": "Build folders",
+      "help": "Folder names (wildcards * and ? allowed). NAME:MARKER matches only when the folder next to it holds an entry matching MARKER, e.g. bin:*.*proj for .NET projects. Folders tracked by Git are never removed."
+    },
+    "caches": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["npm", "maven", "gradle", "nuget", "pip", "uv"] },
+      "uniqueItems": true,
+      "default": ["npm", "maven", "gradle", "nuget", "pip", "uv"],
+      "label": "Caches to clean",
+      "help": "Only caches whose folder exists are measured and removed. The tools fill them again on the next use."
+    },
+    "docker": {
+      "type": "boolean",
+      "default": false,
+      "label": "Clean Docker",
+      "help": "Runs docker system prune: stopped containers, unused networks, dangling images and the build cache. Without Docker in PATH nothing happens."
+    },
+    "dockerAllImages": {
+      "type": "boolean",
+      "default": false,
+      "label": "Remove all unused Docker images",
+      "help": "Removes every image no container uses (docker system prune --all), not only dangling ones.",
+      "advanced": true
+    },
+    "dockerVolumes": {
+      "type": "boolean",
+      "default": false,
+      "label": "Remove unused Docker volumes",
+      "help": "Removes anonymous volumes no container uses (docker system prune --volumes). Their data is lost.",
+      "advanced": true
+    },
+    "warnAboveMb": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 10240,
+      "label": "Warn above this cache size (MB)",
+      "help": "The usage check warns when all caches together are larger. 0 switches the warning off."
+    },
+    "npmCache": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.npm/_cacache",
+      "label": "npm cache",
+      "help": "Empty leaves this cache alone.",
+      "advanced": true
+    },
+    "mavenCache": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.m2/repository",
+      "label": "Maven local repository",
+      "help": "Empty leaves this cache alone.",
+      "advanced": true
+    },
+    "gradleCache": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.gradle/caches",
+      "label": "Gradle cache",
+      "help": "Empty leaves this cache alone.",
+      "advanced": true
+    },
+    "nugetCache": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.nuget/packages",
+      "label": "NuGet package folder",
+      "help": "Empty leaves this cache alone.",
+      "advanced": true
+    },
+    "pipCache": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:cache}/pip",
+      "label": "pip cache",
+      "help": "Empty leaves this cache alone.",
+      "advanced": true
+    },
+    "uvCache": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:cache}/uv",
+      "label": "uv cache",
+      "help": "Empty leaves this cache alone.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "usage": {
+      "label": "Size of the caches",
+      "run": ["checks/usage.sh"],
+      "timeout": "2m",
+      "cache": "1h",
+      "refreshOn": ["session.finished:cleanup.*"]
+    }
+  },
+  "actions": {
+    "caches": {
+      "label": "Clean caches",
+      "description": "Removes the cache folders of npm, Maven, Gradle, NuGet, pip and uv. The dry run lists each cache with its size.",
+      "run": ["actions/caches.sh"],
+      "timeout": "30m",
+      "confirm": "The selected caches are deleted. The tools download everything again on the next build, which needs the network and time.",
+      "danger": true
+    },
+    "projects": {
+      "label": "Clean build folders",
+      "description": "Removes old build folders below the project folders. The dry run lists each folder with its size.",
+      "run": ["actions/projects.sh"],
+      "timeout": "30m",
+      "confirm": "Build folders in the project folders that were not changed for the set number of days are deleted. Folders tracked by Git stay.",
+      "danger": true
+    },
+    "docker": {
+      "label": "Clean Docker",
+      "description": "Runs docker system prune when the setting is switched on. The dry run reports the reclaimable space.",
+      "run": ["actions/docker.sh"],
+      "timeout": "30m",
+      "confirm": "Stopped containers, unused networks, unused images and the build cache of Docker are deleted, with the matching setting unused volumes as well.",
+      "danger": true
+    }
+  },
+  "contributes": {
+    "groups": { "cleanup-all": ["cleanup.caches", "cleanup.projects", "cleanup.docker"] },
+    "overview": { "check": "cleanup.usage", "primaryAction": "cleanup.caches" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}
