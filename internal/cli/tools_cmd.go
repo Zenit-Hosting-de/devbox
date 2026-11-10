@@ -17,6 +17,7 @@ import (
 
 	"github.com/Zenit-Hosting-de/devbox/internal/config"
 	"github.com/Zenit-Hosting-de/devbox/internal/core"
+	"github.com/Zenit-Hosting-de/devbox/internal/history"
 	"github.com/Zenit-Hosting-de/devbox/internal/plugin"
 	"github.com/Zenit-Hosting-de/devbox/internal/schema"
 	"github.com/Zenit-Hosting-de/devbox/internal/vault"
@@ -291,6 +292,8 @@ func (a *app) groupRun(ctx context.Context, id string, f runFlags) error {
 	if len(g.Actions) == 0 {
 		return &config.Error{Code: config.CodeConflict, Key: id, Detail: "the group has no actions"}
 	}
+	a.origin = history.OriginGroup
+	defer func() { a.origin = "" }()
 	var failed, skipped []string
 	for _, ref := range g.Actions {
 		pluginID, _, _ := strings.Cut(ref, ".")

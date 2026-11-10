@@ -1,0 +1,113 @@
+# AP-20: devbox setup. The plan comes from the contributions of the plugins or from a
+# profile; finished steps are found in the history, so a run that stopped continues
+# with the first open step.
+
+chmod 755 home/.local/share/devbox/plugins/demo/act.sh
+chmod 755 home/.local/share/devbox/plugins/late/act.sh
+
+# plugins contribute: late.go names demo.prepare in "after", so it comes second (the
+# bundled plugins that contribute steps are switched off, so nothing real is installed)
+exec devbox setup --plan
+stdout '^1 +demo\.prepare +open'
+stdout '^2 +late\.go +open'
+exec devbox setup --plan --json
+stdout '"origin": "plugins"'
+
+# without a terminal and without --yes nothing starts: exit 4
+! exec devbox setup
+stderr 'starting needs a confirmation'
+! exists home/prepared
+
+# a dry run runs every open step as a dry run and marks nothing as done
+exec devbox setup --dry-run
+stdout '^== demo\.prepare$'
+stdout '^== late\.go$'
+! exists home/prepared
+exec devbox setup --plan
+stdout '^1 +demo\.prepare +open'
+
+# the profile defines the order; a step that fails stops the run
+mkdir home/.config/devbox
+exec devbox setup --profile file://$WORK/home/team.json --plan
+stdout '^1 +demo\.prepare +open'
+stdout '^2 +demo\.flaky +open'
+stdout '^3 +credentials:company +open +the secret is missing$'
+stdout '^4 +late\.go +open'
+stdout '^5 +gone\.x +blocked +no such plugin$'
+! exec devbox setup --yes
+stdout '^== demo\.prepare$'
+stdout '^== demo\.flaky$'
+! stdout '^== late\.go$'
+stderr 'setup stopped at demo\.flaky; run devbox setup again to continue there'
+exists home/prepared
+
+# the second run continues with the open step; the finished one is not run again
+exec devbox setup --plan
+stdout '^1 +demo\.prepare +done'
+stdout '^2 +demo\.flaky +open'
+! exec devbox setup --yes
+! stdout '^== demo\.prepare$'
+stdout '^== demo\.flaky$'
+stdout '^== credentials:company: waits for its secret \(devbox cred set company\)$'
+stdout '^== late\.go$'
+stdout '^== gone\.x: blocked, no such plugin$'
+stdout '^setup: 2 steps run, 1 blocked, 1 wait for a secret$'
+stderr 'setup: blocked steps: gone\.x'
+
+# the sessions are in the history with the origin setup
+exec devbox history --json
+stdout '"origin": "setup"'
+
+# everything that can be done is done: only the blocked step and the secret remain
+exec devbox setup --plan
+stdout '^2 +demo\.flaky +done'
+stdout '^4 +late\.go +done'
+
+-- etc/devbox/config.json --
+{ "plugins": { "disabled": ["base", "docker", "dotnet", "git", "java", "maven", "node", "python", "system"] } }
+-- home/team.json --
+{
+  "id": "team",
+  "name": "Team",
+  "version": "1.0.0",
+  "credentials": {
+    "company": { "type": "registry", "label": "Company", "fields": { "url": "https://nexus.example.com", "layout": "nexus" } }
+  },
+  "setup": ["demo.prepare", "demo.flaky", "credentials:company", "late.go", "gone.x"]
+}
+-- home/.local/share/devbox/plugins/demo/plugin.json --
+{
+  "id": "demo",
+  "version": "1.0.0",
+  "name": "Demo",
+  "actions": {
+    "prepare": { "label": "Prepare", "run": ["act.sh", "prepare"] },
+    "flaky": { "label": "Fails once", "run": ["act.sh", "flaky"] }
+  },
+  "contributes": { "setup": [{ "action": "demo.prepare" }] }
+}
+-- home/.local/share/devbox/plugins/demo/act.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${DEVBOX_DRY_RUN:-}" == 1 ]] && { echo "dry run of $1"; exit 0; }
+case "$1" in
+prepare) touch "$HOME/prepared" ;;
+flaky)
+  if [[ ! -e "$HOME/tried" ]]; then
+    touch "$HOME/tried"
+    exit 1
+  fi
+  ;;
+esac
+-- home/.local/share/devbox/plugins/late/plugin.json --
+{
+  "id": "late",
+  "version": "1.0.0",
+  "name": "Late",
+  "actions": { "go": { "label": "Go", "run": ["act.sh"] } },
+  "contributes": { "setup": [{ "action": "late.go", "after": ["demo.prepare", "nope.x"] }] }
+}
+-- home/.local/share/devbox/plugins/late/act.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+echo "late ran"
