@@ -429,6 +429,20 @@ type CredentialList struct {
 	Instances []CredentialInstance `json:"instances"`
 }
 
+// Group A named sequence of actions.
+type Group struct {
+	// Actions Actions (<plugin>.<action>) in the order they run.
+	Actions []string `json:"actions"`
+	Id      string   `json:"id"`
+	Label   *string  `json:"label,omitempty"`
+
+	// Origin plugins for a group built from contributions, or the profile layer that defines it (profile:<id>).
+	Origin string `json:"origin"`
+}
+
+// GroupList defines model for GroupList.
+type GroupList = []Group
+
 // Host Facts about the machine.
 type Host struct {
 	// Arch CPU architecture.
@@ -1099,6 +1113,27 @@ type SettingList struct {
 
 // SettingsPatch User values to set; null removes the user value.
 type SettingsPatch = map[string]interface{}
+
+// SetupPlan defines model for SetupPlan.
+type SetupPlan struct {
+	// Origin plugins, or the profile layer that defines the plan.
+	Origin string      `json:"origin"`
+	Steps  []SetupStep `json:"steps"`
+}
+
+// SetupStep One step of the first-run setup.
+type SetupStep struct {
+	// Detail Why a step is blocked, or what an open credential step waits for.
+	Detail *string     `json:"detail,omitempty"`
+	Kind   interface{} `json:"kind"`
+	Label  *string     `json:"label,omitempty"`
+
+	// Ref <plugin>.<action> or credentials:<instance>.
+	Ref string `json:"ref"`
+
+	// State blocked: the plugin is missing or not ready, or the instance is unknown.
+	State interface{} `json:"state"`
+}
 
 // StatusReport Overview of all checks; also the output of devbox status --json.
 type StatusReport struct {

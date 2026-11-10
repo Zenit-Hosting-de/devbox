@@ -25,6 +25,7 @@ describe("routes", () => {
     ["/history/s_0123456789", "/verlauf/s_0123456789"],
     ["/settings", "/einstellungen"],
     ["/credentials", "/zugaenge"],
+    ["/setup", "/einrichtung"],
   ])("redirects the English path %s to %s", async (english, german) => {
     const { url, text } = await open(english);
     expect(url).toBe(german);
@@ -40,6 +41,7 @@ describe("routes", () => {
     "/verlauf",
     "/einstellungen",
     "/zugaenge",
+    "/einrichtung",
   ])("opens %s without a redirect", async (path) => {
     const { url, text } = await open(path);
     expect(url).toBe(path);

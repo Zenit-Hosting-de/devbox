@@ -57,6 +57,10 @@
     {
       "name": "ws",
       "description": "WebSocket for live data."
+    },
+    {
+      "name": "setup",
+      "description": "Action groups and the first-run setup."
     }
   ],
   "paths": {
@@ -463,6 +467,52 @@
           },
           "404": {
             "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/groups": {
+      "get": {
+        "tags": ["setup"],
+        "operationId": "listGroups",
+        "summary": "Action groups, for example update-all.",
+        "description": "Ready plugins append their actions to a group (contributes.groups); a profile that defines a group of the same ID replaces them. A client runs a group by starting its actions one after another with POST /sessions.",
+        "responses": {
+          "200": {
+            "description": "Groups sorted by ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupList"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/setup": {
+      "get": {
+        "tags": ["setup"],
+        "operationId": "getSetup",
+        "summary": "Plan of the first-run setup with the state of every step.",
+        "description": "A profile with a setup list defines the steps; otherwise ready plugins contribute them, ordered by their after lists. An action step is done when the history holds a successful run that was no dry run, a credential step when the instance has a secret. A client runs the plan by starting the open action steps in order with POST /sessions.",
+        "responses": {
+          "200": {
+            "description": "The plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupPlan"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3372,6 +3422,80 @@
           },
           "installed": {
             "type": "boolean"
+          }
+        }
+      },
+      "Group": {
+        "description": "A named sequence of actions.",
+        "type": "object",
+        "required": ["id", "actions", "origin"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Actions (<plugin>.<action>) in the order they run."
+          },
+          "origin": {
+            "type": "string",
+            "description": "plugins for a group built from contributions, or the profile layer that defines it (profile:<id>)."
+          }
+        }
+      },
+      "GroupList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Group"
+        }
+      },
+      "SetupStep": {
+        "description": "One step of the first-run setup.",
+        "type": "object",
+        "required": ["ref", "kind", "state"],
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "type": "string",
+            "description": "<plugin>.<action> or credentials:<instance>."
+          },
+          "kind": {
+            "enum": ["action", "credential"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "state": {
+            "enum": ["done", "open", "blocked"],
+            "description": "blocked: the plugin is missing or not ready, or the instance is unknown."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Why a step is blocked, or what an open credential step waits for."
+          }
+        }
+      },
+      "SetupPlan": {
+        "type": "object",
+        "required": ["origin", "steps"],
+        "additionalProperties": false,
+        "properties": {
+          "origin": {
+            "type": "string",
+            "description": "plugins, or the profile layer that defines the plan."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SetupStep"
+            }
           }
         }
       }

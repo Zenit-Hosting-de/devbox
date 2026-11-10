@@ -17,11 +17,11 @@ describe("App shell (against the mock backend)", () => {
     backend = setUpApp([provideRouter(routes)]);
   });
 
-  it("has a skip link first, the five areas in the sidebar, the dock and a live region", async () => {
+  it("has a skip link first, the six areas in the sidebar, the dock and a live region", async () => {
     const fixture = TestBed.createComponent(App);
     await settle(fixture, () => {
       expect(queryAll(fixture, "z-sidebar a[zsidebaritem], z-sidebar .z-side__item")).toHaveLength(
-        5,
+        6,
       );
     });
     const root = fixture.nativeElement as HTMLElement;
@@ -29,14 +29,16 @@ describe("App shell (against the mock backend)", () => {
     expect(root.firstElementChild?.getAttribute("href")).toBe("#inhalt");
     expect(root.querySelector("main#inhalt")?.getAttribute("tabindex")).toBe("-1");
     const items = queryAll(fixture, "z-sidebar .z-side__item");
-    ["Overview", "Plugins", "History", "Settings", "Credentials"].forEach((label, index) => {
-      expect(items[index]?.textContent).toContain(label);
-    });
+    ["Overview", "Plugins", "Setup", "History", "Settings", "Credentials"].forEach(
+      (label, index) => {
+        expect(items[index]?.textContent).toContain(label);
+      },
+    );
     expect(
       queryAll<HTMLAnchorElement>(fixture, "z-sidebar .z-side__item").map((a) =>
         a.getAttribute("href"),
       ),
-    ).toEqual(["/", "/plugins", "/verlauf", "/einstellungen", "/zugaenge"]);
+    ).toEqual(["/", "/plugins", "/einrichtung", "/verlauf", "/einstellungen", "/zugaenge"]);
     expect(root.querySelector("dbx-dock")).not.toBeNull();
     expect(root.querySelector("z-toast-outlet")).not.toBeNull();
     expect(root.querySelector("#announcer")).not.toBeNull();
@@ -70,7 +72,7 @@ describe("App shell (against the mock backend)", () => {
   it("switches the language without a reload and sets the lang attribute", async () => {
     const fixture = TestBed.createComponent(App);
     await settle(fixture, () => {
-      expect(queryAll(fixture, "z-sidebar .z-side__item")).toHaveLength(5);
+      expect(queryAll(fixture, "z-sidebar .z-side__item")).toHaveLength(6);
     });
     const select = fixture.nativeElement.querySelector("z-app-header select") as HTMLSelectElement;
     select.value = "de";
@@ -90,7 +92,7 @@ describe("App shell (against the mock backend)", () => {
   it("keeps the header and the language select in place when the language changes", async () => {
     const fixture = TestBed.createComponent(App);
     await settle(fixture, () => {
-      expect(queryAll(fixture, "z-sidebar .z-side__item")).toHaveLength(5);
+      expect(queryAll(fixture, "z-sidebar .z-side__item")).toHaveLength(6);
     });
     const header = fixture.nativeElement.querySelector("z-app-header") as HTMLElement;
     const select = header.querySelector("select") as HTMLSelectElement;

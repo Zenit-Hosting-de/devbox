@@ -175,6 +175,8 @@ func (s *Server) routes() {
 	s.route("GET /api/v1/checks", s.listChecks)
 	s.route("POST /api/v1/checks/refresh", s.refreshChecks)
 	s.route("GET /api/v1/checks/{id}", s.getCheck)
+	s.route("GET /api/v1/groups", s.listGroups)
+	s.route("GET /api/v1/setup", s.getSetup)
 	s.route("GET /api/v1/settings", s.listSettings)
 	s.route("PATCH /api/v1/settings", s.patchSettings)
 	s.route("GET /api/v1/settings/{key}/explain", s.explainSetting)

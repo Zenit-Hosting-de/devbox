@@ -4,6 +4,8 @@
 
 import { Injectable } from "@angular/core";
 import type {
+  Group,
+  SetupPlan,
   CatalogHit,
   CatalogInstall,
   CatalogInstallRequest,
@@ -326,6 +328,44 @@ export class MockBackend {
     }
     delete hit.installed;
     this.announcePlugins([id], []);
+  }
+
+  // ---- setup and groups -----------------------------------------------------
+
+  /** Actions that ran successfully (no dry run): they finish their setup step. */
+  private readonly finished = new Set<string>();
+
+  groupList(): Group[] {
+    return [{ id: "update-all", actions: ["java.update", "node.update"], origin: "plugins" }];
+  }
+
+  setupPlan(): SetupPlan {
+    const action = (ref: string, label: string): SetupPlan["steps"][number] => ({
+      ref,
+      kind: "action",
+      label,
+      state: this.finished.has(ref) ? "done" : "open",
+    });
+    return {
+      origin: "profile:example-team",
+      steps: [
+        action("java.install", "Install Java"),
+        action("node.install", "Install Node.js"),
+        {
+          ref: "credentials:firmen-registry",
+          kind: "credential",
+          label: "Firmen-Registry",
+          state: "open",
+          detail: "the secret is missing",
+        },
+        { ref: "gone.x", kind: "action", state: "blocked", detail: "no such plugin" },
+      ],
+    };
+  }
+
+  /** Test hook: marks an action as run. */
+  finishAction(ref: string): void {
+    this.finished.add(ref);
   }
 
   // ---- profiles -------------------------------------------------------------

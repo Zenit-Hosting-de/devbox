@@ -477,6 +477,11 @@ devbox setup --profile https://example.com/devbox/profile.json --yes   # add a p
   missing), the code of the action that failed, 3 when a step is blocked (its plugin is
   missing or not ready), 4 without `--yes` and without a terminal.
 
+The web UI shows the same plan on the page "Setup" (`/einrichtung`): every step with its
+state, a button that starts the next open step, and the action groups with one button per
+action. The API has `GET /setup` and `GET /groups`; a client runs steps and groups by
+starting the actions with `POST /sessions`.
+
 ## Self-test and tools
 
 ```bash
