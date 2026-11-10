@@ -13,4 +13,5 @@ node_modules/
 
 # Local tooling
 graphify-out/
+.claude/worktrees/
 .DS_Store

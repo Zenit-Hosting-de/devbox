@@ -1,0 +1,169 @@
+# AP-18 git: identity and defaults in marked blocks of ~/.gitconfig, and the consumer of
+# git-host credentials. Against a fake Git host over https (basic challenge, git
+# http-backend), Git clones only once DevBox has handed the token to the credential
+# helper; a helper of the user with a wrong password is reset for that host. Applying
+# twice changes nothing, a dry run changes nothing, and removing the credential leaves
+# ~/.gitconfig byte for byte as before.
+
+[!exec:git] skip 'git is not installed'
+
+env GIT_AUTHOR_NAME=Test GIT_AUTHOR_EMAIL=test@example.com GIT_AUTHOR_DATE=2026-10-29T09:00:00Z
+env GIT_COMMITTER_NAME=Test GIT_COMMITTER_EMAIL=test@example.com GIT_COMMITTER_DATE=2026-10-29T09:00:00Z
+env GIT_TERMINAL_PROMPT=0
+cd src
+exec git init --quiet --initial-branch=main
+exec git add .
+exec git -c commit.gpgsign=false commit --quiet -m one
+cd ..
+exec git clone --quiet --bare src srv/team/app.git
+
+host start srv
+host accept oauth2 t0k3n-ok
+env GIT_SSL_CAINFO=$HOSTCA
+env STORE=$HOME/.config/devbox/git-credentials
+
+# --- plugin test: checks, dry run, repeat -------------------------------------------
+
+exec devbox plugin test --apply --set 'git.userName=Jane Doe' --set git.userEmail=jane@example.com $REPO/plugins/git
+stdout '^ok +validate +git'
+stdout '^ok +check +git.config +warn'
+stdout '^ok +dry-run +git.identity +2 planned changes'
+stdout '^ok +repeat +git.identity +no changes'
+stdout '^ok +repeat +git.defaults +no changes'
+! stdout '^failed'
+
+# --- identity -----------------------------------------------------------------------
+
+cp home/.gitconfig orig.gitconfig
+exec devbox status
+stdout '^git\.config +warn +No identity$'
+exec devbox run git.identity --dry-run -p 'name=Jane Doe' -p email=jane@example.com
+cmp home/.gitconfig orig.gitconfig
+exec devbox run git.identity -p 'name=Jane Doe' -p email=jane@example.com
+grep '^# >>> devbox:git:identity >>>$' home/.gitconfig
+grep '^	name = "Jane Doe"$' home/.gitconfig
+grep '^	email = "jane@example.com"$' home/.gitconfig
+grep '^	editor = vi$' home/.gitconfig
+exec git config --global user.name
+stdout '^Jane Doe$'
+exec devbox run git.identity -p 'name=Jane Doe' -p email=jane@example.com --json
+! stdout '"type":"change"'
+exec devbox status
+stdout '^git\.config +ok +Jane Doe <jane@example.com>$'
+
+# --- defaults from the setting ------------------------------------------------------
+
+cp defaults.json home/.config/devbox/config.json
+exec devbox status
+stdout '^git\.config +warn +Jane Doe <jane@example.com>, 0/2 defaults$'
+exec devbox run git.defaults --dry-run
+! grep 'devbox:git:defaults' home/.gitconfig
+exec devbox run git.defaults
+grep '^\[init\]$' home/.gitconfig
+grep '^	defaultBranch = "main"$' home/.gitconfig
+exec git config --global pull.rebase
+stdout '^true$'
+exec devbox run git.defaults --json
+! stdout '"type":"change"'
+exec devbox status
+stdout '^git\.config +ok +Jane Doe <jane@example.com>, 2/2 defaults$'
+
+# --- consumer for git-host ----------------------------------------------------------
+
+cp home/.gitconfig before.gitconfig
+# without the credential the host answers 401, the helper of the user does not help
+! exec git clone --quiet $HOST/team/app.git none
+! exists none
+
+exec devbox cred add corp --type git-host --field url=$HOST/team --field flavor=generic --consumer 'git:protocol=https'
+stdin token.txt
+exec devbox cred set corp --from-stdin
+stdout '✓ corp verified'
+stdout '✓ git apply'
+! stdout 't0k3n'
+! stderr 't0k3n'
+grep '^# >>> devbox:git:credential:corp >>>$' home/.gitconfig
+grep '^\[credential "https://127.0.0.1:[0-9]+"\]$' home/.gitconfig
+grep '^	helper =$' home/.gitconfig
+grep '^	username = "oauth2"$' home/.gitconfig
+! grep 't0k3n' home/.gitconfig
+grep '^https://oauth2:t0k3n-ok@127.0.0.1%3a[0-9]+$' $STORE
+exec stat -c %a $STORE
+stdout '^600$'
+exec devbox status
+stdout '^git\.config +ok +Jane Doe <jane@example.com>, 2/2 defaults, hosts: 127.0.0.1:[0-9]+$'
+
+# Git authenticates with the token of the instance, not with the helper of the user
+exec git clone --quiet $HOST/team/app.git app
+exists app/README.md
+host log
+stdout 'GET /team/app.git/info/refs auth=basic:oauth2 ok=true'
+stdout 'POST /team/app.git/git-upload-pack auth=basic:oauth2 ok=true'
+
+# idempotent: applying again and a dry run change nothing
+cp home/.gitconfig applied.gitconfig
+cp $STORE applied.store
+exec devbox cred apply corp --json
+! stdout '"type":"change"'
+exec devbox cred apply corp --dry-run
+cmp home/.gitconfig applied.gitconfig
+cmp $STORE applied.store
+
+# a new token replaces the stored one
+host accept oauth2 t0k3n-new
+stdin token2.txt
+exec devbox cred set corp --from-stdin
+stdout '✓ git apply'
+grep 't0k3n-new' $STORE
+! grep 't0k3n-ok' $STORE
+exec git -C app pull --quiet
+host accept oauth2 t0k3n-ok
+stdin token.txt
+exec devbox cred set corp --from-stdin
+grep 't0k3n-ok' $STORE
+
+# the token is in no output, history or event of DevBox
+! exec grep -r 't0k3n' home/.local/state/devbox/sessions home/.local/share/devbox/credentials.json
+exec devbox history --json
+stdout '"action": "git.apply"'
+
+# remove: ~/.gitconfig is byte for byte as before, the token file is gone
+exec devbox cred remove corp --dry-run
+cmp home/.gitconfig applied.gitconfig
+exec devbox cred remove corp --force
+stdout '✓ git remove'
+cmp home/.gitconfig before.gitconfig
+! exists $STORE
+! exec git clone --quiet $HOST/team/app.git again
+! exists again
+
+# plain http is refused: the token goes to Git over https only
+exec devbox cred add plain --type git-host --field url=http://git.example.com --field flavor=generic --consumer git
+stdin token.txt
+! exec devbox cred set plain --from-stdin
+! exec devbox cred apply plain
+stdout 'tokens go to Git over https only'
+cmp home/.gitconfig before.gitconfig
+
+-- token.txt --
+t0k3n-ok
+-- token2.txt --
+t0k3n-new
+-- src/README.md --
+app
+-- home/.gitconfig --
+[core]
+	editor = vi
+[credential]
+	helper = "!f() { echo username=oauth2; echo password=wrong-from-the-helper-of-the-user; }; f"
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "disabled": ["base", "java"] },
+  "vault": { "backend": "age" }
+}
+-- defaults.json --
+{
+  "plugins": { "disabled": ["base", "java"] },
+  "vault": { "backend": "age" },
+  "settings": { "git.defaults": { "init.defaultBranch": "main", "pull.rebase": "true" } }
+}

@@ -1,0 +1,212 @@
+# AP-18: the bundled consumer nuget. It adds the feed of a registry credential as a
+# package source to NuGet.Config (marked blocks, well-formed XML) and keeps the default
+# source nuget.org: in mode file with packageSourceCredentials (ClearTextPassword, mode
+# 0600), in mode env with NuGetPackageSourceCredentials_<name> in the environment file.
+# Idempotent, dry run, and remove leaves the files as before.
+
+registry start
+registry accept alice nu&g3t-t0k3n
+
+env CONFIG=home/.nuget/NuGet/NuGet.Config
+env ENVFILE=home/.config/devbox/env.d/nuget.sh
+
+exec devbox plugin test --apply $REPO/plugins/nuget
+stdout '^ok +validate +nuget'
+stdout '^ok +check +nuget.config +ok'
+! stdout '^failed'
+
+exec devbox status
+stdout '^nuget\.config +ok +Default source nuget\.org$'
+
+# --- file mode, a NuGet.Config of the user ------------------------------------------
+
+mkdir home/.nuget/NuGet
+cp pre.config $CONFIG
+chmod 644 $CONFIG
+exec devbox cred add team-registry --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'nuget:repository=nuget-group'
+stdin token.txt
+exec devbox cred set team-registry --from-stdin
+stdout '✓ team-registry verified'
+stdout '✓ nuget apply'
+! stdout 't0k3n'
+maven xml $CONFIG
+maven count $CONFIG packageSources 1
+maven count $CONFIG packageSourceCredentials 1
+maven count $CONFIG team_registry 1
+grep '<add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />' $CONFIG
+grep '<add key="own" value="https://own.example.com/nuget/" />' $CONFIG
+grep '^    <!-- >>> devbox:nuget:team-registry >>> -->$' $CONFIG
+grep '^    <add key="team_registry" value="http://127.0.0.1:[0-9]+/repository/nuget-group/" />$' $CONFIG
+grep '<!-- >>> devbox:nuget-section:packageSourceCredentials >>> -->' $CONFIG
+grep '^      <add key="Username" value="alice" />$' $CONFIG
+grep '^      <add key="ClearTextPassword" value="nu&amp;g3t-t0k3n" />$' $CONFIG
+! grep 'devbox:nuget-section:packageSources ' $CONFIG
+exec stat -c %a $CONFIG
+stdout '^600$'
+! exists $ENVFILE
+exec devbox status
+stdout '^nuget\.config +ok +nuget\.org, own, team_registry$'
+
+# idempotent: a second apply and a dry run change nothing
+cp $CONFIG applied.config
+exec devbox cred apply team-registry --json
+! stdout '"type":"change"'
+cmp $CONFIG applied.config
+exec devbox cred apply team-registry --dry-run
+cmp $CONFIG applied.config
+
+# the secret is not in output, history or events
+! exec grep -r 't0k3n' $HOME/.local/state/devbox/sessions $HOME/.local/share/devbox/credentials.json
+
+# remove: the file is exactly as before
+exec devbox cred remove team-registry --force
+stdout '✓ nuget remove'
+cmp $CONFIG pre.config
+
+# a source of the same name is not overwritten
+exec devbox cred add own --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'nuget:repository=nuget-group'
+stdin token.txt
+! exec devbox cred set own --from-stdin
+stderr 'has a package source own already; set the option sourceName'
+cmp $CONFIG pre.config
+exec devbox cred add own --consumer 'nuget:sourceName=corp'
+exec devbox cred apply own
+grep '<add key="corp" value=' $CONFIG
+exec devbox cred remove own --force
+cmp $CONFIG pre.config
+
+# --- no NuGet.Config yet: created with nuget.org, deleted again ----------------------
+
+rm $CONFIG
+exec devbox cred add art --type registry --field url=$REGISTRY --field layout=artifactory --field username=alice --consumer 'nuget:repository=nuget-virtual'
+stdin token.txt
+exec devbox cred set art --from-stdin
+maven xml $CONFIG
+maven count $CONFIG configuration 1
+maven count $CONFIG add 4
+grep '<add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />' $CONFIG
+grep '<add key="art" value="http://127.0.0.1:[0-9]+/artifactory/api/nuget/nuget-virtual/" />' $CONFIG
+exec stat -c %a $CONFIG
+stdout '^600$'
+
+# a second instance with a full address joins the same sections
+exec devbox cred add second --type registry --field url=$REGISTRY --field layout=gitea --field username=alice --consumer 'nuget:url=https://nuget.example.com/v3/index.json'
+stdin token.txt
+exec devbox cred set second --from-stdin
+maven xml $CONFIG
+maven count $CONFIG packageSources 1
+maven count $CONFIG packageSourceCredentials 1
+grep '<add key="second" value="https://nuget.example.com/v3/index.json" />' $CONFIG
+exec devbox cred remove art --force
+maven xml $CONFIG
+! grep 'devbox:nuget:art' $CONFIG
+grep 'devbox:nuget:second' $CONFIG
+exec devbox cred remove second --force
+! exists $CONFIG
+
+# a dry run on a missing file creates nothing
+exec devbox cred add dry --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'nuget:repository=nuget-group'
+stdin token.txt
+exec devbox cred set dry --from-stdin
+rm $CONFIG
+exec devbox cred apply dry --dry-run --json
+stdout '"op":"create"'
+! exists $CONFIG
+exec devbox cred remove dry --force
+! exists $CONFIG
+
+# without username, or a layout without address, the credential is refused
+exec devbox cred add anon --type registry --field url=$REGISTRY --field layout=gitea --consumer 'nuget:url=https://nuget.example.com/v3/index.json'
+stdin token.txt
+! exec devbox cred set anon --from-stdin
+stderr 'has no field username'
+exec devbox cred remove anon --force
+exec devbox cred add lab --type registry --field url=$REGISTRY --field layout=gitlab --field username=alice --consumer nuget
+stdin token.txt
+! exec devbox cred set lab --from-stdin
+stderr 'layout gitlab needs the option url'
+exec devbox cred remove lab --force
+! exists $CONFIG
+
+# --- env mode ---------------------------------------------------------------------
+
+exec devbox config set nuget.mode env
+cp pre.config $CONFIG
+exec devbox cred add team-registry --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'nuget:repository=nuget-group'
+stdin token.txt
+exec devbox cred set team-registry --from-stdin
+stdout '✓ nuget apply'
+maven xml $CONFIG
+maven count $CONFIG packageSourceCredentials 0
+grep '<add key="team_registry" value="http://127.0.0.1:[0-9]+/repository/nuget-group/" />' $CONFIG
+! grep 't0k3n' $CONFIG
+grep '^export NuGetPackageSourceCredentials_team_registry=''Username=alice;Password=nu&g3t-t0k3n''$' $ENVFILE
+exec stat -c %a $ENVFILE
+stdout '^600$'
+cp $CONFIG env.config
+cp $ENVFILE env.sh
+exec devbox cred apply team-registry --json
+! stdout '"type":"change"'
+cmp $CONFIG env.config
+cmp $ENVFILE env.sh
+
+# the variable cannot carry a ';' in the secret: that one needs mode file
+registry accept alice semi;colon
+exec devbox cred add semi --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'nuget:repository=nuget-group'
+stdin semi.txt
+! exec devbox cred set semi --from-stdin
+stderr 'cannot carry a .;. in user name or secret; use mode file'
+exec devbox cred remove semi --force
+registry accept alice nu&g3t-t0k3n
+
+# switching to file mode moves the credential into the file and drops the
+# environment file, and back
+exec devbox config set nuget.mode file
+exec devbox cred apply team-registry
+grep 'ClearTextPassword' $CONFIG
+! exists $ENVFILE
+exec devbox config set nuget.mode env
+exec devbox cred apply team-registry
+cmp $CONFIG env.config
+cmp $ENVFILE env.sh
+
+# remove: both files as before
+exec devbox cred remove team-registry --force
+cmp $CONFIG pre.config
+! exists $ENVFILE
+
+# an environment file that existed before stays, byte for byte
+mkdir home/.config/devbox/env.d
+cp own.sh $ENVFILE
+exec devbox cred add keep --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'nuget:repository=nuget-group'
+stdin token.txt
+exec devbox cred set keep --from-stdin
+grep 'NuGetPackageSourceCredentials_keep' $ENVFILE
+exec devbox cred remove keep --force
+cmp $ENVFILE own.sh
+cmp $CONFIG pre.config
+
+exec devbox history --json
+stdout '"action": "nuget.apply"'
+stdout '"action": "nuget.remove"'
+! exec grep -r 't0k3n' $HOME/.local/state/devbox/sessions
+
+-- token.txt --
+nu&g3t-t0k3n
+-- semi.txt --
+semi;colon
+-- own.sh --
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+-- pre.config --
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+    <add key="own" value="https://own.example.com/nuget/" />
+  </packageSources>
+</configuration>
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "disabled": ["base", "java"] },
+  "vault": { "backend": "age" }
+}

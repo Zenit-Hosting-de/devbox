@@ -1,0 +1,20 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "NuGet",
+  "plugin.description": "Feeds von Registries als Paketquellen in die NuGet.Config eintragen, mit Zugangsdaten in der Datei oder in der Umgebung",
+  "settings.mode.label": "Ablage der Zugangsdaten",
+  "settings.mode.help": "file: Das Passwort steht als ClearTextPassword in der NuGet.Config (Modus 0600). env: Die NuGet.Config nennt nur die Quelle, die Zugangsdaten werden als NuGetPackageSourceCredentials_<Name> aus einer Datei für die Shell-Umgebung exportiert (Modus 0600).",
+  "settings.sourceName.label": "Name der Paketquelle",
+  "settings.sourceName.help": "Schlüssel der Paketquelle in der NuGet.Config. Leer: der Name der Instanz mit Unterstrichen statt Bindestrichen. Die Option sourceName einer Instanz hat Vorrang; bei mehreren Instanzen dort setzen.",
+  "settings.configPath.label": "NuGet-Konfigurationsdatei",
+  "settings.defaultSource.label": "Standardquelle",
+  "settings.defaultSource.help": "Wird mit einer neuen NuGet.Config oder einem neuen Abschnitt packageSources geschrieben, damit öffentliche Pakete erreichbar bleiben. Leer: keine Standardquelle.",
+  "settings.defaultSourceName.label": "Name der Standardquelle",
+  "settings.envFile.label": "Datei für die Shell-Umgebung",
+  "settings.envFile.help": "Exportiert die Variablen NuGetPackageSourceCredentials_* im Modus env.",
+  "checks.config.label": "Paketquellen",
+  "consumes.registry.options.repository.label": "Repository-Name",
+  "consumes.registry.options.url.label": "Vollständige Feed-Adresse",
+  "consumes.registry.options.sourceName.label": "Name der Paketquelle",
+  "consumes.registry.options.sourceName.help": "Schlüssel der Paketquelle in der NuGet.Config. Im Modus env sind nur Buchstaben, Ziffern und Unterstriche erlaubt."
+}
