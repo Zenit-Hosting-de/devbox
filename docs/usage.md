@@ -363,6 +363,64 @@ devbox run git.identity -p name="M. Muster" -p email=m.muster@example.com
 devbox run git.defaults                      # applies the object git.defaults with git config --global
 ```
 
+## Cleanup
+
+The `cleanup` plugin frees disk space. Every action asks for confirmation; with `--dry-run`
+it lists what would go and how large it is, and deletes nothing.
+
+```bash
+devbox run cleanup.caches --dry-run           # npm, Maven, Gradle, NuGet, pip and uv caches with sizes
+devbox run cleanup.projects --dry-run         # old build folders below cleanup.projectRoots
+devbox run cleanup.docker                     # docker system prune, only with cleanup.docker = true
+```
+
+- `cleanup.projects` removes a folder only if it lies below a root, matches
+  `cleanup.patterns` (`node_modules`, `target`, `build`, `dist`, …), is not tracked by Git
+  and nothing in it changed within `cleanup.olderThanDays` (default 30). Symbolic links are
+  neither followed nor removed.
+- `cleanup.caches` selects the caches; the folder of each cache is a setting. The home
+  directory, `/` and relative paths are refused as cache or project root.
+- The check `cleanup.usage` warns when the caches are larger than `cleanup.warnAboveMb`.
+
+## Project templates
+
+The `templates` plugin creates projects from templates. A source is a Git repository with
+one folder per template, each with a `template.json` (`template.v1.json`).
+
+```bash
+devbox run templates.sync                                     # fetch templates.sources into the cache
+devbox status                                                 # templates.available lists the templates
+devbox run templates.new -p template=node-service -p name=shop --dry-run
+devbox run templates.new -p template=node-service -p name=shop -p values='{"port": 8080}'
+devbox run templates.hooks -p template=node-service -p name=shop   # asks for confirmation
+```
+
+- `templates.new` creates `<templates.projectRoot>/<name>`, refuses a folder that is not
+  empty and replaces `{{param}}` in the files the template marks for rendering.
+- Commands a template brings along (`hooks`) never run on their own: `templates.new` only
+  lists them, `templates.hooks` runs them after a confirmation.
+- The plugin needs `git` and `jq` (both come with the base packages).
+
+## Remote desktop (xrdp)
+
+The `xrdp` plugin sets up xrdp with XFCE. All actions use sudo.
+
+```bash
+devbox run xrdp.install                       # xrdp, xorgxrdp and the desktop packages
+devbox run xrdp.configure                     # port, security layer, colour depth, session start
+devbox run xrdp.polkit                        # narrow polkit rule for remote sessions
+devbox run xrdp.sound                         # sound module, with xrdp.sound = true
+devbox run xrdp.enable                        # also: xrdp.restart, xrdp.disable (ask for confirmation)
+```
+
+- `xrdp.configure` changes only `port`, `security_layer` and `max_bpp` in `xrdp.ini` and
+  `AllowRootLogin` in `sesman.ini`; every other line stays byte for byte, and both files
+  are backed up first. The desktop start is a marked block in `~/.xsession`.
+- `xrdp.allowRootLogin` is `false` by default, so the first `xrdp.configure` stops root
+  from logging in over RDP (the stock configuration allows it).
+- The polkit rule allows exactly the actions in `xrdp.polkitActions` for the user (or
+  `xrdp.polkitGroup`); `xrdp.polkit = false` removes it.
+
 ## Dry run and backups
 
 - `--dry-run` sets `DEVBOX_DRY_RUN=1` for the plugin. It still reads, checks and
@@ -768,4 +826,4 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
   `devbox repo init`
 - `devbox doctor`, `devbox schema print`, `devbox migrate`, `devbox completion`
 - global flags `--quiet`, `--no-color`, `--lang`, `--socket`
-- the remaining bundled plugins (`xrdp`, `cleanup`, `templates`, …), rootless Docker and plugin templates for TypeScript, Python and Go
+- the language packs `lang-de` and `lang-en`, rootless Docker, the keyring setup of `xrdp` and plugin templates for TypeScript, Python and Go
