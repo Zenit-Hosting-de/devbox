@@ -11,11 +11,14 @@ import (
 )
 
 func (a *app) statusCommand() *cobra.Command {
-	return &cobra.Command{
+	var strict bool
+	cmd := &cobra.Command{
 		Use:  "status",
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error { return a.status(cmd.Context()) },
+		RunE: func(cmd *cobra.Command, _ []string) error { return a.status(cmd.Context(), strict) },
 	}
+	cmd.Flags().BoolVar(&strict, "strict", false, "exit 5 when a check warns, 6 when one reports error or missing")
+	return cmd
 }
 
 // statusOutput is `devbox status --json` (docs/concept.md, CLI example).
@@ -33,7 +36,7 @@ type checkLine struct {
 }
 
 // status runs every check of every ready plugin.
-func (a *app) status(ctx context.Context) error {
+func (a *app) status(ctx context.Context, strict bool) error {
 	st, err := a.load(true)
 	if err != nil {
 		return err
@@ -51,7 +54,13 @@ func (a *app) status(ctx context.Context) error {
 
 	sum := core.Summarize(outcomes)
 	if a.jsonOut {
-		return a.printJSON(statusOutput{Host: host, Summary: sum, Checks: append([]checkLine{}, lines...)})
+		if err := a.printJSON(statusOutput{Host: host, Summary: sum, Checks: append([]checkLine{}, lines...)}); err != nil {
+			return err
+		}
+		if strict {
+			return strictExit(sum)
+		}
+		return nil
 	}
 	tw := tabwriter.NewWriter(a.io.Stdout, 0, 4, 2, ' ', 0)
 	for _, l := range lines {
@@ -61,5 +70,8 @@ func (a *app) status(ctx context.Context) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(a.io.Stdout, "\n%d ok, %d warn, %d error, %d missing\n", sum.OK, sum.Warn, sum.Error, sum.Missing)
+	if strict {
+		return strictExit(sum)
+	}
 	return nil
 }

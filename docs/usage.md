@@ -435,15 +435,48 @@ devbox run xrdp.enable                        # also: xrdp.restart, xrdp.disable
   `# <<< devbox:<plugin> <<<`), replaced in place on the next run instead of appended.
 - Actions are idempotent: a second run with the same values changes nothing.
 
+## Checks, actions and groups
+
+```bash
+devbox status [--strict]              # every check of every ready plugin, one line each
+devbox check [ID ...] [--strict]      # the same with details and hints; ID is <plugin>.<check> or a plugin
+devbox actions [PLUGIN]               # actions with their parameters, defaults and choices
+devbox group list                     # action groups, for example update-all and cleanup-all
+devbox group run update-all [--dry-run] [--yes]
+```
+
+- With `--strict`, `status` and `check` exit with 5 when a check warns and with 6 when one
+  reports `error` or `missing`, so they can gate scripts and CI.
+- A group is a sequence of actions. Ready plugins append their actions
+  (`contributes.groups`); a profile that defines a group of the same ID replaces them.
+- `group run` runs the actions one after another, each as its own session in the
+  history. An action that fails or is not confirmed does not stop the others, and an
+  action of a plugin that is not ready is skipped; the exit code is 1 when any failed.
+
+## Self-test and tools
+
+```bash
+devbox doctor [--offline]             # schemas, configuration, plugins, vault, service, proxy, network
+devbox schema list                    # names of the embedded JSON Schemas
+devbox schema print profile           # one schema, for editors and validation
+devbox completion bash|zsh|fish       # completion script, e.g. source <(devbox completion bash)
+```
+
+`devbox doctor` changes nothing. It exits with 1 only for an `error` line; `info` and `warn`
+lines (service not running, network not reachable) do not fail it. The network test sends
+one request to `system.releaseUrl`.
+
 ## Exit codes
 
 | Code | Meaning                                                                    |
 | ---- | -------------------------------------------------------------------------- |
-| 0    | success, also when there was nothing to do; `devbox status` always exits 0 |
+| 0    | success, also when there was nothing to do; `devbox status` exits 0 without `--strict` |
 | 1    | error                                                                      |
 | 2    | invalid parameter, setting, configuration, or unknown plugin or action     |
 | 3    | a requirement is missing (plugin `blocked`, the action reported it, or `git` or the network is missing for a repository) |
 | 4    | confirmation refused (or no terminal to ask and no `--yes`)                |
+| 5    | `status --strict` or `check --strict`: a check warns                       |
+| 6    | `status --strict` or `check --strict`: a check reports `error` or `missing` |
 | 130  | cancelled with Ctrl+C                                                      |
 
 Any other exit code from 1 to 127 of a plugin action is passed through unchanged.
@@ -816,14 +849,13 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
 
 - install script, distribution packages
 - web UI (the placeholder page only), `devbox service …`, terminal menu (`devbox` without arguments)
-- `devbox setup`, `devbox group run` (for example `update-all`), `devbox check`,
-  `devbox actions`, `devbox status --strict` (exit codes 5 and 6)
+- `devbox setup`, `devbox service …`, `devbox check --refresh` (the command line has no check cache)
 - SSH key upload for `git-host` and the credential types `ssh-key`, `generic`; the
   event `credential.changed`
 - version ranges from `plugins.require` of a profile (installing what a profile asks for)
 - plugin repositories: the kinds `profile`, `templates` and `packages`, SSH keys for
   `git+ssh://` sources, Sigstore signatures (`trust` object) for kind `plugins`,
   `devbox repo init`
-- `devbox doctor`, `devbox schema print`, `devbox migrate`, `devbox completion`
+- `devbox migrate`
 - global flags `--quiet`, `--no-color`, `--lang`, `--socket`
 - the language packs `lang-de` and `lang-en`, rootless Docker, the keyring setup of `xrdp` and plugin templates for TypeScript, Python and Go

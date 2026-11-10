@@ -1,0 +1,160 @@
+# AP-11: devbox check, actions, group, status --strict, doctor, schema and completion.
+
+chmod 755 home/.local/share/devbox/plugins/demo/check.sh
+chmod 755 home/.local/share/devbox/plugins/demo/act.sh
+chmod 755 home/.local/share/devbox/plugins/other/act.sh
+
+# check: named checks with details and hints; a plugin ID selects all its checks
+exec devbox check demo.fine
+stdout '^demo\.fine  ok  all good$'
+stdout '^    Version: 1\.2\.3$'
+stdout '^1 ok, 0 warn, 0 error, 0 missing$'
+exec devbox check demo
+stdout '^demo\.old  warn  outdated$'
+stdout '^    hint: update it \(devbox run demo\.one\)$'
+stdout '^1 ok, 1 warn, 0 error, 0 missing$'
+exec devbox check demo --json
+stdout '"summary": \{\s*"ok": 1,\s*"warn": 1'
+stdout '"action": "demo.one"'
+! exec devbox check demo.nope
+stderr 'not-found: demo.nope: no such check'
+
+# --strict: exit 5 for a warning, 6 for error or missing, 0 when everything is ok
+! exec devbox check demo --strict
+stderr '1 checks warn'
+exec devbox check demo.fine --strict
+! exec devbox check demo other --strict
+stderr '1 checks report error or missing'
+
+# actions: parameters with type, default and choices
+exec devbox actions demo
+stdout '^demo\.one  First$'
+stdout '^demo\.two  Second  \(asks for confirmation\)$'
+stdout '^    -p level=…  Level \(integer, default 1, one of \[1,2,3\]\)$'
+exec devbox actions demo --json
+stdout '"id": "demo.two"'
+stdout '"confirm": true'
+! exec devbox actions nope
+stderr 'not-found'
+
+# groups: plugins contribute, in plugin order
+exec devbox group list
+stdout '^demo-all +plugins +demo\.one, demo\.fail, other\.go$'
+exec devbox group list --json
+stdout '"origin": "plugins"'
+
+# group run: every action runs, a failing one does not stop the others, exit 1 at the end
+! exec devbox group run demo-all
+stdout '^== demo\.one$'
+stdout 'one ran'
+stdout '^== demo\.fail$'
+stdout '^== other\.go$'
+stdout 'other ran'
+stdout '^demo-all: 3 run, 1 failed, 0 skipped$'
+stderr 'group demo-all: failed: demo\.fail'
+! exec devbox group run nope
+stderr 'not-found: nope: no such group'
+
+# a profile replaces the group; an action of a missing plugin is skipped; a
+# confirmation without terminal and without --yes refuses that action only
+mkdir home/.config/devbox
+cp config.json home/.config/devbox/config.json
+exec devbox group list
+stdout '^demo-all +profile:team +demo\.two, gone\.x, demo\.one$'
+! exec devbox group run demo-all
+stderr 'demo\.two: not confirmed'
+stdout '^== gone\.x: skipped, the plugin is not ready$'
+stdout 'one ran'
+stdout '^demo-all: 2 run, 1 failed, 1 skipped$'
+exec devbox group run demo-all --yes
+stdout 'two ran'
+stdout '^demo-all: 2 run, 0 failed, 1 skipped$'
+
+# doctor
+exec devbox doctor --offline
+stdout '^schemas +ok +[0-9]+ embedded schemas compile$'
+stdout '^config +ok +user file .*1 profiles$'
+stdout '^plugins +ok '
+stdout '^network +info +skipped'
+exec devbox doctor --offline --json
+stdout '"ok": true'
+
+# schema
+exec devbox schema list
+stdout '^profile$'
+stdout '^plugin$'
+exec devbox schema print profile
+stdout '"title": "DevBox profile"'
+! exec devbox schema print nope
+stderr 'not-found: nope: no such schema'
+
+# completion
+exec devbox completion bash
+stdout 'bash completion'
+exec devbox completion zsh
+stdout 'compdef'
+exec devbox completion fish
+stdout 'complete -c devbox'
+! exec devbox completion csh
+stderr 'unknown shell'
+
+-- config.json --
+{ "profiles": [ { "source": "file://${env:HOME}/team.json" } ] }
+-- home/team.json --
+{
+  "id": "team",
+  "name": "Team",
+  "version": "1.0.0",
+  "groups": { "demo-all": { "label": "Everything", "actions": ["demo.two", "gone.x", "demo.one"] } }
+}
+-- home/.local/share/devbox/plugins/demo/plugin.json --
+{
+  "id": "demo",
+  "version": "1.0.0",
+  "name": "Demo",
+  "checks": {
+    "fine": { "label": "Fine", "run": ["check.sh", "fine"] },
+    "old": { "label": "Old", "run": ["check.sh", "old"] }
+  },
+  "actions": {
+    "one": { "label": "First", "run": ["act.sh", "one"] },
+    "two": {
+      "label": "Second",
+      "run": ["act.sh", "two"],
+      "confirm": "Really?",
+      "params": { "level": { "type": "integer", "enum": [1, 2, 3], "default": 1, "label": "Level" } }
+    },
+    "fail": { "label": "Fails", "run": ["act.sh", "fail"] }
+  },
+  "contributes": { "groups": { "demo-all": ["demo.one", "demo.fail"] } }
+}
+-- home/.local/share/devbox/plugins/demo/check.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1" in
+fine) printf '%s\n' '{"status":"ok","summary":"all good","details":[{"label":"Version","value":"1.2.3"}]}' ;;
+old) printf '%s\n' '{"status":"warn","summary":"outdated","hints":[{"text":"update it","action":"demo.one"}]}' ;;
+esac
+-- home/.local/share/devbox/plugins/demo/act.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1" in
+fail) echo "fail ran"; exit 1 ;;
+*) echo "$1 ran" ;;
+esac
+-- home/.local/share/devbox/plugins/other/plugin.json --
+{
+  "id": "other",
+  "version": "1.0.0",
+  "name": "Other",
+  "checks": { "gone": { "label": "Gone", "run": ["act.sh", "check"] } },
+  "actions": { "go": { "label": "Go", "run": ["act.sh", "go"] } },
+  "contributes": { "groups": { "demo-all": ["other.go"] } }
+}
+-- home/.local/share/devbox/plugins/other/act.sh --
+#!/usr/bin/env bash
+set -euo pipefail
+case "$1" in
+check) printf '%s\n' '{"status":"missing","summary":"nothing here"}' ;;
+*) echo "other ran" ;;
+esac
