@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.6.0](https://github.com/Zenit-Hosting-de/devbox/compare/v0.5.0...v0.6.0) (2026-11-10)
+
+
+### Features
+
+* bundled dotnet and python plugins (AP-17) ([93002ea](https://github.com/Zenit-Hosting-de/devbox/commit/93002ea2509854ef65350ca2365b502bd1b6bbad))
+* bundled plugins cleanup, templates and xrdp (AP-19) ([a44bffc](https://github.com/Zenit-Hosting-de/devbox/commit/a44bffc50951e451652f125afbf546c6091c26bb))
+* bundled plugins git, gradle, nuget and pip (AP-18) ([2d61c90](https://github.com/Zenit-Hosting-de/devbox/commit/2d61c907675d052a3afd7227f5826acd064aad89))
+* **catalog:** install plugins from signed catalogs (AP-23) ([e833f93](https://github.com/Zenit-Hosting-de/devbox/commit/e833f93480053293a9eb89b71b13ef7d432efbbd))
+* **catalog:** install plugins from signed catalogs (AP-23) ([2dd6aea](https://github.com/Zenit-Hosting-de/devbox/commit/2dd6aeaabd299e3b0d37e0bbb46cfca32213dd0d))
+* **cleanup:** add the bundled cleanup plugin ([c7cd8a9](https://github.com/Zenit-Hosting-de/devbox/commit/c7cd8a93950967fc2220de5d637035ae6f9e61e3))
+* **cli:** add check, actions, group, doctor, schema and completion (AP-11) ([80363f7](https://github.com/Zenit-Hosting-de/devbox/commit/80363f7f33203a93260510be819541d24833948e))
+* **cli:** add check, actions, group, doctor, schema and completion (AP-11) ([53ddbf9](https://github.com/Zenit-Hosting-de/devbox/commit/53ddbf99bb8bdf214ce1bdf713d7fc94e6c1e1e2))
+* **docker:** add the bundled plugin docker (AP-18) ([0d06278](https://github.com/Zenit-Hosting-de/devbox/commit/0d06278dc70790a6f738e65c25fdfadf86a1b406))
+* **docker:** bundled docker plugin (AP-18) ([92eced0](https://github.com/Zenit-Hosting-de/devbox/commit/92eced02b03be60b6d4366bf3d7ed4b3664e35d9))
+* **dotnet:** bundled .NET SDK plugin (AP-17) ([6ffaf11](https://github.com/Zenit-Hosting-de/devbox/commit/6ffaf1101d12273a6fda137554c48f5277dfed8b))
+* **git:** add the bundled plugin git (AP-18) ([bacb4dc](https://github.com/Zenit-Hosting-de/devbox/commit/bacb4dcce00079a4c76db8f68ba4c4bf74564e68))
+* **gradle:** add the registry consumer for Gradle ([82e4f6b](https://github.com/Zenit-Hosting-de/devbox/commit/82e4f6b6dfd751debe14c72a1b34bb98ecb1f36d))
+* **nuget:** add the registry consumer for NuGet ([2e275d8](https://github.com/Zenit-Hosting-de/devbox/commit/2e275d81ec1407060956b52c2b9b8b8078d2ea37))
+* **pip:** add the registry consumer for pip and uv (AP-18) ([162f228](https://github.com/Zenit-Hosting-de/devbox/commit/162f2285a2e6fa5a921b91d89d157bb59541fce7))
+* **profile:** profiles from https and Git, cache and signature check (AP-12) ([e1164da](https://github.com/Zenit-Hosting-de/devbox/commit/e1164dabbd5f0befd04c852e607dc72a7a6286af))
+* **profile:** profiles from https and Git, cache and signature check (AP-12) ([0bdf390](https://github.com/Zenit-Hosting-de/devbox/commit/0bdf3903ebdd38012b22f44b3c7c810a3fb0ba4d))
+* **python:** bundled python plugin with uv, Python versions and tools (AP-17) ([fddea6d](https://github.com/Zenit-Hosting-de/devbox/commit/fddea6dc45a378a58437170a4b7f98c1be71acb3))
+* **repo:** credentials for private plugin repositories ([f4fc38d](https://github.com/Zenit-Hosting-de/devbox/commit/f4fc38de3d7905c617fa7ce6f761fc79f5f3a9be))
+* **sdk:** add json-remove and a value from stdin for json-set ([82c8678](https://github.com/Zenit-Hosting-de/devbox/commit/82c86780f6b795276cbd6e9216d71988346041d0))
+* **setup:** add devbox setup with a resumable plan (AP-20) ([1c9758b](https://github.com/Zenit-Hosting-de/devbox/commit/1c9758b5dda905a702e2fc67e897302d6204462b))
+* **setup:** add devbox setup with a resumable plan (AP-20) ([3eece82](https://github.com/Zenit-Hosting-de/devbox/commit/3eece821dc1865bdfc6565e2c74619d300343da4))
+* **templates:** add the bundled plugin templates ([3d38971](https://github.com/Zenit-Hosting-de/devbox/commit/3d3897194dc95300981c6537b5285476ee78e4a2))
+* **web:** add the setup page with the plan and the groups (AP-20) ([735c0b1](https://github.com/Zenit-Hosting-de/devbox/commit/735c0b1f13e35197a52722b7776444ddd39dc644))
+* **web:** add the setup page with the plan and the groups (AP-20) ([96720b1](https://github.com/Zenit-Hosting-de/devbox/commit/96720b1fa7b2979f71ab0b0c6f673827b8dadee2))
+* **xrdp:** bundled plugin for xrdp with XFCE (AP-19) ([a15daa7](https://github.com/Zenit-Hosting-de/devbox/commit/a15daa78514f314dffda529495511fee399d26f6))
+
+
+### Bug Fixes
+
+* **build:** make lint, test and build safe under make -j ([3f3e3c7](https://github.com/Zenit-Hosting-de/devbox/commit/3f3e3c7cbc42a26c776e7aa93a5bbe583232ca18))
+* **web:** regenerate the API and event types ([5550c88](https://github.com/Zenit-Hosting-de/devbox/commit/5550c88179a5da2251ae6f347525b36fb1a493e4))
+
+
+### Performance Improvements
+
+* **web:** keep the initial bundle under budget ([c4e302f](https://github.com/Zenit-Hosting-de/devbox/commit/c4e302f1d9111d6593c51d5406e43a23ce9531e1))
+
 ## [0.5.0](https://github.com/Zenit-Hosting-de/devbox/compare/v0.4.0...v0.5.0) (2026-10-31)
 
 
