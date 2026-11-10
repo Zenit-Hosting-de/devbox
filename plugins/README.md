@@ -22,6 +22,7 @@ last in the plugin search order, so a team can replace any of them.
 | `gradle`      | AP-18 (registry consumer: `gradle.properties` or `ORG_GRADLE_PROJECT_*` in `env.d`)                                                     |
 | `nuget`       | AP-18 (registry consumer: package sources in `NuGet.Config`, credentials in the file or `NuGetPackageSourceCredentials_*` in `env.d`)   |
 | `pip`         | AP-18 (registry consumer for pip and uv: `pip.conf`, `uv.toml` and `.netrc`, or `PIP_INDEX_URL` and `UV_DEFAULT_INDEX`)                 |
+| `xrdp`        | AP-19 (xrdp with XFCE: packages, keys of `xrdp.ini` and `sesman.ini`, session start, polkit rule, sound module, services)               |
 
 The remaining plugins (`docker`, `xrdp`, `cleanup`, `templates`) follow in AP-18 and AP-19, the language packs `lang-de` and
 `lang-en` in AP-28.
