@@ -1,0 +1,147 @@
+# AP-19: the bundled plugin templates. A local Git repository is the source
+# (git+file://): sync fetches a shallow copy, the check lists the templates, new creates
+# a project with the placeholders replaced, refuses a folder with content and writes
+# nothing in a dry run. The commands of a template run only through the action hooks,
+# which asks for a confirmation.
+
+[!exec:git] skip 'git is not installed'
+[!exec:jq] skip 'jq is not installed'
+
+env GIT_AUTHOR_NAME=Test GIT_AUTHOR_EMAIL=test@example.com GIT_AUTHOR_DATE=2026-11-10T09:00:00Z
+env GIT_COMMITTER_NAME=Test GIT_COMMITTER_EMAIL=test@example.com GIT_COMMITTER_DATE=2026-11-10T09:00:00Z
+cd src
+exec git init --quiet --initial-branch=main
+exec git add .
+exec git -c commit.gpgsign=false commit --quiet -m one
+cd ..
+env SOURCE=git+file://$WORK/src
+env CACHE=home/.cache/devbox/templates
+
+# plugin test: check, dry runs without changes, sync applied twice
+exec devbox plugin test --apply --set templates.sources=$SOURCE $REPO/plugins/templates
+stdout '^ok +validate +templates'
+stdout '^ok +check +templates.available +missing'
+stdout '^ok +dry-run +templates.sync +1 planned changes'
+stdout '^ok +apply +templates.sync +1 changes'
+stdout '^ok +repeat +templates.sync +no changes'
+stdout '^skipped +apply +templates.hooks +danger'
+! stdout '^failed'
+
+# the bundled plugin: nothing fetched yet
+exec devbox config set templates.sources $SOURCE
+exec devbox plugin info templates --json
+stdout '"state": "ready"'
+stdout '"path": ".*/devbox/builtin/.*/templates"'
+exec devbox status
+stdout '^templates\.available +missing +Templates not fetched$'
+
+# sync: the dry run fetches nothing, a second run changes nothing
+exec devbox run templates.sync --dry-run --json
+stdout '"kind":"file","op":"create","summary":"templates of git\+file://.*/src"'
+! exists $CACHE
+exec devbox run templates.sync
+exec devbox run templates.sync --json
+! stdout '"type":"change"'
+stdout '"type":"result"'
+exec devbox status
+stdout '^templates\.available +warn +2 templates \(java, node\)$'
+
+# new: the dry run lists every file and writes nothing
+exec devbox run templates.new -p template=node-app -p name=shop -p 'values={"projectName":"shop-api","port":8080}' --dry-run --json
+stdout '"op":"create","summary":"rendered from template node-app","target":".*/projects/shop/package.json"'
+stdout '"op":"create","summary":"copied from template node-app","target":".*/projects/shop/src/index.js"'
+! stdout 'template.json'
+! exists home/projects
+
+exec devbox run templates.new -p template=node-app -p name=shop -p 'values={"projectName":"shop-api","port":8080}'
+cmp home/projects/shop/package.json package.want
+cmp home/projects/shop/src/index.js src/node-app/src/index.js
+! exists home/projects/shop/template.json
+
+# a folder with content is refused and stays as it is
+! exec devbox run templates.new -p template=node-app -p name=shop -p 'values={"projectName":"other"}'
+stderr 'exists and is not empty'
+cmp home/projects/shop/package.json package.want
+
+# a parameter without a value is an error of the parameters
+! exec devbox run templates.new -p template=node-app -p name=other
+stderr 'projectName needs a value'
+! exists home/projects/other
+
+# the project root is a setting
+exec devbox run templates.new -p template=node-app -p name=shop -p 'values={"projectName":"shop-api","port":8080}' --set templates.projectRoot=$WORK/elsewhere
+cmp elsewhere/shop/package.json package.want
+
+# commands of a template: new lists them, hooks runs them only when confirmed
+exec devbox run templates.new -p template=java-service -p name=svc
+stdout 'not run here: ''touch'' ''hooked.txt'''
+grep '<groupId>com.example</groupId>' home/projects/svc/pom.xml
+! exists home/projects/svc/hooked.txt
+! exists home/projects/svc/NOTES.txt
+exec devbox run templates.hooks -p template=java-service -p name=svc --dry-run
+stdout 'run: ''touch'' ''hooked.txt'''
+! exists home/projects/svc/hooked.txt
+! exec devbox run templates.hooks -p template=java-service -p name=svc
+stderr 'not confirmed'
+! exists home/projects/svc/hooked.txt
+exec devbox run templates.hooks -p template=java-service -p name=svc --yes
+exists home/projects/svc/hooked.txt
+exec devbox run templates.hooks -p template=java-service -p name=svc --yes --json
+! stdout '"type":"change"'
+
+# a source that is no longer configured loses its copy
+exec devbox config set templates.sources '[]'
+exec devbox run templates.sync --json
+stdout '"op":"delete"'
+exec devbox status
+stdout '^templates\.available +ok +No template sources$'
+
+-- home/.config/devbox/config.json --
+{
+  "plugins": {
+    "paths": ["${xdg:data}/devbox/plugins"],
+    "disabled": ["credentials", "dotnet", "git", "githost", "gradle", "java", "maven", "node", "npm", "nuget", "pip", "python", "registry", "system"]
+  }
+}
+-- home/.local/share/devbox/plugins/base/plugin.json --
+{ "id": "base", "version": "1.0.0", "name": "Base stand-in" }
+-- package.want --
+{
+  "name": "shop-api",
+  "port": 8080
+}
+-- src/node-app/template.json --
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/template.v1.json",
+  "id": "node-app",
+  "name": "Node application",
+  "language": "node",
+  "params": {
+    "projectName": { "type": "string", "label": "Project name", "pattern": "^[a-z][a-z0-9-]*$" },
+    "port": { "type": "integer", "label": "Port", "default": 3000 }
+  },
+  "files": { "render": ["package.json"] }
+}
+-- src/node-app/package.json --
+{
+  "name": "{{projectName}}",
+  "port": {{port}}
+}
+-- src/node-app/src/index.js --
+console.log("{{projectName}}");
+-- src/templates/java-service/template.json --
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/template.v1.json",
+  "id": "java-service",
+  "name": "Java service",
+  "language": "java",
+  "params": { "groupId": { "type": "string", "label": "Group ID", "default": "com.example" } },
+  "files": { "include": ["pom.xml", "src/**/*.java"], "render": ["pom.xml"] },
+  "hooks": { "postCreate": [["touch", "hooked.txt"]] }
+}
+-- src/templates/java-service/pom.xml --
+<project><groupId>{{groupId}}</groupId></project>
+-- src/templates/java-service/NOTES.txt --
+not part of the project
+-- src/broken/template.json --
+{ "id": "Broken", "name": "Broken" }
