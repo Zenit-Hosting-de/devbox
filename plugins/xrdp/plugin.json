@@ -1,0 +1,294 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "xrdp",
+  "version": "1.0.0",
+  "name": "xrdp",
+  "description": "Remote desktop over RDP with xrdp and XFCE: installation, port, colour depth, security layer, sound, polkit rule, status, restart and switching off",
+  "category": "remote",
+  "icon": "monitor",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["systemctl", "awk", "grep", "id", "mkdir", "cp", "cat", "install", "mktemp", "rm"]
+  },
+  "permissions": {
+    "network": [],
+    "files": {
+      "read": [
+        "${xrdp.xrdpIni}",
+        "${xrdp.sesmanIni}",
+        "${xrdp.sessionFile}",
+        "${xrdp.polkitRuleFile}"
+      ],
+      "write": [
+        "${xrdp.xrdpIni}",
+        "${xrdp.sesmanIni}",
+        "${xrdp.sessionFile}",
+        "${xrdp.polkitRuleFile}"
+      ]
+    },
+    "sudo": true,
+    "credentials": []
+  },
+  "settings": {
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 3389,
+      "label": "Port",
+      "help": "TCP port xrdp listens on (port in [Globals] of xrdp.ini)."
+    },
+    "securityLayer": {
+      "type": "string",
+      "enum": ["negotiate", "tls", "rdp"],
+      "default": "negotiate",
+      "label": "Security layer",
+      "help": "negotiate lets client and server agree, tls requires TLS, rdp is the classic RDP encryption (security_layer in xrdp.ini)."
+    },
+    "maxBpp": {
+      "type": "integer",
+      "enum": [8, 15, 16, 24, 32],
+      "default": 32,
+      "label": "Colour depth",
+      "help": "Highest colour depth in bits per pixel a client may ask for (max_bpp in xrdp.ini)."
+    },
+    "sound": {
+      "type": "boolean",
+      "default": false,
+      "label": "Sound",
+      "help": "Install the xrdp module of the sound server, so remote sessions play sound on the client."
+    },
+    "desktop": {
+      "type": "string",
+      "enum": ["xfce", "none"],
+      "default": "xfce",
+      "label": "Desktop",
+      "help": "xfce installs XFCE and starts it in remote sessions; none installs no desktop and leaves the session start as it is."
+    },
+    "allowRootLogin": {
+      "type": "boolean",
+      "default": false,
+      "label": "Allow root to log in",
+      "help": "Whether root may open a remote session (AllowRootLogin in [Security] of sesman.ini)."
+    },
+    "polkit": {
+      "type": "boolean",
+      "default": true,
+      "label": "polkit rule",
+      "help": "Write a rule that answers the password prompts of the listed polkit actions in remote sessions. Switched off, the action removes the rule again."
+    },
+    "polkitActions": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+      "uniqueItems": true,
+      "default": [
+        "org.freedesktop.color-manager.create-device",
+        "org.freedesktop.color-manager.create-profile",
+        "org.freedesktop.color-manager.delete-device",
+        "org.freedesktop.color-manager.delete-profile",
+        "org.freedesktop.color-manager.modify-device",
+        "org.freedesktop.color-manager.modify-profile",
+        "org.freedesktop.NetworkManager.wifi.scan"
+      ],
+      "label": "polkit actions",
+      "help": "Actions the rule allows without a password: colour management and Wi-Fi scans, which ask at every remote login. The rule allows nothing else.",
+      "advanced": true
+    },
+    "polkitGroup": {
+      "type": "string",
+      "pattern": "^([a-z_][a-z0-9_-]*)?$",
+      "default": "",
+      "label": "Group of the polkit rule",
+      "help": "Members of this group get the rule. Empty: only the user who runs the action.",
+      "advanced": true
+    },
+    "polkitRuleFile": {
+      "type": "string",
+      "format": "path",
+      "default": "/etc/polkit-1/rules.d/45-devbox-xrdp.rules",
+      "label": "polkit rule file",
+      "advanced": true
+    },
+    "xrdpIni": {
+      "type": "string",
+      "format": "path",
+      "default": "/etc/xrdp/xrdp.ini",
+      "label": "xrdp.ini",
+      "advanced": true
+    },
+    "sesmanIni": {
+      "type": "string",
+      "format": "path",
+      "default": "/etc/xrdp/sesman.ini",
+      "label": "sesman.ini",
+      "advanced": true
+    },
+    "sessionFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.xsession",
+      "label": "Session start file",
+      "help": "File the session start of xrdp reads for the user; the desktop is started from a marked block in it.",
+      "advanced": true
+    },
+    "sessionCommand": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_./-]+( [A-Za-z0-9_./=-]+)*$",
+      "default": "startxfce4",
+      "label": "Session command",
+      "help": "Command that starts the desktop in a remote session.",
+      "advanced": true
+    },
+    "services": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.@-]*$" },
+      "minItems": 1,
+      "uniqueItems": true,
+      "default": ["xrdp-sesman", "xrdp"],
+      "label": "Services",
+      "help": "systemd units of xrdp, in the order they are started.",
+      "advanced": true
+    },
+    "packages": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "default": {
+        "apt": ["xrdp", "xorgxrdp"],
+        "dnf": ["xrdp", "xorgxrdp"],
+        "pacman": [],
+        "zypper": ["xrdp", "xorgxrdp"]
+      },
+      "label": "Packages of xrdp",
+      "help": "Packages per package manager (apt, dnf, pacman, zypper). An empty list means the distribution ships no package.",
+      "advanced": true
+    },
+    "desktopPackages": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "default": {
+        "apt": ["xfce4", "xfce4-terminal", "dbus-x11"],
+        "dnf": [
+          "xfce4-session",
+          "xfwm4",
+          "xfce4-panel",
+          "xfdesktop",
+          "xfce4-settings",
+          "xfce4-terminal"
+        ],
+        "pacman": ["xfce4"],
+        "zypper": [
+          "xfce4-session",
+          "xfwm4",
+          "xfce4-panel",
+          "xfdesktop",
+          "xfce4-settings",
+          "xfce4-terminal"
+        ]
+      },
+      "label": "Packages of the desktop",
+      "help": "Packages per package manager, installed with the desktop xfce.",
+      "advanced": true
+    },
+    "soundPackages": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "default": {
+        "apt": ["pipewire-module-xrdp"],
+        "dnf": ["pipewire-module-xrdp"],
+        "pacman": [],
+        "zypper": []
+      },
+      "label": "Packages for sound",
+      "help": "Packages per package manager with the xrdp module of the sound server, e.g. pipewire-module-xrdp or pulseaudio-module-xrdp.",
+      "advanced": true
+    },
+    "manager": {
+      "type": "string",
+      "enum": ["auto", "apt", "dnf", "pacman", "zypper"],
+      "default": "auto",
+      "label": "Package manager",
+      "help": "auto takes the first of apt, dnf, pacman and zypper found in PATH.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "status": {
+      "label": "Remote desktop",
+      "run": ["checks/status.sh"],
+      "timeout": "10s",
+      "cache": "5m",
+      "refreshOn": ["session.finished:xrdp.*"]
+    }
+  },
+  "actions": {
+    "install": {
+      "label": "Install xrdp",
+      "description": "Installs xrdp and the desktop from the package sources of the distribution.",
+      "run": ["actions/install.sh"],
+      "timeout": "30m",
+      "sudo": true,
+      "locks": ["package-manager"]
+    },
+    "configure": {
+      "label": "Apply configuration",
+      "description": "Sets port, security layer, colour depth and root login in xrdp.ini and sesman.ini, and the session start of the desktop.",
+      "run": ["actions/configure.sh"],
+      "timeout": "2m",
+      "sudo": true
+    },
+    "polkit": {
+      "label": "Write polkit rule",
+      "description": "Writes or removes the rule for the password prompts in remote sessions.",
+      "run": ["actions/polkit.sh"],
+      "timeout": "2m",
+      "sudo": true
+    },
+    "sound": {
+      "label": "Set up sound",
+      "description": "Installs the xrdp module of the sound server when sound is switched on.",
+      "run": ["actions/sound.sh"],
+      "timeout": "30m",
+      "sudo": true,
+      "locks": ["package-manager"]
+    },
+    "enable": {
+      "label": "Switch on",
+      "description": "Starts xrdp now and at every start of the machine.",
+      "run": ["actions/enable.sh"],
+      "timeout": "2m",
+      "sudo": true
+    },
+    "restart": {
+      "label": "Restart",
+      "run": ["actions/restart.sh"],
+      "timeout": "2m",
+      "confirm": "xrdp is restarted. Running remote sessions are disconnected and may end.",
+      "danger": true,
+      "sudo": true
+    },
+    "disable": {
+      "label": "Switch off",
+      "run": ["actions/disable.sh"],
+      "timeout": "2m",
+      "confirm": "xrdp is stopped and no longer started with the machine. Running remote sessions end, and the machine is no longer reachable over RDP.",
+      "danger": true,
+      "sudo": true
+    }
+  },
+  "contributes": {
+    "setup": [
+      { "action": "xrdp.install", "after": ["base.packages"] },
+      { "action": "xrdp.configure", "after": ["xrdp.install"] },
+      { "action": "xrdp.polkit", "after": ["xrdp.install"] },
+      { "action": "xrdp.sound", "after": ["xrdp.install"] },
+      { "action": "xrdp.enable", "after": ["xrdp.configure"] }
+    ],
+    "overview": { "check": "xrdp.status", "primaryAction": "xrdp.restart" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

@@ -1,0 +1,481 @@
+# AP-19: the bundled plugin xrdp against test INI files and fake system commands.
+# dpkg-query reports a package as installed when pkgs/<name> exists, apt-get logs its
+# arguments and creates those files (xrdp brings its units), systemctl keeps units,
+# enabled and active states as files and logs every change, sudo runs only these fakes.
+# xrdp.ini and sesman.ini are the files below home/etc/xrdp, modelled on the stock ones:
+# only the keys of the plugin change, every other line stays.
+
+chmod 0755 bin/apt-get
+chmod 0755 bin/dpkg-query
+chmod 0755 bin/systemctl
+chmod 0755 bin/sudo
+env PATH=$WORK/bin:$PATH
+env INI=home/etc/xrdp/xrdp.ini
+env SESMAN=home/etc/xrdp/sesman.ini
+env RULE=home/etc/polkit-1/rules.d/45-devbox-xrdp.rules
+mkdir pkgs units enabled active
+exec devbox plugin info xrdp --json
+stdout '"state": "ready"'
+
+# nothing installed yet
+exec devbox status
+stdout '^xrdp\.status +missing +Not installed: xrdp, xorgxrdp, xfce4, dbus-x11$'
+
+# install: the dry run plans one change per package, the run installs them once
+exec devbox run xrdp.install --dry-run --json
+stdout '"kind":"package","op":"create","summary":"install with apt","target":"xrdp","type":"change"'
+stdout '"kind":"package","op":"create","summary":"install with apt","target":"xfce4","type":"change"'
+stdout '"summary":"4 packages would be installed","type":"result"'
+! exists apt.log
+exec devbox run xrdp.install --json
+stdout '"summary":"4 packages installed","type":"result"'
+cmp apt.log install.log
+exec devbox run xrdp.install --json
+stdout '"summary":"xrdp is installed","type":"result"'
+! stdout '"type":"change"'
+cmp apt.log install.log
+
+# installed, but not configured as set and not switched on
+exec devbox status
+stdout '^xrdp\.status +warn +Configuration differs from the settings: port, security_layer, max_bpp, AllowRootLogin, session start$'
+
+# configure: the dry run reports every key and leaves the files alone
+exec devbox run xrdp.configure --dry-run --json
+stdout '"kind":"file","op":"update","summary":"\[Globals\] port=3390 \(was 3389\)","target":".*/etc/xrdp/xrdp.ini","type":"change"'
+stdout '"summary":"\[Globals\] security_layer=tls \(was negotiate\)"'
+stdout '"summary":"\[Globals\] max_bpp=24 \(was 32\)"'
+stdout '"summary":"\[Security\] AllowRootLogin=false \(was true\)","target":".*/etc/xrdp/sesman.ini"'
+stdout '"op":"create","summary":"devbox:xrdp block","target":"~/.xsession"'
+stdout '"summary":"The configuration of xrdp would be applied","type":"result"'
+cmp $INI xrdp.orig.ini
+cmp $SESMAN sesman.orig.ini
+! exists home/.xsession
+
+# apply: exactly the four keys differ, the port of [Xorg] and all comments stay
+exec devbox run xrdp.configure --json
+stdout '"data":\{"restartNeeded":true\},"summary":"xrdp is configured","type":"result"'
+cmp $INI xrdp.want.ini
+cmp $SESMAN sesman.want.ini
+cmp home/.xsession xsession.want
+
+# second run and dry run: no change
+exec devbox run xrdp.configure --json
+! stdout '"type":"change"'
+stdout '"data":\{"restartNeeded":false\},"summary":"xrdp is configured","type":"result"'
+exec devbox run xrdp.configure --dry-run --json
+! stdout '"type":"change"'
+cmp $INI xrdp.want.ini
+cmp $SESMAN sesman.want.ini
+cmp home/.xsession xsession.want
+
+# polkit: a rule for the listed actions only; idempotent
+exec devbox run xrdp.polkit --dry-run --json
+stdout '"kind":"file","op":"create","summary":"polkit rule for 2 actions and group remote-users"'
+! exists $RULE
+exec devbox run xrdp.polkit --json
+stdout '"summary":"The polkit rule is written","type":"result"'
+cmp $RULE rule.want
+exec devbox run xrdp.polkit --json
+! stdout '"type":"change"'
+stdout '"summary":"The polkit rule is in place","type":"result"'
+
+# sound is off by default: nothing happens; switched on, the module is installed
+exec devbox run xrdp.sound --json
+stdout '"summary":"Sound is switched off","type":"result"'
+cmp apt.log install.log
+exec devbox run xrdp.sound --set xrdp.sound=true --json
+stdout '"kind":"package","op":"create","summary":"install with apt","target":"pipewire-module-xrdp","type":"change"'
+cmp apt.log install-sound.log
+
+# enable, then the status is ok
+exec devbox run xrdp.enable --dry-run --json
+stdout '"kind":"service","op":"update","summary":"enable and start","target":"xrdp-sesman","type":"change"'
+! exists systemctl.log
+exec devbox run xrdp.enable --json
+stdout '"summary":"xrdp is switched on","type":"result"'
+exec devbox run xrdp.enable --json
+! stdout '"type":"change"'
+cmp systemctl.log enable.log
+exec devbox status
+stdout '^xrdp\.status +ok +xrdp is running on port 3390$'
+
+# a changed setting shows in the status and is applied by configure
+exec devbox config set xrdp.port 3391
+exec devbox status
+stdout '^xrdp\.status +warn +Configuration differs from the settings: port$'
+exec devbox run xrdp.configure --json
+stdout '"summary":"\[Globals\] port=3391 \(was 3390\)"'
+grep '^port=3391$' $INI
+grep '^port=-1$' $INI
+exec devbox config set xrdp.port 3390
+exec devbox run xrdp.configure
+cmp $INI xrdp.want.ini
+
+# restart and disable ask first; without a terminal they need --yes
+! exec devbox run xrdp.restart
+stderr 'xrdp.restart: not confirmed'
+cmp systemctl.log enable.log
+exec devbox run xrdp.restart --yes --json
+stdout '"summary":"xrdp restarted","type":"result"'
+cmp systemctl.log restart.log
+
+exec devbox run xrdp.disable --dry-run --yes --json
+stdout '"kind":"service","op":"update","summary":"stop and disable","target":"xrdp","type":"change"'
+cmp systemctl.log restart.log
+exec devbox run xrdp.disable --yes --json
+stdout '"summary":"xrdp is switched off","type":"result"'
+cmp systemctl.log disable.log
+exec devbox run xrdp.disable --yes --json
+! stdout '"type":"change"'
+cmp systemctl.log disable.log
+exec devbox status
+stdout '^xrdp\.status +warn +xrdp is switched off$'
+# switching off keeps packages and configuration
+cmp $INI xrdp.want.ini
+exists pkgs/xrdp
+
+# polkit switched off removes the rule; desktop none removes the session start
+exec devbox run xrdp.polkit --set xrdp.polkit=false --json
+stdout '"kind":"file","op":"delete"'
+! exists $RULE
+exec devbox run xrdp.configure --set xrdp.desktop=none --json
+stdout '"kind":"file","op":"delete","summary":"devbox:xrdp block removed, nothing else in the file","target":".*/.xsession"'
+! exists home/.xsession
+
+# back to the stock values: the INI files are byte for byte the originals again
+exec devbox run xrdp.configure --set xrdp.port=3389 --set xrdp.securityLayer=negotiate --set xrdp.maxBpp=32 --set xrdp.allowRootLogin=true --set xrdp.desktop=none
+cmp $INI xrdp.orig.ini
+cmp $SESMAN sesman.orig.ini
+
+# without xrdp.ini the action stops as blocked and changes nothing
+rm $INI
+! exec devbox run xrdp.configure --json
+stderr 'blocked \(exit 3\)'
+! stdout '"type":"change"'
+cmp $SESMAN sesman.orig.ini
+
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "disabled": ["base", "java"] },
+  "settings": {
+    "xrdp.manager": "apt",
+    "xrdp.port": 3390,
+    "xrdp.securityLayer": "tls",
+    "xrdp.maxBpp": 24,
+    "xrdp.xrdpIni": "${env:HOME}/etc/xrdp/xrdp.ini",
+    "xrdp.sesmanIni": "${env:HOME}/etc/xrdp/sesman.ini",
+    "xrdp.polkitRuleFile": "${env:HOME}/etc/polkit-1/rules.d/45-devbox-xrdp.rules",
+    "xrdp.polkitGroup": "remote-users",
+    "xrdp.polkitActions": ["org.freedesktop.color-manager.create-device", "org.freedesktop.NetworkManager.wifi.scan"],
+    "xrdp.packages": { "apt": ["xrdp", "xorgxrdp"] },
+    "xrdp.desktopPackages": { "apt": ["xfce4", "dbus-x11"] },
+    "xrdp.soundPackages": { "apt": ["pipewire-module-xrdp"] }
+  }
+}
+-- install.log --
+update
+install -y xrdp xorgxrdp xfce4 dbus-x11
+-- install-sound.log --
+update
+install -y xrdp xorgxrdp xfce4 dbus-x11
+update
+install -y pipewire-module-xrdp
+-- enable.log --
+enable --now xrdp-sesman xrdp
+-- restart.log --
+enable --now xrdp-sesman xrdp
+restart xrdp-sesman xrdp
+-- disable.log --
+enable --now xrdp-sesman xrdp
+restart xrdp-sesman xrdp
+disable --now xrdp-sesman xrdp
+-- xsession.want --
+# >>> devbox:xrdp >>>
+# Starts the desktop in remote sessions of xrdp; other logins skip this block.
+if [ -n "${XRDP_SESSION:-}" ]; then
+  exec startxfce4
+fi
+# <<< devbox:xrdp <<<
+-- rule.want --
+// >>> devbox:xrdp >>>
+// Written by the DevBox plugin xrdp (action xrdp.polkit); changes are overwritten.
+// Answers the listed actions for group remote-users without a password prompt. Nothing else.
+polkit.addRule(function(action, subject) {
+  var allowed = [
+    "org.freedesktop.color-manager.create-device",
+    "org.freedesktop.NetworkManager.wifi.scan"
+  ];
+  if (subject.isInGroup("remote-users") && allowed.indexOf(action.id) >= 0) {
+    return polkit.Result.YES;
+  }
+});
+// <<< devbox:xrdp <<<
+-- home/etc/xrdp/xrdp.ini --
+[Globals]
+; xrdp.ini file version number
+ini_version=1
+
+; ports to listen on, number alone means listen on all interfaces
+; Examples:
+;   port=3389
+;   port=tcp://.:3389                           127.0.0.1:3389
+port=3389
+
+; security layer can be 'tls', 'rdp' or 'negotiate'
+; for client compatible layer
+security_layer=negotiate
+crypt_level=high
+#tls_ciphers=HIGH
+
+bitmap_compression=true
+#hidelogwindow=true
+max_bpp=32
+new_cursors=true
+
+[Logging]
+LogFile=xrdp.log
+LogLevel=INFO
+
+; Session types
+[Xorg]
+name=Xorg
+lib=libxup.so
+username=ask
+password=ask
+ip=127.0.0.1
+port=-1
+code=20
+
+[Xvnc]
+name=Xvnc
+lib=libvnc.so
+ip=127.0.0.1
+port=-1
+#xserverbpp=24
+-- xrdp.orig.ini --
+[Globals]
+; xrdp.ini file version number
+ini_version=1
+
+; ports to listen on, number alone means listen on all interfaces
+; Examples:
+;   port=3389
+;   port=tcp://.:3389                           127.0.0.1:3389
+port=3389
+
+; security layer can be 'tls', 'rdp' or 'negotiate'
+; for client compatible layer
+security_layer=negotiate
+crypt_level=high
+#tls_ciphers=HIGH
+
+bitmap_compression=true
+#hidelogwindow=true
+max_bpp=32
+new_cursors=true
+
+[Logging]
+LogFile=xrdp.log
+LogLevel=INFO
+
+; Session types
+[Xorg]
+name=Xorg
+lib=libxup.so
+username=ask
+password=ask
+ip=127.0.0.1
+port=-1
+code=20
+
+[Xvnc]
+name=Xvnc
+lib=libvnc.so
+ip=127.0.0.1
+port=-1
+#xserverbpp=24
+-- xrdp.want.ini --
+[Globals]
+; xrdp.ini file version number
+ini_version=1
+
+; ports to listen on, number alone means listen on all interfaces
+; Examples:
+;   port=3389
+;   port=tcp://.:3389                           127.0.0.1:3389
+port=3390
+
+; security layer can be 'tls', 'rdp' or 'negotiate'
+; for client compatible layer
+security_layer=tls
+crypt_level=high
+#tls_ciphers=HIGH
+
+bitmap_compression=true
+#hidelogwindow=true
+max_bpp=24
+new_cursors=true
+
+[Logging]
+LogFile=xrdp.log
+LogLevel=INFO
+
+; Session types
+[Xorg]
+name=Xorg
+lib=libxup.so
+username=ask
+password=ask
+ip=127.0.0.1
+port=-1
+code=20
+
+[Xvnc]
+name=Xvnc
+lib=libvnc.so
+ip=127.0.0.1
+port=-1
+#xserverbpp=24
+-- home/etc/xrdp/sesman.ini --
+;; See `man 5 sesman.ini` for details
+
+[Globals]
+ListenAddress=127.0.0.1
+ListenPort=3350
+EnableUserWindowManager=true
+UserWindowManager=startwm.sh
+
+[Security]
+AllowRootLogin=true
+MaxLoginRetry=4
+; When AlwaysGroupCheck=false access will be permitted
+AlwaysGroupCheck=false
+
+[Logging]
+LogFile=xrdp-sesman.log
+LogLevel=INFO
+
+[Xorg]
+param=/usr/lib/xorg/Xorg
+param=-config
+param=xrdp/xorg.conf
+-- sesman.orig.ini --
+;; See `man 5 sesman.ini` for details
+
+[Globals]
+ListenAddress=127.0.0.1
+ListenPort=3350
+EnableUserWindowManager=true
+UserWindowManager=startwm.sh
+
+[Security]
+AllowRootLogin=true
+MaxLoginRetry=4
+; When AlwaysGroupCheck=false access will be permitted
+AlwaysGroupCheck=false
+
+[Logging]
+LogFile=xrdp-sesman.log
+LogLevel=INFO
+
+[Xorg]
+param=/usr/lib/xorg/Xorg
+param=-config
+param=xrdp/xorg.conf
+-- sesman.want.ini --
+;; See `man 5 sesman.ini` for details
+
+[Globals]
+ListenAddress=127.0.0.1
+ListenPort=3350
+EnableUserWindowManager=true
+UserWindowManager=startwm.sh
+
+[Security]
+AllowRootLogin=false
+MaxLoginRetry=4
+; When AlwaysGroupCheck=false access will be permitted
+AlwaysGroupCheck=false
+
+[Logging]
+LogFile=xrdp-sesman.log
+LogLevel=INFO
+
+[Xorg]
+param=/usr/lib/xorg/Xorg
+param=-config
+param=xrdp/xorg.conf
+-- bin/sudo --
+#!/bin/sh
+# runs only the fakes of this test and file tools, so a test can never touch the real system
+case "$1" in
+apt-get | systemctl | env | cp | install | mkdir | rm | cat | test) exec "$@" ;;
+esac
+echo "sudo: $1 not allowed in this test" >&2
+exit 1
+-- bin/dpkg-query --
+#!/bin/sh
+# dpkg-query -W -f=${Status} NAME
+for name; do :; done
+if [ -e "$(dirname "$0")/../pkgs/$name" ]; then
+  printf 'install ok installed'
+  exit 0
+fi
+echo "dpkg-query: no packages found matching $name" >&2
+exit 1
+-- bin/apt-get --
+#!/bin/sh
+dir=$(dirname "$0")/..
+echo "$*" >>"$dir/apt.log"
+if [ "$1" = install ] && [ "$2" = -y ]; then
+  shift 2
+  for name; do
+    : >"$dir/pkgs/$name"
+    # the package xrdp brings the units
+    if [ "$name" = xrdp ]; then
+      : >"$dir/units/xrdp"
+      : >"$dir/units/xrdp-sesman"
+    fi
+  done
+fi
+exit 0
+-- bin/systemctl --
+#!/bin/sh
+dir=$(dirname "$0")/..
+case "$1" in
+cat) [ -e "$dir/units/$2" ] ;;
+is-active)
+  shift
+  [ "$1" = --quiet ] && shift
+  [ -e "$dir/active/$1" ]
+  ;;
+is-enabled)
+  if [ -e "$dir/enabled/$2" ]; then
+    echo enabled
+  else
+    echo disabled
+    exit 1
+  fi
+  ;;
+enable | disable | restart)
+  echo "$*" >>"$dir/systemctl.log"
+  cmd=$1
+  shift
+  [ "$1" = --now ] && shift
+  for unit; do
+    [ -e "$dir/units/$unit" ] || exit 5
+    case "$cmd" in
+    enable)
+      : >"$dir/enabled/$unit"
+      : >"$dir/active/$unit"
+      ;;
+    disable) rm -f "$dir/enabled/$unit" "$dir/active/$unit" ;;
+    restart) : >"$dir/active/$unit" ;;
+    esac
+  done
+  ;;
+*)
+  echo "fake systemctl: unexpected $*" >&2
+  exit 64
+  ;;
+esac
