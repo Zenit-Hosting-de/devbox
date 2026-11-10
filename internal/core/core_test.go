@@ -67,7 +67,7 @@ func load(t *testing.T) (*State, string) {
 	write(t, filepath.Join(dir, "act.sh"), "#!/usr/bin/env bash\necho out\nprintf '%s\\n' '{\"type\":\"result\",\"summary\":\"ok\"}' >&3\n", 0o700)
 	write(t, filepath.Join(dir, "i18n", "de.json"), `{"$schema":"x","demo.title":"Demo"}`, 0o600)
 	write(t, filepath.Join(dir, "i18n", "bad.json"), `{"Title":"x"}`, 0o600)
-	write(t, filepath.Join(home, "none.json"), `{"plugins":{"disabled":["base","credentials","git","java","maven","node","npm","python","registry","system"]}}`, 0o600)
+	write(t, filepath.Join(home, "none.json"), `{"plugins":{"disabled":["base","credentials","docker","git","java","maven","node","npm","python","registry","system"]}}`, 0o600)
 	st, err := Load(Env{Getenv: func(k string) string { return env[k] }, Environ: func() []string { return nil }}, Build{Version: "1.0.0"}, true)
 	if err != nil {
 		t.Fatal(err)

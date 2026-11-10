@@ -1,0 +1,530 @@
+# AP-18: the bundled plugin docker. Packages, group and service run against fakes in
+# bin/ (apt-get, dpkg-query, sudo, id, getent, groupadd, usermod, systemctl; the fake
+# docker appears when apt-get "installs" it). PATH holds only these fakes and the
+# tools the plugins need, linked from the host, and every path is redirected into the
+# work directory through settings, so nothing real is installed or changed. The registry
+# consumer writes logins into the client configuration in a temporary HOME; the login
+# is then sent to the fake registry. Removing leaves config.json and daemon.json byte
+# for byte as before.
+
+chmod 0755 bin/apt-get
+chmod 0755 bin/dpkg-query
+chmod 0755 bin/sudo
+chmod 0755 bin/id
+chmod 0755 bin/getent
+chmod 0755 bin/groupadd
+chmod 0755 bin/usermod
+chmod 0755 bin/systemctl
+mkdir pkgs sys minbin
+exec sh -c 'for t in devbox bash sh env cat cp rm mkdir rmdir chmod cmp install base64 dirname stat sed touch curl date; do ln -s "$(command -v $t)" minbin/$t; done'
+env PATH=$WORK/bin:$WORK/minbin
+env DAEMON=$WORK/etc/docker/daemon.json
+env CFG=home/.docker/config.json
+exec devbox config set docker.daemonConfig $DAEMON
+exec devbox config set docker.aptSourceFile $WORK/etc/apt/sources.list.d/devbox-docker.sources
+exec devbox config set docker.aptKeyFile $WORK/etc/apt/keyrings/devbox-docker.asc
+exec devbox config set docker.rpmRepoFile $WORK/etc/yum.repos.d/devbox-docker.repo
+exec devbox plugin info docker --json
+stdout '"state": "ready"'
+
+# --- install from the packages of the distribution --------------------------------
+
+exec devbox plugin test --checks-only $REPO/plugins/docker
+stdout '^ok +check +docker.installed +missing'
+stdout '^ok +check +docker.config +ok'
+! stdout '^failed'
+
+# dry run: the package and the service are planned, nothing is called
+exec devbox run docker.install --dry-run --json
+stdout '"kind":"package","op":"create","summary":"install with apt","target":"docker.io","type":"change"'
+stdout '"kind":"service","op":"update","summary":"enable and start","target":"docker","type":"change"'
+stdout '"summary":"1 packages would be installed","type":"result"'
+! exists apt.log
+! exists sudo.log
+! exists pkgs/docker.io
+
+exec devbox run docker.install --json
+stdout '"summary":"Docker Engine installed \(1 packages, source distro\)","type":"result"'
+cmp apt.log install-distro.log
+cmp systemctl.log systemctl-enable.log
+exists pkgs/docker.io
+
+# second run: nothing to do, neither apt-get nor systemctl is called again
+exec devbox run docker.install --json
+stdout '"summary":"Docker Engine is installed","type":"result"'
+! stdout '"type":"change"'
+cmp apt.log install-distro.log
+cmp systemctl.log systemctl-enable.log
+
+exec devbox status
+stdout '^docker\.installed +ok +Docker 27\.0\.1$'
+
+# the daemon does not answer: a warning that names the missing group
+rm sys/active
+exec devbox status
+stdout '^docker\.installed +warn +Docker 27\.0\.1, the daemon does not answer and dev is not in the group docker$'
+
+# --- group ------------------------------------------------------------------------
+
+exec devbox run docker.group --dry-run --json
+stdout '"kind":"other","op":"create","summary":"create the group","target":"group docker","type":"change"'
+stdout '"kind":"other","op":"update","summary":"add dev","target":"group docker","type":"change"'
+! exists group.log
+exec devbox run docker.group --json
+stdout '"kind":"relogin".*"type":"notice"'
+stdout '"summary":"dev added to the group docker","type":"result"'
+cmp group.log group.want.log
+exec devbox run docker.group --json
+stdout '"summary":"dev is a member of the group docker","type":"result"'
+! stdout '"type":"change"'
+cmp group.log group.want.log
+exec devbox status
+stdout '^docker\.installed +warn +Docker 27\.0\.1, the daemon does not answer$'
+exec touch sys/active
+
+# --- update -----------------------------------------------------------------------
+
+rm apt.log
+exec devbox run docker.update --dry-run --json
+stdout '"kind":"package","op":"update","summary":"update with apt when a newer version is available","target":"docker.io","type":"change"'
+! exists apt.log
+exec devbox run docker.update --json
+stdout '"summary":"Docker Engine is up to date","type":"result"'
+! stdout '"type":"change"'
+cmp apt.log update.log
+cp new.version sys/newversion
+exec devbox run docker.update --json
+stdout '"kind":"package","op":"update","summary":"from 1.0 to 2.0","target":"docker.io","type":"change"'
+stdout '"summary":"1 packages updated with apt","type":"result"'
+rm sys/newversion
+
+# --- install from the package repository of Docker --------------------------------
+
+# the signing key comes from a local server (any file stands for the key)
+nodedist start
+exec devbox config set docker.source docker
+exec devbox config set docker.dockerPackages '["docker-ce","docker-ce-cli"]'
+exec devbox config set docker.repoUrl https://download.example.com/linux/debian
+exec devbox config set docker.repoKeyUrl $NODEDIST/index.json
+exec devbox config set docker.repoSuite trixie
+rm apt.log
+exec devbox run docker.install --dry-run --json
+stdout '"kind":"file","op":"create","summary":"download http://127.0.0.1:[0-9]+/dist/index.json","target":".*/etc/apt/keyrings/devbox-docker.asc","type":"change"'
+stdout '"kind":"file","op":"create","summary":"package repository https://download.example.com/linux/debian","target":".*/devbox-docker.sources","type":"change"'
+stdout '"kind":"package","op":"create","summary":"install with apt","target":"docker-ce","type":"change"'
+stdout '"kind":"package","op":"create","summary":"install with apt","target":"docker-ce-cli","type":"change"'
+! exists etc/apt
+! exists apt.log
+exec devbox run docker.install --json
+stdout '"summary":"Docker Engine installed \(2 packages, source docker\)","type":"result"'
+exists etc/apt/keyrings/devbox-docker.asc
+grep '^Types: deb$' etc/apt/sources.list.d/devbox-docker.sources
+grep '^URIs: https://download.example.com/linux/debian$' etc/apt/sources.list.d/devbox-docker.sources
+grep '^Suites: trixie$' etc/apt/sources.list.d/devbox-docker.sources
+grep '^Components: stable$' etc/apt/sources.list.d/devbox-docker.sources
+grep '^Architectures: (amd64|arm64)$' etc/apt/sources.list.d/devbox-docker.sources
+grep '^Signed-By: .*/etc/apt/keyrings/devbox-docker.asc$' etc/apt/sources.list.d/devbox-docker.sources
+cmp apt.log install-docker.log
+exec devbox run docker.install --json
+stdout '"summary":"Docker Engine is installed","type":"result"'
+! stdout '"type":"change"'
+cmp apt.log install-docker.log
+
+# a changed repository address rewrites the source and refreshes the package lists
+exec devbox config set docker.repoSuite forky
+exec devbox run docker.install --json
+stdout '"kind":"file","op":"update".*devbox-docker.sources'
+grep '^Suites: forky$' etc/apt/sources.list.d/devbox-docker.sources
+cmp apt.log install-docker-again.log
+
+# a configured manager that is not in PATH fails before planning anything
+# (dnf stands for it; the fake sudo refuses it even on a host that has dnf)
+rm apt.log
+rm pkgs/docker-ce
+! exec devbox run docker.install --set docker.manager=dnf --json
+stderr 'blocked \(exit 3\)'
+! stdout '"type":"change"'
+stdout '"level":"error","text":"No supported package manager found'
+! exists apt.log
+exec devbox config unset docker.source
+
+# --- daemon.json ------------------------------------------------------------------
+
+# nothing configured: no file is written
+exec devbox run docker.configure --json
+stdout '"summary":"daemon.json is up to date","type":"result"'
+! stdout '"type":"change"'
+! exists $DAEMON
+
+exec devbox config set docker.registryMirrors '["https://mirror.example.com"]'
+exec devbox config set docker.logDriver json-file
+exec devbox config set docker.logOptions '{"max-size":"10m","max-file":"3"}'
+exec devbox config set docker.defaultAddressPools '[{"base":"10.200.0.0/16","size":24}]'
+exec devbox status
+stdout '^docker\.config +warn +daemon.json differs from the settings: registry-mirrors, log-driver, log-opts, default-address-pools$'
+
+rm systemctl.log
+exec devbox run docker.configure --dry-run --json
+stdout '"kind":"file","op":"create","summary":"daemon settings written","target":".*/etc/docker/daemon.json","type":"change"'
+stdout '"kind":"service","op":"update","summary":"reload after the change of daemon.json","target":"docker","type":"change"'
+! exists $DAEMON
+! exists systemctl.log
+
+exec devbox run docker.configure --json
+stdout '"summary":"daemon.json written","type":"result"'
+cmp $DAEMON daemon.want.json
+cmp systemctl.log systemctl-reload.log
+exec devbox status
+stdout '^docker\.config +ok +daemon.json holds the 4 configured settings, registry logins: none$'
+
+# second run: no change, no reload
+exec devbox run docker.configure --json
+stdout '"summary":"daemon.json is up to date","type":"result"'
+! stdout '"type":"change"'
+cmp $DAEMON daemon.want.json
+cmp systemctl.log systemctl-reload.log
+
+# the settings are emptied again: the file DevBox created is gone
+exec devbox config unset docker.registryMirrors
+exec devbox config unset docker.logDriver
+exec devbox config unset docker.logOptions
+exec devbox config unset docker.defaultAddressPools
+exec devbox run docker.configure --json
+stdout '"kind":"file","op":"delete"'
+! exists $DAEMON
+
+# an existing file keeps its other keys and its formatting; restart instead of reload
+cp pre.daemon.json $DAEMON
+exec devbox config set docker.registryMirrors '["https://mirror.example.com"]'
+exec devbox config set docker.logDriver local
+exec devbox config set docker.serviceReload restart
+rm systemctl.log
+exec devbox run docker.configure --json
+stdout '"kind":"file","op":"update"'
+cmp $DAEMON daemon.merged.json
+cmp systemctl.log systemctl-restart.log
+exec devbox run docker.configure --json
+! stdout '"type":"change"'
+
+# a setting equal to what the file holds anyway is not taken over by DevBox
+exec devbox config set docker.logOptions '{"max-size":"5m"}'
+exec devbox run docker.configure --json
+! stdout '"type":"change"'
+
+# emptied settings: the file is byte for byte as before, the old log driver is back
+exec devbox config unset docker.registryMirrors
+exec devbox config unset docker.logDriver
+exec devbox config unset docker.logOptions
+exec devbox run docker.configure --json
+stdout '"kind":"file","op":"update"'
+cmp $DAEMON pre.daemon.json
+exec devbox run docker.configure --json
+! stdout '"type":"change"'
+cmp $DAEMON pre.daemon.json
+
+# a file that is not JSON is left alone
+cp broken.json $DAEMON
+exec devbox config set docker.logDriver local
+! exec devbox run docker.configure --json
+stdout 'is not a JSON object; nothing changed'
+cmp $DAEMON broken.json
+exec devbox status
+stdout '^docker\.config +error +.*daemon.json is not a JSON object$'
+exec devbox config unset docker.logDriver
+rm $DAEMON
+
+# --- registry consumer ------------------------------------------------------------
+
+registry start
+registry accept alice t0k3n:ok@1
+
+# new file: the login of docker login, mode 0600, the secret only base64 encoded
+exec devbox cred add reg --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'docker:host=docker.example.com'
+stdin token.txt
+exec devbox cred set reg --from-stdin
+stdout '✓ docker apply'
+! stdout 't0k3n'
+! stdout 'YWxpY2U6'
+cmp $CFG config.want.json
+exec stat -c %a $CFG
+stdout '^600$'
+exec devbox status
+stdout '^docker\.config +ok +No daemon settings configured, registry logins: docker.example.com$'
+! stdout 'YWxpY2U6'
+
+# idempotent: a second apply changes nothing, a dry run plans nothing
+exec devbox cred apply reg --json
+! stdout '"type":"change"'
+! stdout 'YWxpY2U6'
+cmp $CFG config.want.json
+exec devbox cred apply reg --dry-run --json
+! stdout '"type":"change"'
+cmp $CFG config.want.json
+
+# a second credential without the option takes the host of its address; the login
+# from the file is accepted by the registry
+exec devbox cred add local --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer docker
+stdin token.txt
+exec devbox cred set local --from-stdin
+grep '^    "127.0.0.1:[0-9]+": \{$' $CFG
+exec sh -c 'auth=$(sed -n "/127.0.0.1/,/}/s/.*\"auth\": \"\(.*\)\".*/\1/p" "$HOME/.docker/config.json") && curl -fsS -o /dev/null -H "Authorization: Basic $auth" "$REGISTRY/v2/"'
+registry log
+stdout 'GET /v2/ auth=basic:alice'
+
+# removing the second login restores the file, removing the first deletes the file and
+# the directory DevBox created
+exec devbox cred remove local --force
+cmp $CFG config.want.json
+exec devbox cred remove reg --force
+! exists $CFG
+! exists home/.docker
+
+# the file was deleted behind DevBox's back: a dry run plans to write it again and
+# writes nothing, the next apply brings it back
+exec devbox cred add reg --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'docker:host=docker.example.com'
+stdin token.txt
+exec devbox cred set reg --from-stdin
+rm $CFG
+exec devbox cred apply reg --dry-run --json
+stdout '"kind":"file","op":"create","summary":"/auths/docker.example.com/auth set","target":"~/.docker/config.json","type":"change"'
+! stdout 'YWxpY2U6'
+! exists $CFG
+exec devbox cred apply reg
+cmp $CFG config.want.json
+exec devbox cred remove reg --force
+! exists home/.docker
+
+# existing file (as docker writes it, with tabs): other logins and keys stay, removing
+# leaves it byte for byte as before
+mkdir home/.docker
+cp pre.config.json $CFG
+exec devbox cred add reg --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'docker:host=docker.example.com'
+stdin token.txt
+exec devbox cred set reg --from-stdin
+cmp $CFG config.merged.json
+exec stat -c %a $CFG
+stdout '^600$'
+exec devbox cred apply reg --dry-run --json
+! stdout '"type":"change"'
+exec devbox cred remove reg --force
+cmp $CFG pre.config.json
+exists home/.docker
+
+# a login for the host that DevBox did not write is not overwritten
+exec devbox cred add dup --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'docker:host=ghcr.example.com'
+stdin token.txt
+! exec devbox cred set dup --from-stdin
+! exec devbox cred apply dup
+stdout 'already has a login for ghcr.example.com that DevBox did not write'
+cmp $CFG pre.config.json
+exec devbox cred remove dup --force
+cmp $CFG pre.config.json
+
+# a credential without user name is refused until tokenUsername names one
+exec devbox cred add tok --type registry --field url=$REGISTRY --field layout=gitlab --consumer 'docker:host=registry.example.com'
+stdin token.txt
+! exec devbox cred set tok --from-stdin
+! exec devbox cred apply tok
+stdout 'has no user name and the setting tokenUsername is empty'
+cmp $CFG pre.config.json
+exec devbox config set docker.tokenUsername token
+exec devbox cred apply tok
+grep '"registry.example.com": \{' $CFG
+grep '"auth": "dG9rZW46dDBrM246b2tAMQ=="' $CFG
+exec devbox cred remove tok --force
+cmp $CFG pre.config.json
+
+-- token.txt --
+t0k3n:ok@1
+-- new.version --
+2.0
+-- install-distro.log --
+update
+install -y docker.io
+-- install-docker.log --
+update
+install -y docker-ce docker-ce-cli
+-- install-docker-again.log --
+update
+install -y docker-ce docker-ce-cli
+update
+-- update.log --
+update
+install -y --only-upgrade docker.io
+-- systemctl-enable.log --
+enable --now docker
+-- systemctl-reload.log --
+reload docker
+-- systemctl-restart.log --
+restart docker
+-- group.want.log --
+groupadd --system docker
+usermod -aG docker dev
+-- broken.json --
+{ "log-driver":
+-- pre.daemon.json --
+{
+    "log-driver": "journald",
+    "log-opts": { "max-size": "5m" },
+    "storage-driver": "overlay2",
+    "features": { "buildkit": true }
+}
+-- daemon.merged.json --
+{
+    "log-driver": "local",
+    "log-opts": { "max-size": "5m" },
+    "storage-driver": "overlay2",
+    "features": { "buildkit": true },
+    "registry-mirrors": [
+        "https://mirror.example.com"
+    ]
+}
+-- daemon.want.json --
+{
+  "registry-mirrors": [
+    "https://mirror.example.com"
+  ],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-file": "3",
+    "max-size": "10m"
+  },
+  "default-address-pools": [
+    {
+      "base": "10.200.0.0/16",
+      "size": 24
+    }
+  ]
+}
+-- config.want.json --
+{
+  "auths": {
+    "docker.example.com": {
+      "auth": "YWxpY2U6dDBrM246b2tAMQ=="
+    }
+  }
+}
+-- pre.config.json --
+{
+	"auths": {
+		"ghcr.example.com": {
+			"auth": "b3RoZXI6c2VjcmV0"
+		}
+	},
+	"currentContext": "default"
+}
+-- config.merged.json --
+{
+	"auths": {
+		"ghcr.example.com": {
+			"auth": "b3RoZXI6c2VjcmV0"
+		},
+		"docker.example.com": {
+			"auth": "YWxpY2U6dDBrM246b2tAMQ=="
+		}
+	},
+	"currentContext": "default"
+}
+-- docker.fake --
+#!/bin/sh
+dir=$(dirname "$0")/..
+case "$1" in
+--version) echo "Docker version 27.0.1, build abcdef0" ;;
+version)
+  if [ -e "$dir/sys/active" ]; then
+    echo 27.0.1
+  else
+    echo "Cannot connect to the Docker daemon" >&2
+    exit 1
+  fi
+  ;;
+*) exit 1 ;;
+esac
+-- bin/sudo --
+#!/bin/sh
+# runs only the fakes, so a test can never touch the real system
+case "$1:$2" in
+apt-get:* | env:DEBIAN_FRONTEND=* | groupadd:* | usermod:* | systemctl:*)
+  echo "$*" >>"$(dirname "$0")/../sudo.log"
+  exec "$@"
+  ;;
+esac
+echo "sudo: $1 not allowed in this test" >&2
+exit 1
+-- bin/id --
+#!/bin/sh
+# an unprivileged user dev, member of the group docker once usermod ran
+dir=$(dirname "$0")/..
+case "$1" in
+-u) echo 1000 ;;
+-un) echo dev ;;
+-nG)
+  if [ -e "$dir/sys/member" ]; then echo "dev sudo docker"; else echo "dev sudo"; fi
+  ;;
+*) exit 1 ;;
+esac
+-- bin/getent --
+#!/bin/sh
+# getent group NAME
+[ "$1" = group ] && [ -e "$(dirname "$0")/../sys/group-$2" ]
+-- bin/groupadd --
+#!/bin/sh
+dir=$(dirname "$0")/..
+echo "groupadd $*" >>"$dir/group.log"
+for name; do :; done
+: >"$dir/sys/group-$name"
+-- bin/usermod --
+#!/bin/sh
+dir=$(dirname "$0")/..
+echo "usermod $*" >>"$dir/group.log"
+: >"$dir/sys/member"
+-- bin/systemctl --
+#!/bin/sh
+dir=$(dirname "$0")/..
+case "$1" in
+is-active) [ -e "$dir/sys/active" ] ;;
+is-enabled) [ -e "$dir/sys/enabled" ] ;;
+enable)
+  echo "$*" >>"$dir/systemctl.log"
+  : >"$dir/sys/enabled"
+  : >"$dir/sys/active"
+  ;;
+reload | restart) echo "$*" >>"$dir/systemctl.log" ;;
+*) exit 1 ;;
+esac
+-- bin/dpkg-query --
+#!/bin/sh
+# dpkg-query -W -f=FORMAT NAME: status and version (the content of pkgs/NAME)
+for name; do :; done
+file="$(dirname "$0")/../pkgs/$name"
+if [ -e "$file" ]; then
+  printf 'install ok installed\t%s' "$(cat "$file")"
+  exit 0
+fi
+echo "dpkg-query: no packages found matching $name" >&2
+exit 1
+-- bin/apt-get --
+#!/bin/sh
+# install creates pkgs/NAME with version 1.0 and the fake docker; --only-upgrade
+# writes the version in sys/newversion, when there is one
+dir=$(dirname "$0")/..
+echo "$*" >>"$dir/apt.log"
+[ "$1" = install ] || exit 0
+shift
+upgrade=false
+for name; do
+  case "$name" in
+  --only-upgrade) upgrade=true ;;
+  -*) ;;
+  *)
+    if $upgrade; then
+      [ ! -e "$dir/sys/newversion" ] || cat "$dir/sys/newversion" >"$dir/pkgs/$name"
+    else
+      echo 1.0 >"$dir/pkgs/$name"
+      cp "$dir/docker.fake" "$dir/bin/docker"
+      chmod 755 "$dir/bin/docker"
+    fi
+    ;;
+  esac
+done
+exit 0

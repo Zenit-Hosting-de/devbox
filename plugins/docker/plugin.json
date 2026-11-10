@@ -1,0 +1,304 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "docker",
+  "version": "1.0.0",
+  "name": "Docker",
+  "description": "Install Docker Engine, manage the group and daemon.json, and write registry logins into the Docker client configuration",
+  "category": "tool",
+  "icon": "package",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["base64", "chmod", "cmp", "cp", "id", "install", "mkdir", "rm", "rmdir"],
+    "plugins": { "registry": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": ["${docker.repoUrl}", "${docker.repoKeyUrl}"],
+    "files": {
+      "read": [
+        "${docker.daemonConfig}",
+        "${docker.clientConfig}",
+        "${docker.aptSourceFile}",
+        "${docker.aptKeyFile}",
+        "${docker.rpmRepoFile}"
+      ],
+      "write": [
+        "${docker.daemonConfig}",
+        "${docker.clientConfig}",
+        "${docker.aptSourceFile}",
+        "${docker.aptKeyFile}",
+        "${docker.rpmRepoFile}"
+      ]
+    },
+    "sudo": true,
+    "credentials": ["registry"]
+  },
+  "settings": {
+    "source": {
+      "type": "string",
+      "enum": ["distro", "docker"],
+      "default": "distro",
+      "label": "Package source",
+      "help": "distro installs the packages of the distribution. docker sets up the package repository of Docker first (apt and dnf)."
+    },
+    "registryMirrors": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "default": [],
+      "label": "Registry mirrors",
+      "help": "Addresses written as registry-mirrors into daemon.json. Empty: the key is not managed.",
+      "examples": [["https://mirror.example.com"]]
+    },
+    "logDriver": {
+      "type": "string",
+      "default": "",
+      "label": "Log driver",
+      "help": "Written as log-driver into daemon.json, e.g. json-file, local or journald. Empty: the key is not managed."
+    },
+    "logOptions": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "default": {},
+      "label": "Log options",
+      "help": "Written as log-opts into daemon.json; all values are texts. Empty: the key is not managed.",
+      "examples": [{ "max-size": "10m", "max-file": "3" }]
+    },
+    "defaultAddressPools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "base": { "type": "string", "label": "Network (CIDR)" },
+          "size": {
+            "type": "integer",
+            "minimum": 8,
+            "maximum": 128,
+            "label": "Prefix length of each network"
+          }
+        },
+        "required": ["base", "size"],
+        "additionalProperties": false
+      },
+      "default": [],
+      "label": "Address pools for networks",
+      "help": "Written as default-address-pools into daemon.json. Empty: the key is not managed.",
+      "examples": [[{ "base": "10.200.0.0/16", "size": 24 }]]
+    },
+    "serviceReload": {
+      "type": "string",
+      "enum": ["none", "reload", "restart"],
+      "default": "reload",
+      "label": "After a change of daemon.json",
+      "help": "reload applies registry mirrors without stopping containers; log driver and address pools need restart, which stops running containers. none leaves the service alone."
+    },
+    "enableService": {
+      "type": "boolean",
+      "default": true,
+      "label": "Enable and start the service",
+      "help": "After the installation the service is enabled and started through systemctl, where it is available."
+    },
+    "user": {
+      "type": "string",
+      "default": "",
+      "label": "User for the group",
+      "help": "User added to the group. Empty: the current user.",
+      "advanced": true
+    },
+    "group": {
+      "type": "string",
+      "pattern": "^[a-z_][a-z0-9_-]*$",
+      "default": "docker",
+      "label": "Group",
+      "help": "Group whose members may use the Docker daemon.",
+      "advanced": true
+    },
+    "service": {
+      "type": "string",
+      "default": "docker",
+      "label": "Service name",
+      "advanced": true
+    },
+    "manager": {
+      "type": "string",
+      "enum": ["auto", "apt", "dnf", "pacman", "zypper"],
+      "default": "auto",
+      "label": "Package manager",
+      "help": "auto takes the first of apt, dnf, pacman and zypper found in PATH.",
+      "advanced": true
+    },
+    "distroPackages": {
+      "type": "object",
+      "additionalProperties": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+      "default": {
+        "apt": ["docker.io"],
+        "dnf": ["moby-engine"],
+        "pacman": ["docker"],
+        "zypper": ["docker"]
+      },
+      "label": "Packages of the distribution",
+      "help": "Packages installed with the source distro, per package manager.",
+      "advanced": true
+    },
+    "dockerPackages": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": [
+        "docker-ce",
+        "docker-ce-cli",
+        "containerd.io",
+        "docker-buildx-plugin",
+        "docker-compose-plugin"
+      ],
+      "label": "Packages of Docker",
+      "help": "Packages installed with the source docker.",
+      "advanced": true
+    },
+    "repoUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://download.docker.com/linux/${host:distro}",
+      "label": "Package repository of Docker",
+      "help": "Address of the repository for this distribution. Distributions derived from another one need the address of their parent here.",
+      "advanced": true
+    },
+    "repoKeyUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "${docker.repoUrl}/gpg",
+      "label": "Signing key of the repository",
+      "advanced": true
+    },
+    "repoSuite": {
+      "type": "string",
+      "default": "${host:codename}",
+      "label": "Suite of the apt repository",
+      "help": "Code name of the distribution release.",
+      "advanced": true
+    },
+    "repoChannel": {
+      "type": "string",
+      "default": "stable",
+      "label": "Channel of the repository",
+      "advanced": true
+    },
+    "rpmBaseUrl": {
+      "type": "string",
+      "default": "${docker.repoUrl}/$releasever/$basearch/${docker.repoChannel}",
+      "label": "Base address of the rpm repository",
+      "help": "$releasever and $basearch are replaced by dnf.",
+      "advanced": true
+    },
+    "aptSourceFile": {
+      "type": "string",
+      "format": "path",
+      "default": "/etc/apt/sources.list.d/devbox-docker.sources",
+      "label": "apt source file",
+      "advanced": true
+    },
+    "aptKeyFile": {
+      "type": "string",
+      "format": "path",
+      "default": "/etc/apt/keyrings/devbox-docker.asc",
+      "label": "apt key file",
+      "advanced": true
+    },
+    "rpmRepoFile": {
+      "type": "string",
+      "format": "path",
+      "default": "/etc/yum.repos.d/devbox-docker.repo",
+      "label": "rpm repository file",
+      "advanced": true
+    },
+    "daemonConfig": {
+      "type": "string",
+      "format": "path",
+      "default": "/etc/docker/daemon.json",
+      "label": "Daemon configuration file",
+      "advanced": true
+    },
+    "clientConfig": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.docker/config.json",
+      "label": "Client configuration file",
+      "help": "Holds the registry logins (mode 0600).",
+      "advanced": true
+    },
+    "tokenUsername": {
+      "type": "string",
+      "default": "",
+      "label": "User name for tokens",
+      "help": "User name sent with the secret when the credential has none. Empty: such a credential is refused.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "installed": {
+      "label": "Docker Engine",
+      "run": ["checks/installed.sh"],
+      "timeout": "15s",
+      "cache": "5m",
+      "refreshOn": ["session.finished:docker.*"]
+    },
+    "config": {
+      "label": "Docker configuration",
+      "run": ["checks/config.sh"],
+      "timeout": "5s",
+      "cache": "1m",
+      "refreshOn": ["session.finished:docker.*"]
+    }
+  },
+  "actions": {
+    "install": {
+      "label": "Install Docker Engine",
+      "run": ["actions/install.sh"],
+      "timeout": "30m",
+      "sudo": true,
+      "locks": ["package-manager"]
+    },
+    "group": {
+      "label": "Add the user to the Docker group",
+      "description": "Members of the group may use the Docker daemon, which equals root access to the machine.",
+      "run": ["actions/group.sh"],
+      "timeout": "1m",
+      "sudo": true
+    },
+    "configure": {
+      "label": "Write daemon.json",
+      "description": "Writes registry mirrors, log settings and address pools into daemon.json and keeps all other keys.",
+      "run": ["actions/configure.sh"],
+      "timeout": "5m",
+      "sudo": true
+    },
+    "update": {
+      "label": "Update Docker Engine",
+      "run": ["actions/update.sh"],
+      "timeout": "30m",
+      "sudo": true,
+      "locks": ["package-manager"]
+    }
+  },
+  "consumes": {
+    "registry": {
+      "apply": ["consume/apply.sh"],
+      "remove": ["consume/remove.sh"],
+      "options": {
+        "host": {
+          "type": "string",
+          "pattern": "^[^\\s/\"\\\\]+$",
+          "label": "Registry host",
+          "help": "Host (and port) of the Docker registry, e.g. docker.example.com. Empty: the host of the credential address."
+        }
+      }
+    }
+  },
+  "contributes": {
+    "groups": { "update-all": ["docker.update"] },
+    "setup": [{ "action": "docker.install", "after": ["base.packages"] }],
+    "overview": { "check": "docker.installed", "primaryAction": "docker.update" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}
