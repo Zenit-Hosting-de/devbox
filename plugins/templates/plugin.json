@@ -1,0 +1,145 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "templates",
+  "version": "1.0.0",
+  "name": "Project templates",
+  "description": "Create new projects from templates in Git repositories",
+  "category": "projects",
+  "icon": "folder",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": [
+      "git",
+      "jq",
+      "find",
+      "sort",
+      "sha256sum",
+      "mkdir",
+      "mktemp",
+      "mv",
+      "cp",
+      "chmod",
+      "rm"
+    ],
+    "plugins": { "base": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": ["${templates.sources}"],
+    "files": {
+      "read": ["${templates.cacheDir}", "${templates.projectRoot}"],
+      "write": ["${templates.cacheDir}", "${templates.projectRoot}"]
+    },
+    "sudo": false,
+    "credentials": []
+  },
+  "settings": {
+    "sources": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^git\\+(https|ssh|file)://.+$" },
+      "uniqueItems": true,
+      "default": ["git+https://github.com/Zenit-Hosting-de/devbox-plugins.git"],
+      "label": "Template sources",
+      "help": "Git repositories with templates, as git+https://, git+ssh:// or git+file:// addresses. Each template is a folder with a template.json. An earlier source wins when two templates share an ID. Private repositories use the access Git itself has, e.g. the token of a Git host."
+    },
+    "searchPaths": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(\\.|[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*)$"
+      },
+      "uniqueItems": true,
+      "default": [".", "templates"],
+      "label": "Folders with templates",
+      "help": "Folders of a source whose sub-folders are templates, relative to the root of the repository. A dot is the root itself.",
+      "advanced": true
+    },
+    "projectRoot": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/projects",
+      "label": "Project folder",
+      "help": "New projects are created as sub-folders of this folder."
+    },
+    "cacheDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:cache}/devbox/templates",
+      "label": "Storage for fetched sources",
+      "help": "One shallow copy per source. Fetch templates removes copies of sources that are no longer configured.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "available": {
+      "label": "Available templates",
+      "run": ["checks/available.sh"],
+      "timeout": "10s",
+      "cache": "5m",
+      "refreshOn": ["session.finished:templates.*"]
+    }
+  },
+  "actions": {
+    "sync": {
+      "label": "Fetch templates",
+      "run": ["actions/sync.sh"],
+      "timeout": "10m"
+    },
+    "new": {
+      "label": "Create project",
+      "run": ["actions/new.sh"],
+      "params": {
+        "template": {
+          "type": "string",
+          "label": "Template",
+          "optionsFrom": "templates.available#/data/items/*/id"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$",
+          "label": "Project name",
+          "help": "Name of the new folder in the project folder."
+        },
+        "values": {
+          "type": "object",
+          "default": {},
+          "label": "Template parameters",
+          "help": "Values of the parameters the template declares, by key. They replace the {{key}} placeholders in the files the template marks for rendering."
+        }
+      },
+      "timeout": "5m"
+    },
+    "hooks": {
+      "label": "Run template commands",
+      "run": ["actions/hooks.sh"],
+      "params": {
+        "template": {
+          "type": "string",
+          "label": "Template",
+          "optionsFrom": "templates.available#/data/items/*/id"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$",
+          "label": "Project name"
+        },
+        "again": {
+          "type": "boolean",
+          "default": false,
+          "label": "Run again",
+          "help": "Run the commands although they ran for this project before."
+        }
+      },
+      "confirm": "The commands the template lists under hooks.postCreate run in the project folder with the rights of the user. The dry run lists every command.",
+      "danger": true,
+      "timeout": "30m"
+    }
+  },
+  "contributes": {
+    "overview": { "check": "templates.available", "primaryAction": "templates.sync" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

@@ -1,0 +1,134 @@
+# AP-19: the cleanup plugin. The dry run reports sizes and deletes nothing; the real run
+# removes the caches and only build folders that match, are old and are not tracked by
+# Git; a second run changes nothing.
+
+exec devbox plugin test --apply $REPO/plugins/cleanup
+stdout '^ok +validate +cleanup'
+stdout '^ok +check +cleanup.usage +ok'
+stdout '^ok +dry-run +cleanup.caches +0 planned changes'
+stdout '^ok +dry-run +cleanup.projects +0 planned changes'
+stdout '^ok +dry-run +cleanup.docker +0 planned changes'
+stdout '^skipped +apply +cleanup.caches +danger'
+stdout '^skipped +apply +cleanup.projects +danger'
+stdout '^skipped +apply +cleanup.docker +danger'
+! stdout '^failed'
+
+# the bundled cleanup plugin (unpacked from the binary) used for real
+exec devbox plugin info cleanup --json
+stdout '"state": "ready"'
+stdout '"path": ".*/devbox/builtin/.*/cleanup"'
+
+# fixtures: everything is 100 days old except the project "fresh"; dist of the
+# repository is checked in, its node_modules is not
+exec git init -q home/projects/repo
+exec git -C home/projects/repo add dist
+exec find home/projects/app home/projects/repo -depth -exec touch -d '100 days ago' {} +
+
+# the check adds up the caches that exist
+exec devbox status --json
+stdout '"id": "cleanup.usage",\s*"status": "ok",\s*"summary": "Caches use [0-9.]+ (kB|MB)"'
+mkdir big
+exec dd if=/dev/zero of=big/blob bs=1024 count=2048 status=none
+exec devbox status --json --set cleanup.warnAboveMb=1 --set cleanup.mavenCache=$WORK/big
+stdout '"id": "cleanup.usage",\s*"status": "warn",\s*"summary": "Caches use [0-9.]+ MB, more than 1.0 MB"'
+
+# caches, dry run: one planned change per existing cache with its size, nothing deleted
+exec devbox run cleanup.caches --dry-run --json
+stdout '"kind":"file","op":"delete","summary":"npm cache, [0-9]+ kB","target":".*/home/.npm/_cacache","type":"change"'
+stdout '"kind":"file","op":"delete","summary":"Maven local repository, [0-9]+ kB","target":".*/home/.m2/repository","type":"change"'
+stdout '"kind":"file","op":"delete","summary":"pip cache, [0-9]+ kB","target":".*/home/.cache/pip","type":"change"'
+stdout '"data":\{"bytes":[1-9][0-9]*,"count":3\},"summary":"Would free [0-9]+ kB in 3 caches","type":"result"'
+! stdout 'Gradle|NuGet|uv cache'
+exists home/.npm/_cacache/index-v5/entry
+exists home/.m2/repository/com/example/lib/1.0/lib-1.0.jar
+exists home/.cache/pip/http/entry
+
+# projects, dry run: folder and size, nothing deleted; fresh, tracked and unknown
+# folders are not planned
+exec devbox run cleanup.projects --dry-run --json --set cleanup.projectRoots=["$HOME/projects"]
+stdout '"kind":"file","op":"delete","summary":"build folder, [0-9]+ kB","target":".*/home/projects/app/node_modules","type":"change"'
+stdout '"kind":"file","op":"delete","summary":"build folder, [0-9]+ kB","target":".*/home/projects/app/target","type":"change"'
+stdout '"kind":"file","op":"delete","summary":"build folder, [0-9]+ kB","target":".*/home/projects/repo/node_modules","type":"change"'
+stdout '"count":3,"keptRecent":1,"keptTracked":1\},"summary":"Would free [0-9]+ kB in 3 build folders","type":"result"'
+! stdout 'projects/fresh'
+! stdout 'projects/repo/dist'
+! stdout 'projects/app/src'
+exists home/projects/app/node_modules/pkg/index.js
+exists home/projects/app/target/classes/App.class
+exists home/projects/repo/node_modules/pkg/index.js
+
+# without project folders nothing is searched
+exec devbox run cleanup.projects --dry-run --json
+! stdout '"type":"change"'
+stdout '"summary":"No project folders to search"'
+
+# docker is switched off by default
+exec devbox run cleanup.docker --dry-run --json
+! stdout '"type":"change"'
+stdout '"summary":"Docker cleanup is switched off"'
+
+# the actions ask before they delete; without a terminal the answer is no
+! exec devbox run cleanup.caches
+exists home/.npm/_cacache/index-v5/entry
+! exec devbox run cleanup.projects --set cleanup.projectRoots=["$HOME/projects"]
+exists home/projects/app/node_modules/pkg/index.js
+
+# the real run of projects
+exec devbox run cleanup.projects --yes --json --set cleanup.projectRoots=["$HOME/projects"]
+stdout '"summary":"Freed [0-9]+ kB in 3 build folders","type":"result"'
+! exists home/projects/app/node_modules
+! exists home/projects/app/target
+! exists home/projects/repo/node_modules
+exists home/projects/app/src/main.js
+exists home/projects/fresh/dist/out.js
+exists home/projects/repo/dist/out.js
+exists home/projects/repo/.git/HEAD
+
+# a second run changes nothing
+exec devbox run cleanup.projects --yes --json --set cleanup.projectRoots=["$HOME/projects"]
+! stdout '"type":"change"'
+
+# the home directory is never a project folder
+! exec devbox run cleanup.projects --yes --set cleanup.projectRoots=["$HOME"]
+exists home/projects/fresh/dist/out.js
+
+# the real run of caches, then nothing is left to do
+exec devbox run cleanup.caches --yes --json
+stdout '"summary":"Freed [0-9]+ kB in 3 caches","type":"result"'
+! exists home/.npm/_cacache
+! exists home/.m2/repository
+! exists home/.cache/pip
+exists home/.npm/_logs/debug.log
+exists home/.m2/settings.xml
+exec devbox run cleanup.caches --yes --json
+! stdout '"type":"change"'
+stdout '"summary":"No caches to clean"'
+exec devbox status --json
+stdout '"id": "cleanup.usage",\s*"status": "ok",\s*"summary": "No caches found"'
+
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "disabled": ["base", "java"] }
+}
+-- home/.npm/_cacache/index-v5/entry --
+cached
+-- home/.npm/_logs/debug.log --
+log
+-- home/.m2/repository/com/example/lib/1.0/lib-1.0.jar --
+jar
+-- home/.m2/settings.xml --
+<settings/>
+-- home/.cache/pip/http/entry --
+cached
+-- home/projects/app/src/main.js --
+console.log("example");
+-- home/projects/app/node_modules/pkg/index.js --
+module.exports = {};
+-- home/projects/app/target/classes/App.class --
+class
+-- home/projects/fresh/dist/out.js --
+fresh
+-- home/projects/repo/dist/out.js --
+tracked
+-- home/projects/repo/node_modules/pkg/index.js --
+module.exports = {};
