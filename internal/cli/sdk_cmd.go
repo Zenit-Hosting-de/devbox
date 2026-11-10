@@ -127,6 +127,44 @@ func (a *app) sdkCommand() *cobra.Command {
 	}
 	download.Flags().StringVar(&sha, "sha256", "", "expected SHA-256 checksum")
 
+	var jsonMode string
+	jsonSet := &cobra.Command{
+		Use: "json-set FILE POINTER VALUE|-", Args: cobra.ExactArgs(3),
+		RunE: func(_ *cobra.Command, args []string) error {
+			e, err := env()
+			if err != nil {
+				return err
+			}
+			text := []byte(args[2])
+			if args[2] == "-" {
+				// from standard input, so a secret never appears in the arguments
+				if text, err = io.ReadAll(a.io.Stdin); err != nil {
+					return err
+				}
+			}
+			v, err := schema.Decode(text)
+			if err != nil {
+				return &exitError{code: ExitInvalid, err: fmt.Errorf("VALUE must be JSON, e.g. '\"text\"': %w", err)}
+			}
+			perm, err := strconv.ParseUint(jsonMode, 8, 32)
+			if err != nil {
+				return &exitError{code: ExitInvalid, err: fmt.Errorf("--mode %q: %w", jsonMode, err)}
+			}
+			return e.JSONSetMode(args[0], args[1], v, os.FileMode(perm))
+		},
+	}
+	jsonSet.Flags().StringVar(&jsonMode, "mode", "644", "mode for a new file (octal), e.g. 600 for files with secrets")
+	jsonRemove := &cobra.Command{
+		Use: "json-remove FILE POINTER", Args: cobra.ExactArgs(2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			e, err := env()
+			if err != nil {
+				return err
+			}
+			return e.JSONRemove(args[0], args[1])
+		},
+	}
+
 	cmd.AddCommand(
 		&cobra.Command{Use: "param NAME", Args: cobra.ExactArgs(1), RunE: lookup("params")},
 		&cobra.Command{Use: "setting NAME", Args: cobra.ExactArgs(1), RunE: lookup("settings")},
@@ -168,20 +206,8 @@ func (a *app) sdkCommand() *cobra.Command {
 		block,
 		blockRemove,
 		hasLine,
-		&cobra.Command{
-			Use: "json-set FILE POINTER VALUE", Args: cobra.ExactArgs(3),
-			RunE: func(_ *cobra.Command, args []string) error {
-				e, err := env()
-				if err != nil {
-					return err
-				}
-				v, err := schema.Decode([]byte(args[2]))
-				if err != nil {
-					return &exitError{code: ExitInvalid, err: fmt.Errorf("VALUE must be JSON, e.g. '\"text\"': %w", err)}
-				}
-				return e.JSONSet(args[0], args[1], v)
-			},
-		},
+		jsonSet,
+		jsonRemove,
 		download,
 		&cobra.Command{
 			Use: "fetch URL", Args: cobra.ExactArgs(1),
