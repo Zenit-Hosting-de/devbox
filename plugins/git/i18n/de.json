@@ -1,0 +1,22 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/messages.v1.json",
+  "plugin.name": "Git",
+  "plugin.description": "Git-Identität und Standardwerte setzen und Tokens von Git-Servern an einen Credential-Helper übergeben",
+  "settings.userName.label": "Name für Commits",
+  "settings.userName.help": "Vorgabe der Aktion „Identität setzen“ (user.name). Leer: Die Aktion fragt danach.",
+  "settings.userEmail.label": "E-Mail-Adresse für Commits",
+  "settings.userEmail.help": "Vorgabe der Aktion „Identität setzen“ (user.email). Leer: Die Aktion fragt danach.",
+  "settings.defaults.label": "Git-Standardwerte",
+  "settings.defaults.help": "Schlüssel der Git-Konfiguration und ihre Werte, z. B. init.defaultBranch: main oder pull.rebase: true. Die Aktion „Standardwerte anwenden“ schreibt sie in einen markierten Block der Git-Konfigurationsdatei.",
+  "settings.credentialHelper.label": "Credential-Helper",
+  "settings.credentialHelper.help": "Helper, der die Tokens der Git-Server aufbewahrt. store: eine Datei von DevBox (Modus 0600, siehe credentialsFile). Jeder andere Wert ist ein Git-Credential-Helper wie in credential.helper, z. B. libsecret oder ein absoluter Pfad; DevBox übergibt ihm das Token mit git credential approve.",
+  "settings.gitconfig.label": "Git-Konfigurationsdatei",
+  "settings.credentialsFile.label": "Token-Datei des Helpers store",
+  "settings.credentialsFile.help": "Wird von git credential-store gelesen und geschrieben; nur mit dem Helper store genutzt.",
+  "checks.config.label": "Git-Konfiguration",
+  "actions.identity.label": "Identität setzen",
+  "actions.identity.params.name.label": "Name",
+  "actions.identity.params.email.label": "E-Mail-Adresse",
+  "actions.defaults.label": "Standardwerte anwenden",
+  "consumes.git-host.options.protocol.label": "Protokoll"
+}

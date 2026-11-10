@@ -1,0 +1,111 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "pip",
+  "version": "1.0.0",
+  "name": "pip",
+  "description": "Write Python package indexes and their credentials into the pip and uv configuration",
+  "category": "consumer",
+  "icon": "package",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["chmod", "rm"],
+    "plugins": { "registry": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": [],
+    "files": {
+      "read": ["${pip.pipConfig}", "${pip.uvConfig}", "${pip.netrc}", "${pip.envFile}"],
+      "write": ["${pip.pipConfig}", "${pip.uvConfig}", "${pip.netrc}", "${pip.envFile}"]
+    },
+    "sudo": false,
+    "credentials": ["registry"]
+  },
+  "settings": {
+    "mode": {
+      "type": "string",
+      "enum": ["file", "env"],
+      "default": "file",
+      "label": "Where credentials are stored",
+      "help": "file: pip.conf and uv.toml name the index, the credential is written into .netrc (mode 0600). env: PIP_INDEX_URL and UV_DEFAULT_INDEX with the credential in the address are exported from a shell environment file (mode 0600)."
+    },
+    "targets": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["pip", "uv"] },
+      "uniqueItems": true,
+      "default": ["pip", "uv"],
+      "label": "Tools",
+      "help": "Tools that get the index of a credential."
+    },
+    "pipConfig": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/pip/pip.conf",
+      "label": "pip configuration file",
+      "advanced": true
+    },
+    "uvConfig": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/uv/uv.toml",
+      "label": "uv configuration file",
+      "advanced": true
+    },
+    "netrc": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.netrc",
+      "label": "netrc file",
+      "help": "Holds the credentials in mode file. pip and uv read it.",
+      "advanced": true
+    },
+    "envFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d/pip.sh",
+      "label": "Shell environment file",
+      "help": "Exports PIP_INDEX_URL and UV_DEFAULT_INDEX in mode env.",
+      "advanced": true
+    },
+    "defaultIndex": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://pypi.org/simple",
+      "label": "Default index",
+      "help": "Index the tools use when no credential sets one. Shown by the check."
+    },
+    "tokenUsername": {
+      "type": "string",
+      "default": "__token__",
+      "label": "User name for tokens",
+      "help": "User name sent with the secret when the credential has none.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "config": {
+      "label": "Effective index",
+      "run": ["checks/config.sh"],
+      "timeout": "5s",
+      "cache": "1m",
+      "refreshOn": ["session.finished:pip.*"]
+    }
+  },
+  "consumes": {
+    "registry": {
+      "apply": ["consume/apply.sh"],
+      "remove": ["consume/remove.sh"],
+      "options": {
+        "repository": { "type": "string", "label": "Repository name" },
+        "url": { "type": "string", "format": "uri", "label": "Full index address" }
+      }
+    }
+  },
+  "contributes": {
+    "overview": { "check": "pip.config" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

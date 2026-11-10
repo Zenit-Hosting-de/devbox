@@ -1,0 +1,161 @@
+# AP-18: the bundled consumer gradle. It writes registry credentials as Gradle project
+# properties <name>Username, <name>Password and <name>Url: in mode file into a marked
+# block of gradle.properties (mode 0600), in mode env as ORG_GRADLE_PROJECT_* exports in
+# the environment file. Idempotent, dry run, and remove leaves the files as before.
+
+registry start
+registry accept alice gr4dl3=t0k3n
+
+env PROPS=home/.gradle/gradle.properties
+env ENVFILE=home/.config/devbox/env.d/gradle.sh
+
+exec devbox plugin test --apply $REPO/plugins/gradle
+stdout '^ok +validate +gradle'
+stdout '^ok +check +gradle.config +ok'
+! stdout '^failed'
+
+exec devbox status
+stdout '^gradle\.config +ok +No registry credentials$'
+
+# file mode: the user's own properties stay, the block holds the credential
+mkdir home/.gradle
+cp pre.properties $PROPS
+chmod 644 $PROPS
+exec devbox cred add team-registry --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'gradle:repository=maven-public'
+stdin token.txt
+exec devbox cred set team-registry --from-stdin
+stdout '✓ team-registry verified'
+stdout '✓ gradle apply'
+! stdout 't0k3n'
+grep '^org.gradle.jvmargs=-Xmx2g$' $PROPS
+grep '^# >>> devbox:gradle:team-registry >>>$' $PROPS
+grep '^teamRegistryUsername=alice$' $PROPS
+grep '^teamRegistryPassword=gr4dl3=t0k3n$' $PROPS
+grep '^teamRegistryUrl=http://127.0.0.1:[0-9]+/repository/maven-public/$' $PROPS
+grep '^# <<< devbox:gradle:team-registry <<<$' $PROPS
+exec stat -c %a $PROPS
+stdout '^600$'
+! exists $ENVFILE
+exec devbox status
+stdout '^gradle\.config +ok +team-registry \(file\)$'
+
+# idempotent: a second apply and a dry run change nothing
+cp $PROPS props.applied
+exec devbox cred apply team-registry --json
+! stdout '"type":"change"'
+cmp $PROPS props.applied
+exec devbox cred apply team-registry --dry-run
+cmp $PROPS props.applied
+
+# the secret is not in output, history or events
+! exec grep -r 't0k3n' $HOME/.local/state/devbox/sessions $HOME/.local/share/devbox/credentials.json
+
+# remove: the file is exactly as before
+exec devbox cred remove team-registry --force
+stdout '✓ gradle remove'
+cmp $PROPS pre.properties
+rm $PROPS
+
+# no file yet: a dry run creates nothing; the new file is removed again with the credential
+exec devbox config set gradle.propertyPrefix corp
+exec devbox cred add art --type registry --field url=$REGISTRY --field layout=artifactory --field username=alice --consumer 'gradle:repository=libs-release,name=artifacts'
+stdin token.txt
+exec devbox cred set art --from-stdin
+rm $PROPS
+exec devbox cred apply art --dry-run
+! exists $PROPS
+exec devbox cred apply art
+grep '^corpArtifactsUsername=alice$' $PROPS
+grep '^corpArtifactsUrl=http://127.0.0.1:[0-9]+/artifactory/libs-release/$' $PROPS
+exec stat -c %a $PROPS
+stdout '^600$'
+exec devbox cred remove art --force
+! exists $PROPS
+exec devbox config unset gradle.propertyPrefix
+
+# a layout without a Maven address needs the option url; without repository and url
+# only the credential is written
+exec devbox cred add lab --type registry --field url=$REGISTRY --field layout=gitlab --field username=alice --consumer 'gradle:repository=42'
+stdin token.txt
+! exec devbox cred set lab --from-stdin
+! exec devbox cred apply lab
+stdout 'layout gitlab needs the option url'
+exec devbox cred add lab --consumer 'gradle:url=https://gitlab.example.com/api/v4/projects/42/packages/maven'
+exec devbox cred apply lab
+grep '^labUrl=https://gitlab.example.com/api/v4/projects/42/packages/maven$' $PROPS
+exec devbox cred remove lab --force
+! exists $PROPS
+exec devbox cred add tok --type registry --field url=$REGISTRY --field layout=gitea --consumer gradle
+stdin token.txt
+exec devbox cred set tok --from-stdin
+stderr 'tok has no field username'
+grep '^tokPassword=gr4dl3=t0k3n$' $PROPS
+! grep '^tokUsername' $PROPS
+! grep '^tokUrl' $PROPS
+exec devbox cred remove tok --force
+! exists $PROPS
+
+# env mode: the properties become ORG_GRADLE_PROJECT_* variables in the environment file
+exec devbox config set gradle.mode env
+cp pre.properties $PROPS
+exec devbox cred add team-registry --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'gradle:repository=maven-public'
+stdin token.txt
+exec devbox cred set team-registry --from-stdin
+cmp $PROPS pre.properties
+grep '^export ORG_GRADLE_PROJECT_teamRegistryUsername=''alice''$' $ENVFILE
+grep '^export ORG_GRADLE_PROJECT_teamRegistryPassword=''gr4dl3=t0k3n''$' $ENVFILE
+grep '^export ORG_GRADLE_PROJECT_teamRegistryUrl=''http://127.0.0.1:[0-9]+/repository/maven-public/''$' $ENVFILE
+exec stat -c %a $ENVFILE
+stdout '^600$'
+exec devbox status
+stdout '^gradle\.config +ok +team-registry \(env\)$'
+cp $ENVFILE env.applied
+exec devbox cred apply team-registry --json
+! stdout '"type":"change"'
+cmp $ENVFILE env.applied
+
+# switching the mode moves the credential; the check warns until it is applied again
+exec devbox config set gradle.mode file
+exec devbox status
+stdout '^gradle\.config +warn +team-registry$'
+exec devbox cred apply team-registry
+grep '^teamRegistryPassword=gr4dl3=t0k3n$' $PROPS
+! exists $ENVFILE
+exec devbox config set gradle.mode env
+exec devbox cred apply team-registry
+cmp $PROPS pre.properties
+exists $ENVFILE
+
+# remove takes the block and the environment file DevBox created
+exec devbox cred remove team-registry --force
+cmp $PROPS pre.properties
+! exists $ENVFILE
+
+# an environment file that existed before stays, byte for byte
+mkdir home/.config/devbox/env.d
+cp own.sh $ENVFILE
+exec devbox cred add keep --type registry --field url=$REGISTRY --field layout=nexus --field username=alice --consumer 'gradle:repository=maven-public'
+stdin token.txt
+exec devbox cred set keep --from-stdin
+grep 'keepPassword' $ENVFILE
+exec devbox cred remove keep --force
+cmp $ENVFILE own.sh
+cmp $PROPS pre.properties
+
+exec devbox history --json
+stdout '"action": "gradle.apply"'
+stdout '"action": "gradle.remove"'
+! exec grep -r 't0k3n' $HOME/.local/state/devbox/sessions
+
+-- token.txt --
+gr4dl3=t0k3n
+-- pre.properties --
+# own settings
+org.gradle.jvmargs=-Xmx2g
+-- own.sh --
+export GRADLE_OPTS='-Dorg.gradle.daemon=false'
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "disabled": ["base", "java"] },
+  "vault": { "backend": "age" }
+}
