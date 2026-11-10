@@ -255,6 +255,11 @@ func (e Env) BlockRemoveAs(path, name, style string) error {
 // JSONSet sets the value at a JSON Pointer in a JSON file and keeps its formatting.
 // A missing file is created as an object.
 func (e Env) JSONSet(path, pointer string, value any) error {
+	return e.JSONSetMode(path, pointer, value, 0o644)
+}
+
+// JSONSetMode is JSONSet with the mode of a new file, e.g. 0600 for files with secrets.
+func (e Env) JSONSetMode(path, pointer string, value any, mode os.FileMode) error {
 	path = e.ExpandHome(path)
 	old, err := readOptional(path)
 	if err != nil {
@@ -267,7 +272,26 @@ func (e Env) JSONSet(path, pointer string, value any) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
-	_, err = e.Write(path, updated, 0o644, pointer+" set")
+	_, err = e.Write(path, updated, mode, pointer+" set")
+	return err
+}
+
+// JSONRemove removes the object member or array element at a JSON Pointer in a JSON
+// file and keeps its formatting. A missing file or value is not an error.
+func (e Env) JSONRemove(path, pointer string) error {
+	path = e.ExpandHome(path)
+	old, err := readOptional(path)
+	if err != nil || old == nil {
+		return err
+	}
+	updated, found, err := jsonfile.RemovePointer(old, pointer)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	if !found {
+		return nil
+	}
+	_, err = e.Write(path, updated, 0o644, pointer+" removed")
 	return err
 }
 

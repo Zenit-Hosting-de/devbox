@@ -149,6 +149,71 @@ func SetPointer(data []byte, pointer string, value any) ([]byte, error) {
 	return splice(data, ps.Start+1, closing, []byte("\n"+inner+member+"\n"+outer)), nil
 }
 
+// RemovePointer removes the object member or array element at a JSON Pointer and keeps
+// the rest of the document byte for byte. A member that SetPointer added is removed
+// exactly, so the document is as before. found is false when nothing is at the pointer.
+func RemovePointer(data []byte, pointer string) (out []byte, found bool, err error) {
+	spans, err := Spans(data)
+	if err != nil {
+		return nil, false, err
+	}
+	s, ok := spans[pointer]
+	if !ok {
+		return data, false, nil
+	}
+	tokens := splitPointer(pointer)
+	if len(tokens) == 0 {
+		return nil, false, fmt.Errorf("pointer %q: the document itself cannot be removed", pointer)
+	}
+	parent := joinPointer(tokens[:len(tokens)-1])
+	ps := spans[parent]
+	// The neighbours of the value among the children of its parent.
+	prevEnd, nextStart := -1, -1
+	prefix := parent + "/"
+	for p, c := range spans {
+		if !strings.HasPrefix(p, prefix) || strings.Contains(p[len(prefix):], "/") {
+			continue
+		}
+		if c.End <= s.Start && c.End > prevEnd {
+			prevEnd = c.End
+		}
+		if c.Start >= s.End && (nextStart < 0 || c.Start < nextStart) {
+			nextStart = c.Start
+		}
+	}
+	switch {
+	case prevEnd < 0 && nextStart < 0:
+		// the only child: the container is empty again
+		return splice(data, ps.Start+1, ps.End-1, nil), true, nil
+	case nextStart < 0:
+		// the last child: drop it with the comma before it
+		return splice(data, prevEnd, s.End, nil), true, nil
+	}
+	// a child with a successor: drop it up to the start of the successor
+	start := ps.Start + 1
+	if prevEnd >= 0 {
+		start = skipSeparator(data, prevEnd)
+	}
+	for start < len(data) && isSpace(data[start]) {
+		start++
+	}
+	return splice(data, start, skipSeparator(data, s.End), nil), true, nil
+}
+
+// skipSeparator returns the offset after white space, one comma and white space.
+func skipSeparator(data []byte, at int) int {
+	for at < len(data) && isSpace(data[at]) {
+		at++
+	}
+	if at < len(data) && data[at] == ',' {
+		at++
+	}
+	for at < len(data) && isSpace(data[at]) {
+		at++
+	}
+	return at
+}
+
 func hasChildren(spans map[string]Span, parent string) bool {
 	prefix := parent + "/"
 	for p := range spans {
