@@ -23,8 +23,10 @@ last in the plugin search order, so a team can replace any of them.
 | `nuget`       | AP-18 (registry consumer: package sources in `NuGet.Config`, credentials in the file or `NuGetPackageSourceCredentials_*` in `env.d`)                           |
 | `pip`         | AP-18 (registry consumer for pip and uv: `pip.conf`, `uv.toml` and `.netrc`, or `PIP_INDEX_URL` and `UV_DEFAULT_INDEX`)                                         |
 | `docker`      | AP-18 (Docker Engine from the packages of the distribution or of Docker, group, `daemon.json`, registry consumer: logins in `~/.docker/config.json`, mode 0600) |
+| `cleanup`     | AP-19 (caches, old build folders in projects and Docker; sizes in the dry run; contributes to `cleanup-all`)                                                    |
+| `templates`   | AP-19 (projects from templates in Git sources: `sync`, check `available`, `new`, `hooks` for the commands of a template)                                        |
 
-The remaining plugins (`xrdp`, `cleanup`, `templates`) follow in AP-19, the language packs `lang-de` and `lang-en` in
+The remaining plugin `xrdp` follows in AP-19, the language packs `lang-de` and `lang-en` in
 AP-28.
 
 ```bash
