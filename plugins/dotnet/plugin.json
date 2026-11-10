@@ -1,0 +1,151 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "dotnet",
+  "version": "1.0.0",
+  "name": ".NET",
+  "description": "Install and update .NET SDKs by channel or version, with workloads",
+  "category": "runtime",
+  "icon": "hash",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["bash"],
+    "plugins": { "base": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": [
+      "${dotnet.metadataUrl}",
+      "${dotnet.installScriptUrl}",
+      "${dotnet.feedUrl}",
+      "https://builds.dotnet.microsoft.com",
+      "https://api.nuget.org"
+    ],
+    "files": {
+      "read": ["${env:HOME}"],
+      "write": ["${dotnet.installDir}", "${dotnet.envFile}", "${env:HOME}/.dotnet"]
+    },
+    "sudo": false,
+    "credentials": []
+  },
+  "settings": {
+    "channel": {
+      "type": "string",
+      "pattern": "^(lts|sts|latest|[0-9]+(\\.[0-9]+)?)$",
+      "default": "lts",
+      "label": "Release channel",
+      "help": "lts takes the newest SDK with long-term support, sts the newest with standard-term support, latest the newest released SDK of all; a channel such as 10.0 the newest SDK of that channel."
+    },
+    "metadataUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json",
+      "label": "Release metadata",
+      "help": "releases-index.json of the .NET release metadata. The releases.json of a channel is expected next to it in CHANNEL/releases.json. Change it to use a mirror in the own network."
+    },
+    "installScriptUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://dot.net/v1/dotnet-install.sh",
+      "label": "Install script",
+      "help": "Address of dotnet-install.sh, which downloads and unpacks the SDKs."
+    },
+    "feedUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://builds.dotnet.microsoft.com/dotnet",
+      "label": "Download server",
+      "help": "Server with the SDK archives (layout of builds.dotnet.microsoft.com/dotnet), handed to the install script. Change it to use a mirror in the own network.",
+      "advanced": true
+    },
+    "installDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:data}/dotnet",
+      "label": "Install location",
+      "help": "All SDKs share this directory; it becomes DOTNET_ROOT.",
+      "advanced": true
+    },
+    "keepPatches": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "default": 1,
+      "label": "SDK versions to keep per channel"
+    },
+    "workloads": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+      "default": [],
+      "label": "Workloads",
+      "help": "Workload IDs installed with dotnet workload install into the newest SDK, e.g. wasm-tools."
+    },
+    "envFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d/dotnet.sh",
+      "label": "Shell environment file",
+      "help": "Sets DOTNET_ROOT and puts dotnet in PATH of new shells.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "installed": {
+      "label": "Installed .NET SDKs",
+      "run": ["checks/installed.sh"],
+      "timeout": "5s",
+      "cache": "10m",
+      "refreshOn": ["session.finished:dotnet.*"]
+    },
+    "latest": {
+      "label": "New versions",
+      "run": ["checks/latest.sh"],
+      "timeout": "20s",
+      "cache": "6h",
+      "network": true
+    }
+  },
+  "actions": {
+    "install": {
+      "label": "Install .NET SDK",
+      "run": ["actions/install.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "default": "",
+          "pattern": "^(lts|sts|latest|[0-9]+(\\.[0-9]+)?|[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?)?$",
+          "label": "Version",
+          "help": "Channel (10.0), SDK version (10.0.100), lts, sts or latest. Empty follows the settings."
+        }
+      },
+      "timeout": "20m"
+    },
+    "update": { "label": "Update and clean up", "run": ["actions/update.sh"], "timeout": "30m" },
+    "remove": {
+      "label": "Remove .NET SDK",
+      "run": ["actions/remove.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "label": "Version",
+          "optionsFrom": "dotnet.installed#/data/items/*/version"
+        }
+      },
+      "confirm": "The .NET SDK is deleted together with runtimes no other SDK uses. Projects that rely on it need another one afterwards.",
+      "danger": true
+    },
+    "workloads": {
+      "label": "Install workloads",
+      "run": ["actions/workloads.sh"],
+      "timeout": "30m"
+    }
+  },
+  "contributes": {
+    "groups": { "update-all": ["dotnet.update"] },
+    "setup": [{ "action": "dotnet.install", "after": ["base.packages"] }],
+    "overview": { "check": "dotnet.installed", "primaryAction": "dotnet.update" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

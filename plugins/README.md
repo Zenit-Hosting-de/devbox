@@ -15,6 +15,8 @@ last in the plugin search order, so a team can replace any of them.
 | `java`   | AP-13 (reference plugin)                                                                                                       |
 | `system` | AP-17                                                                                                                          |
 | `node`   | AP-17                                                                                                                          |
+| `dotnet` | AP-17 (SDKs by channel or version from `metadataUrl`, `installScriptUrl`, workloads)                                         |
+| `python` | AP-17 (uv from `uvInstallUrl`, Python versions through uv, Python downloads redirected by `pythonMirror`)                      |
 
 The remaining plugins follow in AP-17 to AP-19, the language packs `lang-de` and
 `lang-en` in AP-28.

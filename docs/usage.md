@@ -175,6 +175,40 @@ devbox run node.remove -p version=20.18.0     # asks for confirmation
 - `node.keepPatches` keeps that many patch versions per major version; the default is
   never removed. `node.manager` knows `direct` only; support for nvm is planned.
 
+## .NET
+
+The `dotnet` plugin installs .NET SDKs with the official `dotnet-install.sh` into
+`~/.local/share/dotnet` and sets `DOTNET_ROOT` and `PATH` through
+`~/.config/devbox/env.d/dotnet.sh`. Versions come from the release metadata.
+
+```bash
+devbox run dotnet.install                     # newest SDK of dotnet.channel (lts by default)
+devbox run dotnet.install -p version=8.0      # a channel (8.0, lts, sts) or a full SDK version
+devbox run dotnet.update                      # newest SDK of every installed channel
+devbox run dotnet.workloads                   # install dotnet.workloads (for example ["wasm-tools"])
+devbox run dotnet.remove -p version=8.0.404   # asks for confirmation
+```
+
+- `dotnet.metadataUrl`, `dotnet.installScriptUrl` and `dotnet.feedUrl` point to mirrors;
+  `dotnet.keepPatches` keeps that many SDKs per channel.
+
+## Python
+
+The `python` plugin installs [uv](https://docs.astral.sh/uv/) from `python.uvInstallUrl`,
+then the Python versions of `python.versions` through uv, and command line tools of
+`python.tools` with `uv tool install`. `PATH` is set through `~/.config/devbox/env.d/python.sh`.
+
+```bash
+devbox run python.install                     # uv, python.versions and python.tools
+devbox run python.use -p version=3.12         # default version (python3 on PATH)
+devbox run python.update                      # uv self update, newest patches, tool upgrades
+devbox run python.tools                       # install python.tools (for example ["ruff"])
+devbox run python.remove -p version=3.11      # asks for confirmation
+```
+
+- `python.pythonMirror` redirects the Python downloads of uv (`UV_PYTHON_INSTALL_MIRROR`)
+  to a mirror; `python.selfUpdate` turns off `uv self update` where uv comes from a package.
+
 ## Settings
 
 Every value a plugin needs is a setting `<plugin>.<name>` with a default in its
@@ -687,5 +721,5 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
   `devbox repo init`
 - `devbox doctor`, `devbox schema print`, `devbox migrate`, `devbox completion`
 - global flags `--quiet`, `--no-color`, `--lang`, `--socket`
-- the remaining bundled plugins (`node`, `dotnet`, `python`, `docker`, `git`, `xrdp`,
-  `cleanup`, …) and plugin templates for TypeScript, Python and Go
+- the remaining bundled plugins (`docker`, `git`, `gradle`, `nuget`, `pip`, `xrdp`,
+  `cleanup`, `templates`, …) and plugin templates for TypeScript, Python and Go

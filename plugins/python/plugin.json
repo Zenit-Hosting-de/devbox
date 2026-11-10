@@ -1,0 +1,192 @@
+{
+  "$schema": "https://devbox.zenit-hosting.de/schema/plugin.v1.json",
+  "id": "python",
+  "version": "1.0.0",
+  "name": "Python",
+  "description": "Install uv, Python versions and tools, switch the default Python and keep everything current",
+  "category": "runtime",
+  "icon": "code",
+  "license": "Apache-2.0",
+  "authors": ["Zenit-Hosting"],
+  "requires": {
+    "devbox": ">=0.0.1",
+    "os": ["linux"],
+    "arch": ["amd64", "arm64"],
+    "commands": ["sh"],
+    "plugins": { "base": ">=1.0.0" }
+  },
+  "permissions": {
+    "network": [
+      "${python.uvInstallUrl}",
+      "${python.pythonMirror}",
+      "https://astral.sh",
+      "https://releases.astral.sh",
+      "https://github.com",
+      "https://api.github.com",
+      "https://objects.githubusercontent.com",
+      "https://release-assets.githubusercontent.com",
+      "https://pypi.org",
+      "https://files.pythonhosted.org"
+    ],
+    "files": {
+      "read": ["${env:HOME}"],
+      "write": [
+        "${python.binDir}",
+        "${python.pythonDir}",
+        "${python.toolDir}",
+        "${xdg:cache}/uv",
+        "${xdg:config}/uv",
+        "${python.envFile}"
+      ]
+    },
+    "sudo": false,
+    "credentials": []
+  },
+  "settings": {
+    "uvInstallUrl": {
+      "type": "string",
+      "format": "uri",
+      "default": "https://astral.sh/uv/install.sh",
+      "label": "uv installer",
+      "help": "Address of the uv install script (layout of astral.sh/uv/install.sh). Change it to use an installer from the own network."
+    },
+    "pythonMirror": {
+      "type": "string",
+      "pattern": "^((https?|file)://.+)?$",
+      "default": "",
+      "label": "Python download mirror",
+      "help": "Mirror of the python-build-standalone releases, passed to uv as UV_PYTHON_INSTALL_MIRROR. Empty uses the source built into uv."
+    },
+    "versions": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$" },
+      "default": [],
+      "label": "Python versions",
+      "help": "Versions that install sets up in addition to the default one, e.g. 3.12 or 3.13.1. Update keeps each of them on its newest patch release."
+    },
+    "defaultVersion": {
+      "type": "string",
+      "pattern": "^([0-9]+\\.[0-9]+(\\.[0-9]+)?)?$",
+      "default": "",
+      "label": "Default version",
+      "help": "Version behind python and python3, e.g. 3.13. Empty takes the newest stable release uv knows."
+    },
+    "tools": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "default": [],
+      "label": "Tools",
+      "help": "Python command-line tools installed with uv tool install, e.g. ruff or black==24.10.0."
+    },
+    "selfUpdate": {
+      "type": "boolean",
+      "default": true,
+      "label": "Update uv itself",
+      "help": "Update runs uv self update, which asks the GitHub releases of uv. Turn it off in networks without access to github.com.",
+      "advanced": true
+    },
+    "binDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${env:HOME}/.local/bin",
+      "label": "Directory for commands",
+      "help": "Receives uv, python, python3 and the commands of the tools (UV_INSTALL_DIR, UV_PYTHON_BIN_DIR, UV_TOOL_BIN_DIR).",
+      "advanced": true
+    },
+    "pythonDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:data}/uv/python",
+      "label": "Install location of Python",
+      "advanced": true
+    },
+    "toolDir": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:data}/uv/tools",
+      "label": "Install location of tools",
+      "advanced": true
+    },
+    "envFile": {
+      "type": "string",
+      "format": "path",
+      "default": "${xdg:config}/devbox/env.d/python.sh",
+      "label": "Shell environment file",
+      "help": "Puts the directory for commands in PATH of new shells.",
+      "advanced": true
+    }
+  },
+  "checks": {
+    "installed": {
+      "label": "Installed Python versions",
+      "run": ["checks/installed.sh"],
+      "timeout": "10s",
+      "cache": "10m",
+      "refreshOn": ["session.finished:python.*"]
+    },
+    "latest": {
+      "label": "New versions",
+      "run": ["checks/latest.sh"],
+      "timeout": "30s",
+      "cache": "6h",
+      "network": true
+    }
+  },
+  "actions": {
+    "install": {
+      "label": "Install Python",
+      "run": ["actions/install.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "default": "${python.defaultVersion}",
+          "pattern": "^([0-9]+\\.[0-9]+(\\.[0-9]+)?)?$",
+          "label": "Version",
+          "help": "Minor version (3.13) or full version (3.13.1). Empty takes the newest stable release. The versions from the settings are installed as well."
+        },
+        "makeDefault": { "type": "boolean", "default": true, "label": "Make it the default" }
+      },
+      "timeout": "30m"
+    },
+    "update": {
+      "label": "Update uv, Python and tools",
+      "run": ["actions/update.sh"],
+      "timeout": "30m"
+    },
+    "use": {
+      "label": "Switch default Python",
+      "run": ["actions/use.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "label": "Version",
+          "optionsFrom": "python.installed#/data/items/*/version"
+        }
+      }
+    },
+    "tools": {
+      "label": "Install tools",
+      "run": ["actions/tools.sh"],
+      "timeout": "20m"
+    },
+    "remove": {
+      "label": "Remove Python",
+      "run": ["actions/remove.sh"],
+      "params": {
+        "version": {
+          "type": "string",
+          "label": "Version",
+          "optionsFrom": "python.installed#/data/items/*/version"
+        }
+      },
+      "confirm": "The Python version is deleted. Virtual environments and tools that rely on it need another one afterwards.",
+      "danger": true
+    }
+  },
+  "contributes": {
+    "groups": { "update-all": ["python.update"] },
+    "setup": [{ "action": "python.install", "after": ["base.packages"] }],
+    "overview": { "check": "python.installed", "primaryAction": "python.update" }
+  },
+  "i18n": { "default": "en", "dir": "i18n" }
+}

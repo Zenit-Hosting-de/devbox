@@ -1,0 +1,158 @@
+# AP-17: the dotnet plugin passes devbox plugin test against a fake release metadata
+# and install script server (the sources are redirected by settings): checks, dry runs
+# without changes, and every action applied twice with no change on the second run.
+
+dotnetfeed start
+dotnetfeed channel 10.0 lts active
+dotnetfeed channel 9.0 sts maintenance
+dotnetfeed channel 11.0 sts preview
+dotnetfeed channel 6.0 lts eol
+dotnetfeed sdk 10.0.100
+dotnetfeed sdk 10.0.101
+dotnetfeed sdk 9.0.300
+dotnetfeed sdk 11.0.100-rc.1
+dotnetfeed sdk 6.0.428
+
+exec devbox plugin test --apply --set dotnet.metadataUrl=$DOTNETMETA --set dotnet.installScriptUrl=$DOTNETSCRIPT --set dotnet.feedUrl=$DOTNETFEED $REPO/plugins/dotnet
+stdout '^ok +validate +dotnet'
+stdout '^ok +check +dotnet.installed +missing'
+stdout '^ok +check +dotnet.latest +ok'
+stdout '^ok +dry-run +dotnet.install +2 planned changes'
+stdout '^ok +apply +dotnet.install +[1-9][0-9]* changes'
+stdout '^ok +repeat +dotnet.install +no changes'
+stdout '^ok +repeat +dotnet.update +no changes'
+stdout '^ok +repeat +dotnet.workloads +no changes'
+stdout '^skipped +apply +dotnet.remove +danger'
+stdout '^ok +dry-run +dotnet.remove'
+! stdout '^failed'
+
+# the same with workloads configured: they are part of the planned changes and
+# installed once
+exec devbox plugin test --apply --set dotnet.metadataUrl=$DOTNETMETA --set dotnet.installScriptUrl=$DOTNETSCRIPT --set dotnet.feedUrl=$DOTNETFEED --set 'dotnet.workloads=["wasm-tools","aspire"]' $REPO/plugins/dotnet
+stdout '^ok +dry-run +dotnet.install +4 planned changes'
+stdout '^ok +repeat +dotnet.install +no changes'
+stdout '^ok +repeat +dotnet.workloads +no changes'
+! stdout '^failed'
+
+# the bundled dotnet plugin (unpacked from the binary) used for real
+exec devbox plugin info dotnet --json
+stdout '"state": "ready"'
+stdout '"path": ".*/devbox/builtin/.*/dotnet"'
+
+# the sources point to the fake server from here on
+exec devbox config set dotnet.metadataUrl $DOTNETMETA
+exec devbox config set dotnet.installScriptUrl $DOTNETSCRIPT
+exec devbox config set dotnet.feedUrl $DOTNETFEED
+
+# a dry run changes nothing
+exec devbox run dotnet.install --dry-run --json
+stdout '"kind":"file","op":"create","summary":".NET SDK 10.0.101","target":".*/dotnet/sdk/10.0.101","type":"change"'
+! exists home/.local/share/dotnet
+! exists home/.config/devbox/env.d/dotnet.sh
+
+# the channel (lts) decides without a version: the newest LTS SDK; the install script
+# gets the download server from the settings
+exec devbox run dotnet.install --json
+stdout '"kind":"file","op":"create","summary":".NET SDK 10.0.101","target":".*/dotnet/sdk/10.0.101","type":"change"'
+stdout '"summary":".NET SDK 10.0.101","type":"result"'
+exists home/.local/share/dotnet/sdk/10.0.101/dotnet.runtimeconfig.json
+exec home/.local/share/dotnet/dotnet --version
+stdout '^10.0.101$'
+grep '--version 10.0.101 --architecture (x64|arm64) --azure-feed http://.*/dotnet$' home/.local/share/dotnet/install.log
+grep 'export DOTNET_ROOT=".*/home/.local/share/dotnet"' home/.config/devbox/env.d/dotnet.sh
+grep 'export PATH=".*/home/.local/share/dotnet:\$PATH"' home/.config/devbox/env.d/dotnet.sh
+grep '# >>> devbox:dotnet >>>' home/.config/devbox/env.d/dotnet.sh
+
+# a second install changes nothing
+exec devbox run dotnet.install --json
+! stdout '"type":"change"'
+
+# a channel, the sts channel and an exact version
+exec devbox run dotnet.install -p version=9.0
+exists home/.local/share/dotnet/sdk/9.0.300
+exec devbox run dotnet.install -p version=10.0.100
+exists home/.local/share/dotnet/sdk/10.0.100
+exec devbox run dotnet.install -p version=sts --dry-run --json
+stdout '"summary":".NET SDK 9.0.300","type":"result"'
+exec devbox run dotnet.install -p version=latest --dry-run --json
+stdout '"summary":".NET SDK 10.0.101","type":"result"'
+! exec devbox run dotnet.install -p version=10.0.199
+! exec devbox run dotnet.install -p version=8.0
+! exec devbox run dotnet.install -p version=abc
+
+# the installed check lists them, the newest is the default
+exec devbox status --json
+stdout '"id": "dotnet.installed"'
+stdout '"summary": ".NET SDK 10.0.101 \(default\), 10.0.100, 9.0.300"'
+
+# remove an SDK: its runtime goes when no other SDK uses it
+exists home/.local/share/dotnet/shared/Microsoft.NETCore.App/10.0.0
+exec devbox run dotnet.remove -p version=10.0.100 --yes --json
+stdout '"op":"delete","summary":"runtime 10.0.0","target":".*/shared/Microsoft.NETCore.App/10.0.0"'
+! exists home/.local/share/dotnet/sdk/10.0.100
+! exists home/.local/share/dotnet/shared/Microsoft.NETCore.App/10.0.0
+exists home/.local/share/dotnet/shared/Microsoft.NETCore.App/10.0.1
+exec devbox run dotnet.remove -p version=10.0.100 --yes --json
+! stdout '"type":"change"'
+
+# workloads go into the newest SDK once
+exec devbox run dotnet.workloads --set 'dotnet.workloads=["wasm-tools"]' --json
+stdout '"kind":"package","op":"create","summary":"workload for .NET SDK 10.0.101","target":"wasm-tools"'
+exists home/.local/share/dotnet/metadata/workloads/10.0.100/InstalledWorkloads/wasm-tools
+exec devbox run dotnet.workloads --set 'dotnet.workloads=["wasm-tools"]' --json
+! stdout '"type":"change"'
+
+# a newer SDK: the latest check reports it, update installs it, takes the workloads
+# along and removes the old SDK of the channel
+dotnetfeed sdk 10.0.200
+dotnetfeed sdk 9.0.301
+exec devbox status --json
+stdout '"summary": "Updates: 10.0.200, 9.0.301"'
+exec devbox run dotnet.update --json
+stdout '"summary":".NET SDK 10.0.200","target":".*/dotnet/sdk/10.0.200"'
+stdout '"op":"delete","summary":".NET SDK 10.0.101","target":".*/dotnet/sdk/10.0.101"'
+stdout '"kind":"package","op":"create","summary":"workload for .NET SDK 10.0.200","target":"wasm-tools"'
+exists home/.local/share/dotnet/sdk/10.0.200
+exists home/.local/share/dotnet/sdk/9.0.301
+exists home/.local/share/dotnet/metadata/workloads/10.0.200/InstalledWorkloads/wasm-tools
+! exists home/.local/share/dotnet/sdk/10.0.101
+! exists home/.local/share/dotnet/sdk/9.0.300
+exec home/.local/share/dotnet/dotnet --version
+stdout '^10.0.200$'
+
+# a second update changes nothing
+exec devbox run dotnet.update --json
+! stdout '"type":"change"'
+
+# keepPatches keeps the older SDK
+dotnetfeed sdk 10.0.201
+exec devbox run dotnet.update --set dotnet.keepPatches=2
+exists home/.local/share/dotnet/sdk/10.0.201
+exists home/.local/share/dotnet/sdk/10.0.200
+
+# a failing install script is an error and installs nothing
+dotnetfeed sdk 10.0.300
+dotnetfeed broken 10.0.300
+! exec devbox run dotnet.install -p version=10.0.300
+! exists home/.local/share/dotnet/sdk/10.0.300
+
+# a channel out of support is reported
+exec devbox run dotnet.install -p version=6.0
+exec devbox status --json
+stdout 'Out of support: 6.0'
+
+# remove every SDK: the install location and the environment block are gone
+exec devbox run dotnet.remove -p version=6.0 --yes
+exec devbox run dotnet.remove -p version=9.0 --yes
+exec devbox run dotnet.remove -p version=10.0.200 --yes
+exists home/.local/share/dotnet/sdk/10.0.201
+exec devbox run dotnet.remove -p version=10.0.201 --yes
+! exists home/.local/share/dotnet
+! grep 'DOTNET_ROOT' home/.config/devbox/env.d/dotnet.sh
+
+-- home/.config/devbox/config.json --
+{
+  "plugins": { "paths": ["${xdg:data}/devbox/plugins"] }
+}
+-- home/.local/share/devbox/plugins/base/plugin.json --
+{ "id": "base", "version": "1.0.0", "name": "Base stand-in" }

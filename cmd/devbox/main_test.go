@@ -31,13 +31,15 @@ func TestScripts(t *testing.T) {
 	testscript.Run(t, testscript.Params{
 		Dir: "../../test/testscript",
 		Cmds: map[string]func(*testscript.TestScript, bool, []string){
-			"adoptium": cmdAdoptium,
-			"catalog":  cmdCatalog,
-			"host":     cmdHost,
-			"maven":    cmdMaven,
-			"registry": cmdRegistry,
-			"releases": cmdReleases,
-			"nodedist": cmdNodeDist,
+			"adoptium":   cmdAdoptium,
+			"catalog":    cmdCatalog,
+			"dotnetfeed": cmdDotnet,
+			"host":       cmdHost,
+			"maven":      cmdMaven,
+			"registry":   cmdRegistry,
+			"releases":   cmdReleases,
+			"nodedist":   cmdNodeDist,
+			"uvdist":     cmdUvDist,
 		},
 		Setup: func(e *testscript.Env) error {
 			e.Setenv("HOME", e.WorkDir+"/home")
