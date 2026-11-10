@@ -209,6 +209,28 @@ devbox run python.remove -p version=3.11      # asks for confirmation
 - `python.pythonMirror` redirects the Python downloads of uv (`UV_PYTHON_INSTALL_MIRROR`)
   to a mirror; `python.selfUpdate` turns off `uv self update` where uv comes from a package.
 
+## Docker
+
+The `docker` plugin installs Docker Engine, either from the packages of the distribution
+(`docker.source` = `distro`, the default) or from the package repository of Docker
+(`docker`, apt and dnf), and manages `daemon.json`.
+
+```bash
+devbox run docker.install                     # packages, then enables and starts the service (sudo)
+devbox run docker.group                       # adds the user to the docker group (new login needed)
+devbox run docker.configure                   # registryMirrors, logDriver, logOptions, defaultAddressPools
+devbox run docker.update                      # upgrades the installed packages
+```
+
+- `docker.configure` changes only the keys it manages in `/etc/docker/daemon.json` and keeps
+  all others; emptying a setting puts the previous value back. `docker.serviceReload`
+  (`reload`, `restart`, `none`) says what happens to the service afterwards.
+- `docker.repoUrl`, `docker.repoKeyUrl` and the package lists are settings, so a mirror can
+  replace the repository of Docker.
+- As a consumer of `registry` (option `host`), the plugin writes the login for the host
+  into `~/.docker/config.json` (mode 0600). A login for that host that DevBox did not
+  write is not overwritten.
+
 ## Settings
 
 Every value a plugin needs is a setting `<plugin>.<name>` with a default in its
@@ -325,6 +347,7 @@ or the command line; their output is masked. A consumer reads it with `devbox sd
 | `maven` | `registry` | `settings.xml` | `mirror`, `releases`, `snapshots` |
 | `gradle` | `registry` | `~/.gradle/gradle.properties`, or `ORG_GRADLE_PROJECT_*` in `env.d` (`gradle.mode`) | `repository` or `url`, `name` |
 | `nuget` | `registry` | package sources and credentials in `NuGet.Config`, or `NuGetPackageSourceCredentials_*` in `env.d` (`nuget.mode`) | `repository` or `url`, `sourceName` |
+| `docker` | `registry` | the login for the host in `~/.docker/config.json` (mode 0600) | `host` |
 | `pip` | `registry` | `pip.conf`, `uv.toml` and `.netrc`, or `PIP_INDEX_URL` and `UV_DEFAULT_INDEX` in `env.d` (`pip.mode`, `pip.targets`) | `repository` or `url` |
 | `git` | `git-host` | a credential helper entry for the host in `~/.gitconfig`; the token lies in a DevBox file with mode 0600 (`git.credentialHelper`) | `protocol` (`https`) |
 
@@ -344,7 +367,9 @@ devbox run git.defaults                      # applies the object git.defaults w
 
 - `--dry-run` sets `DEVBOX_DRY_RUN=1` for the plugin. It still reads, checks and
   downloads metadata, but changes nothing and reports every change it would make.
-- Plugins edit existing files through `devbox sdk block` and `devbox sdk json-set`.
+- Plugins edit existing files through `devbox sdk block`, `devbox sdk json-set` (`-` as value
+  reads it from standard input, `--mode 600` for a new file with secrets) and
+  `devbox sdk json-remove`.
   Before the first change of a file in a session the original is copied to
   `~/.local/state/devbox/backups/<session>/<path>`; `devbox logs SESSION --json` lists the
   backups of a session.
@@ -735,7 +760,7 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
 - web UI (the placeholder page only), `devbox service …`, terminal menu (`devbox` without arguments)
 - `devbox setup`, `devbox group run` (for example `update-all`), `devbox check`,
   `devbox actions`, `devbox status --strict` (exit codes 5 and 6)
-- the registry consumer `docker`, SSH key upload for `git-host` and the credential types `ssh-key`, `generic`; the
+- SSH key upload for `git-host` and the credential types `ssh-key`, `generic`; the
   event `credential.changed`
 - version ranges from `plugins.require` of a profile (installing what a profile asks for)
 - plugin repositories: the kinds `profile`, `templates` and `packages`, SSH keys for
@@ -743,4 +768,4 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
   `devbox repo init`
 - `devbox doctor`, `devbox schema print`, `devbox migrate`, `devbox completion`
 - global flags `--quiet`, `--no-color`, `--lang`, `--socket`
-- the remaining bundled plugins (`docker`, `xrdp`, `cleanup`, `templates`, …) and plugin templates for TypeScript, Python and Go
+- the remaining bundled plugins (`xrdp`, `cleanup`, `templates`, …), rootless Docker and plugin templates for TypeScript, Python and Go
