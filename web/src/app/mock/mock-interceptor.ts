@@ -103,6 +103,12 @@ function route(req: HttpRequest<unknown>, backend: MockBackend, path: string): A
       return { status: 204, body: null };
     }
   }
+  if (method === "GET" && area === "groups" && !id) {
+    return ok(backend.groupList());
+  }
+  if (method === "GET" && area === "setup" && !id) {
+    return ok(backend.setupPlan());
+  }
   if (area === "profiles") {
     if (method === "GET" && !id) {
       return ok(backend.profileList());

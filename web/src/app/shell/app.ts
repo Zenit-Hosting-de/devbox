@@ -43,6 +43,7 @@ interface NavItem {
 const NAV: readonly { path: string; icon: string; key: string; exact: boolean }[] = [
   { path: "/", icon: "dashboard", key: "nav.overview", exact: true },
   { path: "/plugins", icon: "extension", key: "nav.plugins", exact: false },
+  { path: "/einrichtung", icon: "checklist", key: "nav.setup", exact: false },
   { path: "/verlauf", icon: "history", key: "nav.history", exact: false },
   { path: "/einstellungen", icon: "tune", key: "nav.settings", exact: false },
   { path: "/zugaenge", icon: "key", key: "nav.credentials", exact: false },

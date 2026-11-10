@@ -183,6 +183,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Action groups, for example update-all.
+         * @description Ready plugins append their actions to a group (contributes.groups); a profile that defines a group of the same ID replaces them. A client runs a group by starting its actions one after another with POST /sessions.
+         */
+        get: operations["listGroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plan of the first-run setup with the state of every step.
+         * @description A profile with a setup list defines the steps; otherwise ready plugins contribute them, ordered by their after lists. An action step is done when the history holds a successful run that was no dry run, a credential step when the instance has a secret. A client runs the plan by starting the open action steps in order with POST /sessions.
+         */
+        get: operations["getSetup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/settings": {
         parameters: {
             query?: never;
@@ -1385,6 +1425,36 @@ export interface components {
             newPermissions: components["schemas"]["CatalogPermission"][];
             installed: boolean;
         };
+        /** @description A named sequence of actions. */
+        Group: {
+            id: string;
+            label?: string;
+            /** @description Actions (<plugin>.<action>) in the order they run. */
+            actions: string[];
+            /** @description plugins for a group built from contributions, or the profile layer that defines it (profile:<id>). */
+            origin: string;
+        };
+        GroupList: components["schemas"]["Group"][];
+        /** @description One step of the first-run setup. */
+        SetupStep: {
+            /** @description <plugin>.<action> or credentials:<instance>. */
+            ref: string;
+            /** @enum {unknown} */
+            kind: "action" | "credential";
+            label?: string;
+            /**
+             * @description blocked: the plugin is missing or not ready, or the instance is unknown.
+             * @enum {unknown}
+             */
+            state: "done" | "open" | "blocked";
+            /** @description Why a step is blocked, or what an open credential step waits for. */
+            detail?: string;
+        };
+        SetupPlan: {
+            /** @description plugins, or the profile layer that defines the plan. */
+            origin: string;
+            steps: components["schemas"]["SetupStep"][];
+        };
     };
     responses: {
         /** @description Error in RFC 9457 format. */
@@ -1692,6 +1762,48 @@ export interface operations {
                 };
             };
             404: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Groups sorted by ID. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The plan. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupPlan"];
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

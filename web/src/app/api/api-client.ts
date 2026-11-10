@@ -3,6 +3,8 @@ import { Injectable, inject } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 import { environment } from "../../environments/environment";
 import type {
+  Group,
+  SetupPlan,
   CatalogInstall,
   CatalogInstallRequest,
   CatalogSearch,
@@ -155,6 +157,15 @@ export class ApiClient {
   /** Removes a plugin installed from a catalog. */
   async deletePlugin(id: string): Promise<void> {
     await firstValueFrom(this.http.delete(`${this.base}/plugins/${encodeURIComponent(id)}`));
+  }
+
+  groups(): Promise<Group[]> {
+    return firstValueFrom(this.http.get<Group[]>(`${this.base}/groups`));
+  }
+
+  /** Plan of the first-run setup with the state of every step. */
+  setup(): Promise<SetupPlan> {
+    return firstValueFrom(this.http.get<SetupPlan>(`${this.base}/setup`));
   }
 
   profiles(): Promise<ProfileList> {

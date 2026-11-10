@@ -26,7 +26,7 @@ const testListen = "127.0.0.1:7878"
 
 // bundled lists the plugins that ship with the binary; the tests disable them so no
 // real tool or network is touched.
-var bundled = []string{"base", "cleanup", "credentials", "docker", "java", "maven", "node", "npm", "python", "registry", "system", "xrdp"}
+var bundled = []string{"base", "cleanup", "credentials", "docker", "git", "java", "maven", "node", "npm", "python", "registry", "system", "xrdp"}
 
 const demoManifest = `{
   "id": "demo",

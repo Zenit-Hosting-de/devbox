@@ -44,6 +44,11 @@ export const routes: Routes = [
     data: { title: "nav.settings" },
   },
   {
+    path: "einrichtung",
+    loadComponent: () => import("./pages/setup").then((m) => m.SetupPage),
+    data: { title: "nav.setup" },
+  },
+  {
     path: "zugaenge",
     loadComponent: () => import("./pages/credentials").then((m) => m.CredentialsPage),
     data: { title: "nav.credentials" },
@@ -54,6 +59,7 @@ export const routes: Routes = [
   { path: "history/:id", redirectTo: "verlauf/:id" },
   { path: "settings", pathMatch: "full", redirectTo: "einstellungen" },
   { path: "credentials", pathMatch: "full", redirectTo: "zugaenge" },
+  { path: "setup", pathMatch: "full", redirectTo: "einrichtung" },
   {
     path: "**",
     loadComponent: () => import("./pages/not-found").then((m) => m.NotFoundPage),
