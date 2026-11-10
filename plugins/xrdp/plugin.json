@@ -281,13 +281,6 @@
     }
   },
   "contributes": {
-    "setup": [
-      { "action": "xrdp.install", "after": ["base.packages"] },
-      { "action": "xrdp.configure", "after": ["xrdp.install"] },
-      { "action": "xrdp.polkit", "after": ["xrdp.install"] },
-      { "action": "xrdp.sound", "after": ["xrdp.install"] },
-      { "action": "xrdp.enable", "after": ["xrdp.configure"] }
-    ],
     "overview": { "check": "xrdp.status", "primaryAction": "xrdp.restart" }
   },
   "i18n": { "default": "en", "dir": "i18n" }

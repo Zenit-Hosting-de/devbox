@@ -453,6 +453,30 @@ devbox group run update-all [--dry-run] [--yes]
   history. An action that fails or is not confirmed does not stop the others, and an
   action of a plugin that is not ready is skipped; the exit code is 1 when any failed.
 
+## First-run setup
+
+`devbox setup` runs the steps that bring a fresh machine into shape, in order.
+
+```bash
+devbox setup --plan                   # the steps with their state: done, open or blocked; --json
+devbox setup --dry-run                # run every open step as a dry run
+devbox setup --yes                    # run the open steps without asking
+devbox setup --profile https://example.com/devbox/profile.json --yes   # add a profile first
+```
+
+- **Plan.** A profile with a `setup` list defines the steps and their order. Without one,
+  the ready plugins contribute steps (`contributes.setup`), each after the steps it names
+  in `after` (for example `node.install` after `base.packages`). `xrdp` contributes
+  nothing: a remote desktop is set up only when a profile lists its actions.
+- **Resume.** A step is done when the history holds a successful run of its action. A
+  step that fails stops the run; the next `devbox setup` continues there and does not
+  repeat finished steps.
+- **Credentials.** A step `credentials:<name>` is done when the instance has a secret.
+  `setup` does not ask for secrets; it names the command (`devbox cred set <name>`).
+- **Exit codes.** 0 when every step that can run has run (also while secrets are
+  missing), the code of the action that failed, 3 when a step is blocked (its plugin is
+  missing or not ready), 4 without `--yes` and without a terminal.
+
 ## Self-test and tools
 
 ```bash
@@ -849,7 +873,7 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
 
 - install script, distribution packages
 - web UI (the placeholder page only), `devbox service …`, terminal menu (`devbox` without arguments)
-- `devbox setup`, `devbox service …`, `devbox check --refresh` (the command line has no check cache)
+- `devbox service …`, `devbox check --refresh` (the command line has no check cache)
 - SSH key upload for `git-host` and the credential types `ssh-key`, `generic`; the
   event `credential.changed`
 - version ranges from `plugins.require` of a profile (installing what a profile asks for)

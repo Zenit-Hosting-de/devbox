@@ -164,7 +164,11 @@ func (a *app) runSession(ctx context.Context, st *core.State, r *runner.Runner, 
 	if !a.jsonOut { // JSON Lines only on stdout
 		sink.Output = a.io.Stdout
 	}
-	return core.RunSession(ctx, st, r, spec, ref, title, history.OriginCLI, sink)
+	origin := a.origin
+	if origin == "" {
+		origin = history.OriginCLI
+	}
+	return core.RunSession(ctx, st, r, spec, ref, title, origin, sink)
 }
 
 // coerceParams turns the -p name=value texts into typed values.
