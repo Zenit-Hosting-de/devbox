@@ -12,6 +12,7 @@ export default defineConfig(
       "**/node_modules/**",
       "**/gen/**",
       "graphify-out/**",
+      ".claude/worktrees/**",
       "bin/**",
       "web/public/**",
     ],

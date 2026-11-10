@@ -317,6 +317,29 @@ Plugins get the credential only through the request file, never through the envi
 or the command line; their output is masked. A consumer reads it with `devbox sdk instance`,
 `devbox sdk field NAME`, `devbox sdk option NAME` and `devbox sdk secret`.
 
+### Consumers
+
+| Plugin | Type | Writes | Options of `--consumer` |
+| --- | --- | --- | --- |
+| `npm` | `registry` | `.npmrc`, or the environment (`npm.mode`) | `repository` or `url`, `scopes` |
+| `maven` | `registry` | `settings.xml` | `mirror`, `releases`, `snapshots` |
+| `gradle` | `registry` | `~/.gradle/gradle.properties`, or `ORG_GRADLE_PROJECT_*` in `env.d` (`gradle.mode`) | `repository` or `url`, `name` |
+| `nuget` | `registry` | package sources and credentials in `NuGet.Config`, or `NuGetPackageSourceCredentials_*` in `env.d` (`nuget.mode`) | `repository` or `url`, `sourceName` |
+| `pip` | `registry` | `pip.conf`, `uv.toml` and `.netrc`, or `PIP_INDEX_URL` and `UV_DEFAULT_INDEX` in `env.d` (`pip.mode`, `pip.targets`) | `repository` or `url` |
+| `git` | `git-host` | a credential helper entry for the host in `~/.gitconfig`; the token lies in a DevBox file with mode 0600 (`git.credentialHelper`) | `protocol` (`https`) |
+
+Every consumer writes a marked block (or its own entries), keeps a backup and removes exactly
+what it wrote: after `cred remove` the files are as before. With `repository`, the address
+is built from the layout of the instance (`nexus`, `artifactory`); `url` gives the full
+address. In mode `env` the secret lies only in the `env.d` file (mode 0600).
+
+The `git` plugin also sets the identity and defaults:
+
+```bash
+devbox run git.identity -p name="M. Muster" -p email=m.muster@example.com
+devbox run git.defaults                      # applies the object git.defaults with git config --global
+```
+
 ## Dry run and backups
 
 - `--dry-run` sets `DEVBOX_DRY_RUN=1` for the plugin. It still reads, checks and
@@ -712,8 +735,7 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
 - web UI (the placeholder page only), `devbox service …`, terminal menu (`devbox` without arguments)
 - `devbox setup`, `devbox group run` (for example `update-all`), `devbox check`,
   `devbox actions`, `devbox status --strict` (exit codes 5 and 6)
-- the registry consumers `nuget`, `pip`, `docker`, the consumer of `git-host` (Git credential
-  helper for the user, SSH key upload) and the credential types `ssh-key`, `generic`; the
+- the registry consumer `docker`, SSH key upload for `git-host` and the credential types `ssh-key`, `generic`; the
   event `credential.changed`
 - version ranges from `plugins.require` of a profile (installing what a profile asks for)
 - plugin repositories: the kinds `profile`, `templates` and `packages`, SSH keys for
@@ -721,5 +743,4 @@ These are planned (see [roadmap.md](roadmap.md)) but do not exist in the binary 
   `devbox repo init`
 - `devbox doctor`, `devbox schema print`, `devbox migrate`, `devbox completion`
 - global flags `--quiet`, `--no-color`, `--lang`, `--socket`
-- the remaining bundled plugins (`docker`, `git`, `gradle`, `nuget`, `pip`, `xrdp`,
-  `cleanup`, `templates`, …) and plugin templates for TypeScript, Python and Go
+- the remaining bundled plugins (`docker`, `xrdp`, `cleanup`, `templates`, …) and plugin templates for TypeScript, Python and Go
